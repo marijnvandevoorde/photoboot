@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#111" />
+    <title>Print a Photo</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Print a photo</h1>
+
+      <section class="warn" id="unsupported" hidden>
+        <strong>Web Bluetooth not available in this browser.</strong> Use Chrome.
+      </section>
+
+      <section class="controls">
+        <button id="connect">1. Connect printer</button>
+        <button id="pick">2. Choose photo</button>
+        <input type="file" id="file" accept="image/*" hidden />
+        <fieldset class="choice">
+          <legend>Width</legend>
+          <label><input type="radio" name="width" value="576" checked /> Full width (576 dots, ~49 mm)</label>
+          <label><input type="radio" name="width" value="552" /> Centred on sticker (552 dots, booth size)</label>
+        </fieldset>
+        <button id="print" disabled>3. Print</button>
+      </section>
+
+      <section class="preview" hidden id="preview-wrap">
+        <h2>Print preview, 1 dot = 1 screen pixel</h2>
+        <div id="preview"></div>
+      </section>
+
+      <section>
+        <h2>Status</h2>
+        <pre id="log"></pre>
+      </section>
+    </main>
+    <script type="module" src="/src/print.js"></script>
+  </body>
+</html>

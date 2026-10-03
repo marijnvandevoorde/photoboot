@@ -2,17 +2,14 @@
 // review (retry / print / share via QR).
 
 import qrcode from 'qrcode-generator';
-import { PhomemoPrinter, DEFAULT_PRINT_WIDTH_DOTS } from './printer.js';
-import { canvasToRaster, fitToPrintWidth, rasterToCanvas } from './raster.js';
+import { photoToRaster, printPhoto } from './photo.js';
+import { PhomemoPrinter } from './printer.js';
+import { rasterToCanvas } from './raster.js';
 
 const $ = (id) => document.getElementById(id);
 const screens = { setup: $('setup'), booth: $('booth'), review: $('review') };
 const video = $('video');
 
-// Photo print look. Tune with the dither comparison print on /test.html.
-const PHOTO_DITHER = 'atkinson';
-const PHOTO_NOISE = 16;
-const PHOTO_DENSITY = 3;
 const STICKER_MARGIN_DOTS = 24; // unprintable strip each side, for the preview
 
 const REVIEW_TIMEOUT_MS = 90_000;
@@ -243,11 +240,7 @@ $('shutter').addEventListener('click', async () => {
     await countdown(delay);
     flash();
     const canvas = grabFrame();
-    const raster = canvasToRaster(fitToPrintWidth(canvas, DEFAULT_PRINT_WIDTH_DOTS), {
-      photo: true,
-      dither: PHOTO_DITHER,
-      noise: PHOTO_NOISE,
-    });
+    const raster = photoToRaster(canvas);
     photo = { canvas, raster, shareUrl: null };
     await sleep(350); // let the flash land before switching screens
     showReview();
@@ -319,10 +312,7 @@ $('print').addEventListener('click', () =>
         setPill();
       }
       toast('Printing…', 0);
-      const { bitmap, widthDots, heightDots } = photo.raster;
-      await printer.init({ density: PHOTO_DENSITY });
-      await printer.printRaster(bitmap, widthDots, heightDots);
-      await printer.feed(80);
+      await printPhoto(printer, photo.raster);
       toast('Printed!');
     } catch (err) {
       toast(`Print failed: ${err.message}`, 5000);

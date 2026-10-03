@@ -87,6 +87,10 @@ fall back to `writeValueWithoutResponse`.
   - Photos are saved as the preview showed them (mirrored for the front cam).
   - Keeps the screen awake (Wake Lock), fullscreen on first tap, PWA manifest.
 - `test.html` + `src/test.js` + `src/style.css` — printer test / calibration page.
+- `print.html` + `src/print.js` — print one chosen photo (full 576 or 552
+  centred). `./print.sh` opens it on this Mac via http://localhost.
+- `src/photo.js` — shared photo print look (`PHOTO_DITHER`, `PHOTO_NOISE`,
+  `PHOTO_DENSITY`), used by booth and print page.
 - `src/printer.js` — `PhomemoPrinter`: `connect`, `reconnect`, `init`,
   `printRaster`, `feed`, `disconnect`. Width constants live here.
 - `src/raster.js` — canvas → packed-bit bitmap (Floyd–Steinberg dither,
@@ -112,7 +116,7 @@ fall back to `writeValueWithoutResponse`.
    (`getUserMedia`) works inside Bluefy.
 2. **Shares never expire** — add cleanup (cron/`find -mtime`) if needed.
 3. **Photo look** — booth uses Atkinson + threshold noise 16, gamma 0.6,
-   density 3 (`PHOTO_*` in `src/booth.js`). Plain Atkinson gave regular
+   density 3 (`PHOTO_*` in `src/photo.js`). Plain Atkinson gave regular
    hatching on flat walls and crushed backlit faces. Pending: confirm with
    the dither comparison print on `/test.html`.
 4. Photo layouts (2×2 / strip) — not started.
@@ -128,6 +132,7 @@ fall back to `writeValueWithoutResponse`.
 
 ```sh
 ./run.sh              # local, HTTPS on the LAN (accept the self-signed cert)
+./print.sh            # print a single photo from this Mac (Chrome)
 # Oracle / Docker:
 docker build -t photoboot .
 docker run -d -p 8080:8080 -e BASE_URL=https://booth.example.com \

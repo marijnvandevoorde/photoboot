@@ -14,11 +14,15 @@ const shareRoutes = {
   },
 };
 
+// PHOTOBOOT_LOCAL=1 (print.sh): plain HTTP on localhost only. localhost is a
+// secure context, so camera/Bluetooth still work without a cert warning.
+const local = process.env.PHOTOBOOT_LOCAL === '1';
+
 export default defineConfig({
-  plugins: [basicSsl(), shareRoutes],
+  plugins: local ? [shareRoutes] : [basicSsl(), shareRoutes],
   server: {
-    https: true,
-    host: true,
+    https: !local,
+    host: local ? 'localhost' : true,
     port: 5173,
   },
   build: {
@@ -26,6 +30,7 @@ export default defineConfig({
       input: {
         booth: 'index.html',
         test: 'test.html',
+        print: 'print.html',
       },
     },
   },

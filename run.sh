@@ -30,4 +30,4 @@ if [ ! -d node_modules ]; then
   npm ci --no-audit --no-fund
 fi
 
-exec npm run "${1:-dev}"
+exec npm run "${1:-dev}" -- "${@:2}"

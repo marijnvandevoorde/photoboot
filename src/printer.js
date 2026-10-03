@@ -21,12 +21,18 @@ const UUID_CANDIDATES = [
   },
 ];
 
-// Starting assumption for the P2S. Calibration prints verify this empirically.
-export const DEFAULT_PRINT_WIDTH_DOTS = 384;
+// P2S head width, confirmed by the 0–640 and fine width calibration prints.
+export const HEAD_WIDTH_DOTS = 576;
+
+// Column 0 sits ~24 dots in from the sticker's left edge (unprintable), and
+// the head ends at the sticker's right edge. Printing 552 dots left-aligned
+// leaves the same ~24-dot margin on both sides, so content is centred.
+export const DEFAULT_PRINT_WIDTH_DOTS = 552;
 
 export class PhomemoPrinter {
-  constructor({ onLog = () => {} } = {}) {
+  constructor({ onLog = () => {}, onDisconnect = () => {} } = {}) {
     this.onLog = onLog;
+    this.onDisconnect = onDisconnect;
     this.device = null;
     this.writeChar = null;
     this.chunkSize = 200;
@@ -61,8 +67,18 @@ export class PhomemoPrinter {
     device.addEventListener('gattserverdisconnected', () => {
       this.log('Disconnected.');
       this.writeChar = null;
+      this.onDisconnect();
     });
+    await this.attach(device);
+  }
 
+  // Reconnect to the previously selected device without showing the picker.
+  async reconnect() {
+    if (!this.device) throw new Error('No printer selected yet.');
+    await this.attach(this.device);
+  }
+
+  async attach(device) {
     const server = await device.gatt.connect();
     this.log('GATT connected. Probing services…');
 
@@ -102,10 +118,12 @@ export class PhomemoPrinter {
   }
 
   // Reset / init the printer. Safe to call before each job.
-  async init() {
+  // density (concentration): 1 = thin, 3 = normal, 4 = thick. Don't probe
+  // other 1F 11 xx opcodes — unknown ones have bricked M02-family printers.
+  async init({ density = 4 } = {}) {
     const INIT = new Uint8Array([
       0x1b, 0x40, // ESC @ — initialize
-      0x1f, 0x11, 0x02, 0x04, // Phomemo print quality / density
+      0x1f, 0x11, 0x02, density, // Phomemo print density
     ]);
     await this.write(INIT);
   }

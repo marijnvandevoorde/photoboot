@@ -86,3 +86,12 @@ canvas {
   color: #eee;
   font: inherit;
 }
+.compare {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+.compare figure { margin: 0; }
+.compare figcaption { font-size: 0.85rem; color: #aaa; margin-top: 0.3rem; }
+/* width/height set inline so one dot maps to one device pixel */
+.compare canvas { width: auto; border-radius: 0; }

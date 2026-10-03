@@ -2,59 +2,77 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#111" />
-    <title>Phomemo P2S Printer Test</title>
-    <link rel="stylesheet" href="/src/style.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#000" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <title>Photoboot</title>
+    <link rel="stylesheet" href="/src/booth.css" />
   </head>
   <body>
-    <main>
-      <h1>Phomemo P2S — Printer Test</h1>
+    <!-- 1. Setup: pick the printer once. -->
+    <section id="setup" class="screen">
+      <div class="setup-card">
+        <h1>Photoboot</h1>
+        <p class="muted">Turn on the printer, then connect to it.</p>
+        <button id="connect" class="primary big">Connect printer</button>
+        <p id="setup-status" class="muted small" role="status"></p>
+        <p id="no-bluetooth" class="warn" hidden>
+          This browser can't connect to Bluetooth printers.
+          Use Chrome on Android, or the Bluefy browser on iPad.
+        </p>
+        <button id="skip-printer" class="link">Start without printer</button>
+      </div>
+    </section>
 
-      <section class="warn" id="unsupported" hidden>
-        <strong>Web Bluetooth not available in this browser.</strong>
-        <ul>
-          <li>Android: use Chrome.</li>
-          <li>iOS: install <em>Bluefy</em> from the App Store and open this URL in it.</li>
-          <li>Desktop: Chrome, Edge, or Opera.</li>
-        </ul>
-      </section>
+    <!-- 2. Live camera + capture. -->
+    <section id="booth" class="screen" hidden>
+      <video id="video" autoplay playsinline muted></video>
+      <div id="countdown" class="countdown" hidden></div>
+      <div id="flash" class="flash"></div>
 
-      <section class="controls">
-        <button id="connect">1. Connect printer</button>
-        <button id="print-calibration" disabled>2. Print width calibration (0–640, step 32)</button>
-        <button id="print-cal-narrow" disabled>3. Fine calibration (0–576, step 16)</button>
-        <label class="width-field">
-          Target width (dots, multiple of 8):
-          <input id="width" type="number" min="8" step="8" />
-        </label>
-        <button id="print-text" disabled>Print text (at target width)</button>
-        <button id="print-pattern" disabled>Print test pattern (at target width)</button>
-        <button id="print-image" disabled>Print image (fit to target width)</button>
-        <input type="file" id="file" accept="image/*" hidden />
-        <button id="disconnect" disabled>Disconnect</button>
-      </section>
+      <button id="printer-pill" class="pill" hidden></button>
+      <button id="switch-camera" class="icon-btn" hidden aria-label="Switch camera">⟲</button>
 
-      <section class="help">
-        <h2>How to use the calibration</h2>
-        <ol>
-          <li>Print the <strong>width calibration</strong>. The solid bar reveals where the print head stops; the numbers below show the exact dot column of each tick.</li>
-          <li>Note the <em>highest number that is fully inside the sticker</em>. That is your safe max width. Also note where the solid bar stops — that is the <em>physical</em> head width.</li>
-          <li>Optionally run the <strong>fine calibration</strong> (16-dot steps) to pinpoint the sticker edge within ~1.3&nbsp;mm.</li>
-          <li>Set <em>Target width</em> to that number (nearest multiple of 8), then try the text / pattern / image buttons.</li>
-        </ol>
-      </section>
+      <div class="bar" id="capture-bar">
+        <div class="delays" role="radiogroup" aria-label="Timer">
+          <button class="delay" data-delay="3" role="radio">3s</button>
+          <button class="delay" data-delay="5" role="radio">5s</button>
+          <button class="delay" data-delay="10" role="radio">10s</button>
+        </div>
+        <button id="shutter" class="shutter" aria-label="Take photo"></button>
+        <div class="bar-spacer"></div>
+      </div>
+    </section>
 
-      <section>
-        <h2>Status</h2>
-        <pre id="log"></pre>
-      </section>
+    <!-- 3. Review: retry / print / share. -->
+    <section id="review" class="screen" hidden>
+      <div class="review-body">
+        <img id="photo" alt="Your photo" />
+        <figure class="sticker">
+          <canvas id="sticker"></canvas>
+          <figcaption class="muted small">Sticker preview</figcaption>
+        </figure>
+      </div>
+      <div class="bar">
+        <button id="retry" class="secondary big">Retry</button>
+        <button id="print" class="primary big">Print</button>
+        <button id="share" class="secondary big">Share</button>
+      </div>
+      <p id="review-status" class="toast" role="status" hidden></p>
+    </section>
 
-      <section class="preview" hidden id="preview-wrap">
-        <h2>Rendered (what gets sent)</h2>
-        <canvas id="preview"></canvas>
-      </section>
-    </main>
-    <script type="module" src="/src/main.js"></script>
+    <!-- QR overlay -->
+    <div id="qr-dialog" class="overlay" hidden>
+      <div class="qr-card">
+        <div id="qr"></div>
+        <p>Scan to get your photo</p>
+        <button id="qr-close" class="primary big">Done</button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/booth.js"></script>
   </body>
 </html>

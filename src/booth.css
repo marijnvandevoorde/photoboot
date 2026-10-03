@@ -1,0 +1,214 @@
+:root {
+  color-scheme: dark;
+  font-family: -apple-system, system-ui, sans-serif;
+  --bg: #000;
+  --fg: #fff;
+  --muted: #9a9a9a;
+  --accent: #2a7;
+  --panel: rgba(20, 20, 20, 0.85);
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+[hidden] { display: none !important; }
+
+.screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.muted { color: var(--muted); }
+.small { font-size: 0.9rem; }
+
+button {
+  appearance: none;
+  border: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--fg);
+  cursor: pointer;
+}
+button:disabled { opacity: 0.4; cursor: default; }
+.big { font-size: 1.4rem; padding: 1.1rem 2.2rem; border-radius: 999px; min-width: 9rem; }
+.primary { background: var(--accent); }
+.secondary { background: #333; }
+.link { background: none; color: var(--muted); text-decoration: underline; font-weight: 400; }
+
+/* Setup */
+#setup { align-items: center; justify-content: center; padding: 1.5rem; }
+.setup-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  text-align: center;
+  max-width: 28rem;
+}
+.setup-card h1 { font-size: 3rem; margin: 0; letter-spacing: -0.02em; }
+.warn { background: #533; padding: 0.8rem 1rem; border-radius: 12px; }
+
+/* Booth */
+#video {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  object-fit: contain; /* show exactly what gets captured */
+  transform: scaleX(-1);
+  background: #000;
+}
+#video.unmirrored { transform: none; }
+
+.bar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.5rem calc(1rem + env(safe-area-inset-bottom));
+  background: var(--bg);
+}
+#review .bar { display: flex; justify-content: center; flex-wrap: wrap; }
+
+.delays { display: flex; gap: 0.5rem; justify-self: start; }
+.delay {
+  background: #222;
+  border-radius: 999px;
+  padding: 0.8rem 1.2rem;
+  font-size: 1.2rem;
+  min-width: 4.2rem;
+}
+.delay[aria-checked='true'] { background: var(--fg); color: #000; }
+
+.shutter {
+  width: 5.5rem;
+  height: 5.5rem;
+  border-radius: 50%;
+  background: var(--fg);
+  box-shadow: 0 0 0 6px #000, 0 0 0 10px var(--fg);
+  margin: 10px;
+}
+.shutter:active { transform: scale(0.94); }
+
+.countdown {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: min(45vw, 45vh);
+  font-weight: 800;
+  text-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+.flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+}
+.flash.on { animation: flash 0.6s ease-out; }
+@keyframes flash { from { opacity: 1; } to { opacity: 0; } }
+
+.pill {
+  position: absolute;
+  top: calc(1rem + env(safe-area-inset-top));
+  left: 1rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  background: var(--panel);
+  font-size: 0.9rem;
+}
+.pill.bad { background: #a33; }
+.icon-btn {
+  position: absolute;
+  top: calc(1rem + env(safe-area-inset-top));
+  right: 1rem;
+  width: 3.2rem;
+  height: 3.2rem;
+  border-radius: 50%;
+  background: var(--panel);
+  font-size: 1.6rem;
+}
+
+/* Review */
+.review-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+#photo {
+  max-width: 100%;
+  max-height: 100%;
+  min-width: 0;
+  object-fit: contain;
+  border-radius: 8px;
+}
+.sticker {
+  margin: 0;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  align-items: center;
+}
+.sticker canvas {
+  /* Size and side margins are set from JS so one printer dot maps to exactly
+     one device pixel. Any fractional scaling of a dither pattern shows moire
+     that isn't in the actual print. */
+  background: #fff;
+  border-radius: 4px;
+  box-sizing: content-box;
+  image-rendering: pixelated;
+}
+@media (orientation: portrait) {
+  .review-body { flex-direction: column; }
+}
+
+.toast {
+  position: absolute;
+  top: calc(1rem + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0.7rem 1.2rem;
+  border-radius: 999px;
+  background: var(--panel);
+  font-size: 1.1rem;
+}
+
+/* QR overlay */
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 1.5rem;
+}
+.qr-card {
+  background: #fff;
+  color: #000;
+  border-radius: 24px;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  font-size: 1.4rem;
+  text-align: center;
+}
+.qr-card p { margin: 0; font-weight: 600; }
+#qr svg { width: min(60vw, 60vh, 22rem); height: auto; display: block; }

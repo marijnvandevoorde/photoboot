@@ -20,13 +20,40 @@ export function fitToPrintWidth(source, targetWidth = DEFAULT_PRINT_WIDTH_DOTS) 
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, dw, dh);
+  ctx.imageSmoothingQuality = 'high'; // default 'low' aliases on big downscales
   ctx.drawImage(source, 0, 0, dw, dh);
   return canvas;
 }
 
-// Floyd–Steinberg dither → packed MSB-first bitmap. 1 bit = black dot.
-// Canvas width must be a multiple of 8.
-export function canvasToRaster(canvas) {
+// Error-diffusion kernels: [dx, dy, weight]. Atkinson only diffuses 6/8 of
+// the error, which gives cleaner highlights/shadows and less midtone grain —
+// usually nicer on thermal paper. Floyd–Steinberg keeps more tonal detail.
+const DITHER_KERNELS = {
+  floyd: { div: 16, taps: [[1, 0, 7], [-1, 1, 3], [0, 1, 5], [1, 1, 1]] },
+  atkinson: { div: 8, taps: [[1, 0, 1], [2, 0, 1], [-1, 1, 1], [0, 1, 1], [1, 1, 1], [0, 2, 1]] },
+  stucki: {
+    div: 42,
+    taps: [
+      [1, 0, 8], [2, 0, 4],
+      [-2, 1, 2], [-1, 1, 4], [0, 1, 8], [1, 1, 4], [2, 1, 2],
+      [-2, 2, 1], [-1, 2, 2], [0, 2, 4], [1, 2, 2], [2, 2, 1],
+    ],
+  },
+};
+export const DITHER_MODES = Object.keys(DITHER_KERNELS);
+
+// Dither → packed MSB-first bitmap. 1 bit = black dot. Canvas width must be
+// a multiple of 8. Rows are scanned serpentine to avoid diagonal "worms".
+//
+// `noise` jitters the threshold by ±noise levels, which breaks up the regular
+// hatching error diffusion produces in flat areas (walls, sky).
+//
+// `photo: true` stretches contrast (1st–99th percentile), lifts midtones
+// and sharpens — camera frames are flat/soft and thermal prints
+// come out dark.
+export function canvasToRaster(canvas, { photo = false, dither = 'floyd', noise = 0 } = {}) {
+  const kernel = DITHER_KERNELS[dither];
+  if (!kernel) throw new Error(`Unknown dither mode: ${dither}`);
   const { width, height } = canvas;
   if (width % 8 !== 0) throw new Error(`Canvas width ${width} is not a multiple of 8.`);
   const rowBytes = width / 8;
@@ -38,20 +65,26 @@ export function canvasToRaster(canvas) {
   for (let i = 0, p = 0; i < gray.length; i++, p += 4) {
     gray[i] = 0.299 * img.data[p] + 0.587 * img.data[p + 1] + 0.114 * img.data[p + 2];
   }
+  if (photo) {
+    enhanceForThermal(gray);
+    sharpen(gray, width, height);
+  }
 
   const bitmap = new Uint8Array(rowBytes * height);
   for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
+    const dir = y % 2 === 0 ? 1 : -1;
+    for (let k = 0; k < width; k++) {
+      const x = dir === 1 ? k : width - 1 - k;
       const i = y * width + x;
       const old = gray[i];
-      const newVal = old < 128 ? 0 : 255;
+      const threshold = noise ? 128 + (Math.random() * 2 - 1) * noise : 128;
+      const newVal = old < threshold ? 0 : 255;
       gray[i] = newVal;
       const err = old - newVal;
-      if (x + 1 < width) gray[i + 1] += (err * 7) / 16;
-      if (y + 1 < height) {
-        if (x > 0) gray[i + width - 1] += (err * 3) / 16;
-        gray[i + width] += (err * 5) / 16;
-        if (x + 1 < width) gray[i + width + 1] += (err * 1) / 16;
+      for (const [dx, dy, w] of kernel.taps) {
+        const nx = x + dx * dir;
+        const ny = y + dy;
+        if (nx >= 0 && nx < width && ny < height) gray[ny * width + nx] += (err * w) / kernel.div;
       }
       if (newVal === 0) {
         bitmap[y * rowBytes + (x >> 3)] |= 0x80 >> (x & 7);
@@ -60,6 +93,64 @@ export function canvasToRaster(canvas) {
   }
 
   return { bitmap, widthDots: width, heightDots: height };
+}
+
+// gamma < 1 lifts midtones: compensates thermal dot gain and backlit faces.
+function enhanceForThermal(gray, { gamma = 0.6 } = {}) {
+  const hist = new Uint32Array(256);
+  for (const v of gray) hist[Math.max(0, Math.min(255, v | 0))]++;
+  const percentile = (p) => {
+    const target = gray.length * p;
+    let sum = 0;
+    for (let v = 0; v < 256; v++) {
+      sum += hist[v];
+      if (sum >= target) return v;
+    }
+    return 255;
+  };
+  const lo = percentile(0.01);
+  const hi = Math.max(lo + 1, percentile(0.99));
+  for (let i = 0; i < gray.length; i++) {
+    const t = Math.max(0, Math.min(1, (gray[i] - lo) / (hi - lo)));
+    gray[i] = 255 * Math.pow(t, gamma);
+  }
+}
+
+// Unsharp mask with a 3×3 box blur: restores edges (eyes, hair) that the
+// downscale + dither would otherwise smear.
+function sharpen(gray, width, height, amount = 0.6) {
+  const src = gray.slice();
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const i = y * width + x;
+      let sum = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) sum += src[i + dy * width + dx];
+      }
+      gray[i] = Math.max(0, Math.min(255, src[i] + amount * (src[i] - sum / 9)));
+    }
+  }
+}
+
+// Draw a packed raster back onto a canvas, for an on-screen print preview.
+export function rasterToCanvas({ bitmap, widthDots, heightDots }) {
+  const canvas = document.createElement('canvas');
+  canvas.width = widthDots;
+  canvas.height = heightDots;
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(widthDots, heightDots);
+  const rowBytes = widthDots / 8;
+  for (let y = 0; y < heightDots; y++) {
+    for (let x = 0; x < widthDots; x++) {
+      const black = bitmap[y * rowBytes + (x >> 3)] & (0x80 >> (x & 7));
+      const p = (y * widthDots + x) * 4;
+      const v = black ? 0 : 255;
+      img.data[p] = img.data[p + 1] = img.data[p + 2] = v;
+      img.data[p + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return canvas;
 }
 
 // Render text as a canvas sized to `width` dots.

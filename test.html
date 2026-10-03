@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#111" />
+    <title>Phomemo P2S Printer Test</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Phomemo P2S — Printer Test</h1>
+
+      <section class="warn" id="unsupported" hidden>
+        <strong>Web Bluetooth not available in this browser.</strong>
+        <ul>
+          <li>Android: use Chrome.</li>
+          <li>iOS: install <em>Bluefy</em> from the App Store and open this URL in it.</li>
+          <li>Desktop: Chrome, Edge, or Opera.</li>
+        </ul>
+      </section>
+
+      <section class="controls">
+        <button id="connect">1. Connect printer</button>
+        <button id="print-calibration" disabled>2. Print width calibration (0–640, step 32)</button>
+        <button id="print-cal-narrow" disabled>3. Fine calibration (0–576, step 16)</button>
+        <label class="width-field">
+          Target width (dots, multiple of 8):
+          <input id="width" type="number" min="8" step="8" />
+        </label>
+        <button id="print-text" disabled>Print text (at target width)</button>
+        <button id="print-pattern" disabled>Print test pattern (at target width)</button>
+        <button id="print-image" disabled>Print image (fit to target width)</button>
+        <button id="compare-dither">Compare dithering on screen (no printing)</button>
+        <button id="print-dither" disabled>Dither comparison (pick a photo → 4 strips)</button>
+        <input type="file" id="file" accept="image/*" hidden />
+        <input type="file" id="dither-file" accept="image/*" hidden />
+        <input type="file" id="compare-file" accept="image/*" hidden />
+        <button id="disconnect" disabled>Disconnect</button>
+      </section>
+
+      <section class="help">
+        <h2>How to use the calibration</h2>
+        <ol>
+          <li>Print the <strong>width calibration</strong>. The solid bar reveals where the print head stops; the numbers below show the exact dot column of each tick.</li>
+          <li>Note the <em>highest number that is fully inside the sticker</em>. That is your safe max width. Also note where the solid bar stops — that is the <em>physical</em> head width.</li>
+          <li>Optionally run the <strong>fine calibration</strong> (16-dot steps) to pinpoint the sticker edge within ~1.3&nbsp;mm.</li>
+          <li>Set <em>Target width</em> to that number (nearest multiple of 8), then try the text / pattern / image buttons.</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>Status</h2>
+        <pre id="log"></pre>
+      </section>
+
+      <section class="preview" hidden id="preview-wrap">
+        <h2>Rendered (what gets sent)</h2>
+        <canvas id="preview"></canvas>
+      </section>
+      <section id="compare-wrap" hidden>
+        <h2>Dithering comparison — 1 printer dot = 1 screen pixel</h2>
+        <div id="compare" class="compare"></div>
+      </section>
+    </main>
+    <script type="module" src="/src/test.js"></script>
+  </body>
+</html>

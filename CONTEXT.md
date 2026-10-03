@@ -22,8 +22,15 @@ printer from the browser.
   → **~300 DPI** (so the model is 300 DPI, *not* the 203 DPI I initially
   assumed). The code originally hard-coded a 384-dot width based on the
   wrong DPI assumption — now parameterised.
-- **Head width:** **unknown**, probably 576 dots (common for 300-DPI
-  Phomemos). To be confirmed by the width calibration print.
+- **Head width:** **576 dots** (~48.8 mm), confirmed by the 0–640
+  calibration print: the bar and ruler stop at 576.
+- **Left edge:** column 0 lands ~2 mm (~24 dots) in from the sticker's
+  left edge (fine calibration). That strip is outside the head and cannot
+  be printed. The head's right end (col 575) lands right on the sticker's
+  right edge.
+- **Chosen print width: 552 dots**, left-aligned at col 0, giving ~24 dots
+  of margin each side (`DEFAULT_PRINT_WIDTH_DOTS` in `src/printer.js`).
+  Phomemo's own app leaves an even bigger margin, so this is final.
 
 ## Browser support
 
@@ -51,8 +58,10 @@ a fourth candidate.
 
 **Byte sequences used:**
 
-- Init: `1B 40` (ESC @ — reset) then `1F 11 02 04` (Phomemo print quality /
-  density).
+- Init: `1B 40` (ESC @ — reset) then `1F 11 02 nn` = density
+  (1 thin, 3 normal, 4 thick). Do NOT probe other `1F 11 xx` opcodes —
+  unknown ones have bricked M02-family printers.
+- "HD" in the Phomemo app = native 300 dpi; we already print at native res.
 - Raster: `GS v 0` = `1D 76 30 00 xL xH yL yH <bitmap>` where `xL/xH` is
   width in **bytes** (little-endian uint16) and `yL/yH` is height in
   **dots**. Bits are MSB-first, 1 = black dot.
@@ -66,66 +75,64 @@ fall back to `writeValueWithoutResponse`.
 
 ## What's in the repo
 
-- `index.html` — printer-test UI shell.
-- `src/style.css` — minimal dark theme.
-- `src/printer.js` — `PhomemoPrinter` class: `connect`, `init`, `printRaster`,
-  `feed`, `disconnect`. Raster width is a parameter, not a constant.
-- `src/raster.js` — canvas → packed-bit bitmap (Floyd–Steinberg dither),
-  plus generators: `textToCanvas`, `testPatternCanvas`,
-  `widthCalibrationCanvas`.
-- `src/main.js` — UI glue, status log, target-width input.
-- `vite.config.js` — HTTPS dev server, LAN host.
-- `package.json` — Vite + basic-ssl plugin.
+- `index.html` + `src/booth.js` + `src/booth.css` — the booth app (kiosk):
+  1. Setup screen: connect the printer once (or "Start without printer").
+     After that there is no UI to change printers; on a dropout it keeps
+     reconnecting to the same device.
+  2. Live camera (selfie cam by default, switch button if >1 camera),
+     timer 3 / 5 / 10 s (remembered), countdown + flash.
+  3. Review: photo + dithered sticker preview, **Retry / Print / Share**.
+     Share uploads the JPEG and shows a QR to `/share/{uuid}.jpg`.
+     Review returns to the camera after 90 s idle.
+  - Photos are saved as the preview showed them (mirrored for the front cam).
+  - Keeps the screen awake (Wake Lock), fullscreen on first tap, PWA manifest.
+- `test.html` + `src/test.js` + `src/style.css` — printer test / calibration page.
+- `src/printer.js` — `PhomemoPrinter`: `connect`, `reconnect`, `init`,
+  `printRaster`, `feed`, `disconnect`. Width constants live here.
+- `src/raster.js` — canvas → packed-bit bitmap (Floyd–Steinberg dither,
+  optional photo contrast stretch), `rasterToCanvas` preview, calibration
+  generators.
+- `server/share.js` — `POST /api/share` (JPEG body → `{id, url}`) and
+  `GET /share/{uuid}.jpg`. Mounted in the Vite dev/preview server and the
+  production server.
+- `server/index.js` — production server (node builtins only): `dist/` + share.
+- `Dockerfile` — build + slim runtime; photos in volume `/data/shares`.
+- `run.sh` — self-contained local launcher (portable Node in `.node/`).
 
-## What works
+## Config (env)
 
-- BLE connect / disconnect, device picker with name filters
-  (`P2`, `M02`, `M03`, `M04`, `T02`, `Phomemo`).
-- Printing text, a test pattern (border + diagonals + ramp), and arbitrary
-  images.
-- Floyd–Steinberg dithering (looks acceptable in the user's first test).
-- Width calibration button: prints a solid bar out to 640 dots plus a
-  numbered ruler.
+- `BASE_URL` — public origin for QR links. Unset → derived from the request
+  host, so locally the QR uses whatever IP the tablet opened.
+- `SHARE_DIR` — photo folder (default `./shares`, Docker `/data/shares`).
+- `PORT` — production server port (default 8080).
 
 ## Open questions / next things to do
 
-1. **Width calibration — in progress.** User to report:
-   - Column where the solid bar physically ends (= head width).
-   - Highest tick number that is fully inside the sticker (= usable width).
-   - Then run fine calibration (step 16) if we need sticker-edge accuracy
-     better than ~2.6 mm.
-2. **Set `targetWidth`** in the UI based on calibration (nearest multiple of
-   8 ≤ usable width). Confirm with text / pattern prints.
-3. **Left-edge offset?** If the physical left margin is non-zero we might
-   want to render content with a leading white padding so important
-   subjects don't ride the edge. Measure physical offset from paper edge
-   to column 0 during calibration.
-4. **Photo-booth features** (next milestone, not started):
-   - Camera capture via `getUserMedia`.
-   - 2×2 or 4-strip layout.
-   - Countdown + flash.
-   - PWA manifest + service worker so it installs to the home screen.
-   - Permissions story on iOS/Bluefy.
-5. **Density / darkness** — `1F 11 02 04` is one quality level; other Phomemo
-   models accept different values. Expose a density setting once we have
-   width nailed.
+1. **iPad:** Bluefy is needed for Web Bluetooth — verify that camera
+   (`getUserMedia`) works inside Bluefy.
+2. **Shares never expire** — add cleanup (cron/`find -mtime`) if needed.
+3. **Photo look** — booth uses Atkinson + threshold noise 16, gamma 0.6,
+   density 3 (`PHOTO_*` in `src/booth.js`). Plain Atkinson gave regular
+   hatching on flat walls and crushed backlit faces. Pending: confirm with
+   the dither comparison print on `/test.html`.
+4. Photo layouts (2×2 / strip) — not started.
 
 ## Decisions / conventions
 
-- Keep calibration prints short (~1 cm tall) to minimise paper waste.
+- Print width 552, left-aligned at col 0 → equal ~24-dot margins.
 - Width must be a multiple of 8 (byte alignment).
-- Prints are left-aligned to column 0; centring is done by padding the
-  canvas, not by a printer command.
-- No dependencies beyond Vite + basic-ssl.
+- Deps: Vite + basic-ssl (dev), `qrcode-generator` (client). Server uses
+  node builtins only.
 
-## How to resume
+## How to run
 
 ```sh
-cd photoboot
-npm install           # if node_modules not on the USB
-npm run dev           # Vite prints a LAN HTTPS URL
+./run.sh              # local, HTTPS on the LAN (accept the self-signed cert)
+# Oracle / Docker:
+docker build -t photoboot .
+docker run -d -p 8080:8080 -e BASE_URL=https://booth.example.com \
+  -v photoboot-shares:/data/shares photoboot
 ```
 
-Open the LAN URL on the phone (Android Chrome, or Bluefy on iOS), accept
-the self-signed cert, hit **Connect printer**, then **Print width
-calibration** and report the two numbers above.
+Production needs HTTPS in front (reverse proxy): camera and Web Bluetooth
+won't work over plain HTTP.

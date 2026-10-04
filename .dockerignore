@@ -4,3 +4,7 @@ dist
 shares
 .DS_Store
 *.md
+.env
+.git
+*.sh
+docker-compose.yml

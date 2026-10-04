@@ -1,0 +1,40 @@
+# Production: https://boot.small-victories.co behind the host's Traefik.
+# Photos live on the host in /storage/photoboot/shares (owned by uid 1000,
+# the image's `node` user).
+#
+#   docker compose up -d --build
+#
+# Like the server's other apps it has its own edge network `photoboot-edge`
+# (10.192.17.0/24), shared only with Traefik (~/traefik lists it too).
+# Needs a proxied (orange cloud) DNS record: Traefik only accepts Cloudflare.
+
+services:
+  photoboot:
+    build: .
+    image: photoboot:latest
+    container_name: photoboot
+    restart: unless-stopped
+    environment:
+      BASE_URL: https://boot.small-victories.co
+      SHARE_DIR: /data/shares
+    volumes:
+      - /storage/photoboot/shares:/data/shares
+    networks:
+      - photoboot-edge
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=photoboot-edge
+      - traefik.http.routers.photoboot.rule=Host(`boot.small-victories.co`)
+      - traefik.http.routers.photoboot.entrypoints=websecure
+      - traefik.http.routers.photoboot.tls=true
+      - traefik.http.routers.photoboot.tls.certresolver=letsencrypt
+      - traefik.http.services.photoboot.loadbalancer.server.port=8080
+
+networks:
+  photoboot-edge:
+    external: true

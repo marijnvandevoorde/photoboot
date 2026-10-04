@@ -41,7 +41,7 @@ const DITHER_KERNELS = {
   },
 };
 // Non-diffusing screens, see `screen()`.
-const SCREENS = ['halftone', 'comic'];
+const SCREENS = ['halftone', 'lines', 'stencil', 'comic'];
 export const DITHER_MODES = [...Object.keys(DITHER_KERNELS), ...SCREENS];
 
 // Canvas → packed MSB-first bitmap. 1 bit = black dot. Canvas width must be
@@ -56,10 +56,20 @@ export const DITHER_MODES = [...Object.keys(DITHER_KERNELS), ...SCREENS];
 // `photo: true` stretches contrast (`clip` to 1−`clip` percentile), applies
 // `gamma` (< 1 lifts midtones) and sharpens by `sharpen` — camera frames are
 // flat/soft and thermal prints come out dark. `sketch: true` then swaps the
-// image for its edges, drawn as pencil lines.
+// image for its edges, drawn as pencil lines; `outline` (0–1) instead darkens
+// the edges, keeping features defined when the tones are very light.
 export function canvasToRaster(
   canvas,
-  { photo = false, dither = 'floyd', noise = 0, gamma = 0.6, clip = 0.01, sharpen: amount = 0.6, sketch = false } = {}
+  {
+    photo = false,
+    dither = 'floyd',
+    noise = 0,
+    gamma = 0.6,
+    clip = 0.01,
+    sharpen: amount = 0.6,
+    sketch = false,
+    outline = 0,
+  } = {}
 ) {
   const { width, height } = canvas;
   if (width % 8 !== 0) throw new Error(`Canvas width ${width} is not a multiple of 8.`);
@@ -77,6 +87,10 @@ export function canvasToRaster(
     if (amount) sharpen(gray, width, height, amount);
   }
   if (sketch) toSketch(gray, width, height);
+  if (outline) {
+    const edges = sobel(boxBlur(gray, width, height), width, height);
+    for (let i = 0; i < gray.length; i++) gray[i] -= outline * Math.max(0, edges[i] - 40);
+  }
 
   const ink = DITHER_KERNELS[dither]
     ? diffuse(gray, width, height, DITHER_KERNELS[dither], noise)
@@ -116,16 +130,39 @@ function diffuse(gray, width, height, kernel, noise) {
 }
 
 const HALFTONE_PERIOD = 5; // dots per cell (~60 lpi at 300 dpi)
+const LINES_PERIOD = 5; // dot rows per engraving line
+const STENCIL_RADIUS = 24; // dots, neighbourhood for the adaptive threshold
 const BAYER_4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 
 // Threshold screens → 1 per black dot.
 //
 // halftone: newspaper-style round dots on a 45° grid. Clustered dots survive
 //   thermal dot gain far better than scattered single dots.
+// lines: engraving-style horizontal lines that swell where it's dark.
+// stencil: no dither at all, pure black or white.
 // comic: bold ink outlines over three flat tones (white, a fine ordered
 //   tint, black), like a printed comic panel.
 function screen(gray, width, height, mode) {
   const ink = new Uint8Array(width * height);
+  if (mode === 'lines') {
+    const f = (2 * Math.PI) / LINES_PERIOD;
+    for (let y = 0; y < height; y++) {
+      const spot = (Math.cos(f * y) + 1) / 2; // 1 on a line's centre row
+      for (let x = 0; x < width; x++) {
+        const i = y * width + x;
+        ink[i] = spot > gray[i] / 255 + 0.02 ? 1 : 0;
+      }
+    }
+    return ink;
+  }
+  if (mode === 'stencil') {
+    // Compare each dot with its surroundings (adaptive threshold), so a
+    // backlit face keeps its features instead of turning into a silhouette.
+    const smooth = boxBlur(gray, width, height);
+    const local = localMean(smooth, width, height, STENCIL_RADIUS);
+    for (let i = 0; i < ink.length; i++) ink[i] = smooth[i] < local[i] - 10 || smooth[i] < 35 ? 1 : 0;
+    return ink;
+  }
   if (mode === 'halftone') {
     const f = (2 * Math.PI) / (HALFTONE_PERIOD * Math.SQRT2);
     for (let y = 0; y < height; y++) {
@@ -170,6 +207,28 @@ function boxBlur(gray, width, height) {
         for (let dx = -1; dx <= 1; dx++) sum += gray[i + dy * width + dx];
       }
       out[i] = sum / 9;
+    }
+  }
+  return out;
+}
+
+// Mean over a (2r+1)² square around each dot, via an integral image.
+function localMean(gray, width, height, r) {
+  const sums = new Float64Array((width + 1) * (height + 1));
+  for (let y = 0; y < height; y++) {
+    let row = 0;
+    for (let x = 0; x < width; x++) {
+      row += gray[y * width + x];
+      sums[(y + 1) * (width + 1) + x + 1] = sums[y * (width + 1) + x + 1] + row;
+    }
+  }
+  const out = new Float32Array(width * height);
+  for (let y = 0; y < height; y++) {
+    const y0 = Math.max(0, y - r), y1 = Math.min(height, y + r + 1);
+    for (let x = 0; x < width; x++) {
+      const x0 = Math.max(0, x - r), x1 = Math.min(width, x + r + 1);
+      const s = sums[y1 * (width + 1) + x1] - sums[y0 * (width + 1) + x1] - sums[y1 * (width + 1) + x0] + sums[y0 * (width + 1) + x0];
+      out[y * width + x] = s / ((x1 - x0) * (y1 - y0));
     }
   }
   return out;

@@ -82,8 +82,8 @@ fall back to `writeValueWithoutResponse`.
   2. Live camera (selfie cam by default, switch button if >1 camera),
      timer 3 / 5 / 10 s (remembered), countdown + flash.
   3. Review: large sticker preview only (scaled in whole/half device-pixel
-     steps per dot to avoid moire), a row of filters (Classic, Soft, Bright,
-     Punch, Halftone, Comic, Sketch — resets to Classic per photo), and
+     steps per dot to avoid moire), a row of filters (Classic, Light, Stencil,
+     Lines, Halftone, Comic, Sketch — resets to Classic per photo), and
      **Retry / Print / Share**. Print uses the selected filter. Share uploads
      the original colour JPEG and shows a QR to `/share/{uuid}.jpg`.
      Review returns to the camera after 90 s idle. Portrait: preview on top,
@@ -100,8 +100,9 @@ fall back to `writeValueWithoutResponse`.
 - `src/printer.js` — `PhomemoPrinter`: `connect`, `reconnect`, `init`,
   `printRaster`, `feed`, `disconnect`. Width constants live here.
 - `src/raster.js` — canvas → packed-bit bitmap (error diffusion:
-  Floyd–Steinberg / Atkinson / Stucki; screens: halftone, comic; optional
-  photo contrast stretch + gamma + sharpen, sketch edges), `rasterToCanvas`
+  Floyd–Steinberg / Atkinson / Stucki; screens: halftone, lines, stencil
+  (adaptive threshold), comic; optional photo contrast stretch + gamma +
+  sharpen, sketch edges, ink outlines), `rasterToCanvas`
   preview, calibration generators.
 - `server/share.js` — `POST /api/share` (JPEG body → `{id, url}`) and
   `GET /share/{uuid}.jpg`. Mounted in the Vite dev/preview server and the

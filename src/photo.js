@@ -11,11 +11,14 @@ export const PHOTO_DENSITY = 3;
 //
 // classic: Atkinson + threshold noise. Plain Atkinson gave regular hatching
 //   on flat walls and crushed backlit faces.
+// light: high-key — midtones become sparse dots, ink outlines keep the face.
+// A 1-bit printer has no grey, only dot density, so "lighter dither" means
+// fewer dots, not paler ones.
 export const PHOTO_FILTERS = [
   { id: 'classic', label: 'Classic', options: { dither: 'atkinson', noise: 16 } },
-  { id: 'soft', label: 'Soft', options: { dither: 'stucki', noise: 6, gamma: 0.7, sharpen: 0.3 } },
-  { id: 'bright', label: 'Bright', options: { dither: 'atkinson', noise: 16, gamma: 0.42, clip: 0.02 } },
-  { id: 'punch', label: 'Punch', options: { dither: 'atkinson', noise: 10, gamma: 0.62, clip: 0.05, sharpen: 1.4 } },
+  { id: 'light', label: 'Light', options: { dither: 'atkinson', noise: 8, gamma: 0.3, clip: 0.03, outline: 0.8 } },
+  { id: 'stencil', label: 'Stencil', options: { dither: 'stencil', gamma: 0.9, clip: 0.04, sharpen: 0 } },
+  { id: 'lines', label: 'Lines', options: { dither: 'lines', gamma: 0.8, clip: 0.04, sharpen: 1, outline: 0.6 } },
   { id: 'halftone', label: 'Halftone', options: { dither: 'halftone', gamma: 0.55, clip: 0.08, sharpen: 1.5 } },
   { id: 'comic', label: 'Comic', options: { dither: 'comic', gamma: 0.6, clip: 0.03 } },
   { id: 'sketch', label: 'Sketch', options: { dither: 'atkinson', sketch: true, sharpen: 0 } },

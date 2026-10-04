@@ -40,23 +40,30 @@ const DITHER_KERNELS = {
     ],
   },
 };
-export const DITHER_MODES = Object.keys(DITHER_KERNELS);
+// Non-diffusing screens, see `screen()`.
+const SCREENS = ['halftone', 'comic'];
+export const DITHER_MODES = [...Object.keys(DITHER_KERNELS), ...SCREENS];
 
-// Dither → packed MSB-first bitmap. 1 bit = black dot. Canvas width must be
-// a multiple of 8. Rows are scanned serpentine to avoid diagonal "worms".
+// Canvas → packed MSB-first bitmap. 1 bit = black dot. Canvas width must be
+// a multiple of 8.
+//
+// `dither` is an error-diffusion kernel (rows are scanned serpentine to avoid
+// diagonal "worms") or one of SCREENS.
 //
 // `noise` jitters the threshold by ±noise levels, which breaks up the regular
 // hatching error diffusion produces in flat areas (walls, sky).
 //
-// `photo: true` stretches contrast (1st–99th percentile), lifts midtones
-// and sharpens — camera frames are flat/soft and thermal prints
-// come out dark.
-export function canvasToRaster(canvas, { photo = false, dither = 'floyd', noise = 0 } = {}) {
-  const kernel = DITHER_KERNELS[dither];
-  if (!kernel) throw new Error(`Unknown dither mode: ${dither}`);
+// `photo: true` stretches contrast (`clip` to 1−`clip` percentile), applies
+// `gamma` (< 1 lifts midtones) and sharpens by `sharpen` — camera frames are
+// flat/soft and thermal prints come out dark. `sketch: true` then swaps the
+// image for its edges, drawn as pencil lines.
+export function canvasToRaster(
+  canvas,
+  { photo = false, dither = 'floyd', noise = 0, gamma = 0.6, clip = 0.01, sharpen: amount = 0.6, sketch = false } = {}
+) {
   const { width, height } = canvas;
   if (width % 8 !== 0) throw new Error(`Canvas width ${width} is not a multiple of 8.`);
-  const rowBytes = width / 8;
+  if (!DITHER_KERNELS[dither] && !SCREENS.includes(dither)) throw new Error(`Unknown dither mode: ${dither}`);
 
   const ctx = canvas.getContext('2d');
   const img = ctx.getImageData(0, 0, width, height);
@@ -66,11 +73,28 @@ export function canvasToRaster(canvas, { photo = false, dither = 'floyd', noise 
     gray[i] = 0.299 * img.data[p] + 0.587 * img.data[p + 1] + 0.114 * img.data[p + 2];
   }
   if (photo) {
-    enhanceForThermal(gray);
-    sharpen(gray, width, height);
+    enhanceForThermal(gray, { gamma, clip });
+    if (amount) sharpen(gray, width, height, amount);
   }
+  if (sketch) toSketch(gray, width, height);
 
+  const ink = DITHER_KERNELS[dither]
+    ? diffuse(gray, width, height, DITHER_KERNELS[dither], noise)
+    : screen(gray, width, height, dither);
+
+  const rowBytes = width / 8;
   const bitmap = new Uint8Array(rowBytes * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (ink[y * width + x]) bitmap[y * rowBytes + (x >> 3)] |= 0x80 >> (x & 7);
+    }
+  }
+  return { bitmap, widthDots: width, heightDots: height };
+}
+
+// Error diffusion → 1 per black dot.
+function diffuse(gray, width, height, kernel, noise) {
+  const ink = new Uint8Array(width * height);
   for (let y = 0; y < height; y++) {
     const dir = y % 2 === 0 ? 1 : -1;
     for (let k = 0; k < width; k++) {
@@ -79,24 +103,96 @@ export function canvasToRaster(canvas, { photo = false, dither = 'floyd', noise 
       const old = gray[i];
       const threshold = noise ? 128 + (Math.random() * 2 - 1) * noise : 128;
       const newVal = old < threshold ? 0 : 255;
-      gray[i] = newVal;
+      ink[i] = newVal === 0 ? 1 : 0;
       const err = old - newVal;
       for (const [dx, dy, w] of kernel.taps) {
         const nx = x + dx * dir;
         const ny = y + dy;
         if (nx >= 0 && nx < width && ny < height) gray[ny * width + nx] += (err * w) / kernel.div;
       }
-      if (newVal === 0) {
-        bitmap[y * rowBytes + (x >> 3)] |= 0x80 >> (x & 7);
-      }
     }
   }
-
-  return { bitmap, widthDots: width, heightDots: height };
+  return ink;
 }
 
+const HALFTONE_PERIOD = 5; // dots per cell (~60 lpi at 300 dpi)
+const BAYER_4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+
+// Threshold screens → 1 per black dot.
+//
+// halftone: newspaper-style round dots on a 45° grid. Clustered dots survive
+//   thermal dot gain far better than scattered single dots.
+// comic: bold ink outlines over three flat tones (white, a fine ordered
+//   tint, black), like a printed comic panel.
+function screen(gray, width, height, mode) {
+  const ink = new Uint8Array(width * height);
+  if (mode === 'halftone') {
+    const f = (2 * Math.PI) / (HALFTONE_PERIOD * Math.SQRT2);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = y * width + x;
+        // Cosine spot function: 1 at a dot centre, 0 between dots.
+        const spot = (Math.cos(f * (x + y)) + Math.cos(f * (x - y))) / 4 + 0.5;
+        ink[i] = spot > gray[i] / 255 + 0.02 ? 1 : 0;
+      }
+    }
+    return ink;
+  }
+
+  const smooth = boxBlur(gray, width, height);
+  const edges = sobel(smooth, width, height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = y * width + x;
+      const v = smooth[i];
+      if (edges[i] > 90 || v < 70) ink[i] = 1;
+      else if (v < 150) ink[i] = BAYER_4[(y & 3) * 4 + (x & 3)] < 6 ? 1 : 0;
+    }
+  }
+  return ink;
+}
+
+// Gray image → its edges as dark pencil lines on white.
+function toSketch(gray, width, height) {
+  const edges = sobel(boxBlur(gray, width, height), width, height);
+  for (let i = 0; i < gray.length; i++) {
+    gray[i] = 255 * Math.pow(Math.max(0, 1 - edges[i] / 220), 1.6);
+  }
+}
+
+function boxBlur(gray, width, height) {
+  const out = gray.slice();
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const i = y * width + x;
+      let sum = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) sum += gray[i + dy * width + dx];
+      }
+      out[i] = sum / 9;
+    }
+  }
+  return out;
+}
+
+// Sobel gradient magnitude (0 on the 1-px border).
+function sobel(gray, width, height) {
+  const out = new Float32Array(width * height);
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const i = y * width + x;
+      const a = gray[i - width - 1], b = gray[i - width], c = gray[i - width + 1];
+      const d = gray[i - 1], f = gray[i + 1];
+      const g = gray[i + width - 1], h = gray[i + width], k = gray[i + width + 1];
+      out[i] = Math.hypot(c + 2 * f + k - a - 2 * d - g, g + 2 * h + k - a - 2 * b - c);
+    }
+  }
+  return out;
+}
+
+// Contrast stretch between the `clip` and 1−`clip` percentiles, then gamma.
 // gamma < 1 lifts midtones: compensates thermal dot gain and backlit faces.
-function enhanceForThermal(gray, { gamma = 0.6 } = {}) {
+function enhanceForThermal(gray, { gamma = 0.6, clip = 0.01 } = {}) {
   const hist = new Uint32Array(256);
   for (const v of gray) hist[Math.max(0, Math.min(255, v | 0))]++;
   const percentile = (p) => {
@@ -108,8 +204,8 @@ function enhanceForThermal(gray, { gamma = 0.6 } = {}) {
     }
     return 255;
   };
-  const lo = percentile(0.01);
-  const hi = Math.max(lo + 1, percentile(0.99));
+  const lo = percentile(clip);
+  const hi = Math.max(lo + 1, percentile(1 - clip));
   for (let i = 0; i < gray.length; i++) {
     const t = Math.max(0, Math.min(1, (gray[i] - lo) / (hi - lo)));
     gray[i] = 255 * Math.pow(t, gamma);
@@ -119,16 +215,9 @@ function enhanceForThermal(gray, { gamma = 0.6 } = {}) {
 // Unsharp mask with a 3×3 box blur: restores edges (eyes, hair) that the
 // downscale + dither would otherwise smear.
 function sharpen(gray, width, height, amount = 0.6) {
-  const src = gray.slice();
-  for (let y = 1; y < height - 1; y++) {
-    for (let x = 1; x < width - 1; x++) {
-      const i = y * width + x;
-      let sum = 0;
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) sum += src[i + dy * width + dx];
-      }
-      gray[i] = Math.max(0, Math.min(255, src[i] + amount * (src[i] - sum / 9)));
-    }
+  const blurred = boxBlur(gray, width, height);
+  for (let i = 0; i < gray.length; i++) {
+    gray[i] = Math.max(0, Math.min(255, gray[i] + amount * (gray[i] - blurred[i])));
   }
 }
 

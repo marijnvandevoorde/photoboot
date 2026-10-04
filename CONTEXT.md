@@ -81,21 +81,28 @@ fall back to `writeValueWithoutResponse`.
      reconnecting to the same device.
   2. Live camera (selfie cam by default, switch button if >1 camera),
      timer 3 / 5 / 10 s (remembered), countdown + flash.
-  3. Review: photo + dithered sticker preview, **Retry / Print / Share**.
-     Share uploads the JPEG and shows a QR to `/share/{uuid}.jpg`.
-     Review returns to the camera after 90 s idle.
+  3. Review: large sticker preview only (scaled in whole/half device-pixel
+     steps per dot to avoid moire), a row of filters (Classic, Soft, Bright,
+     Punch, Halftone, Comic, Sketch — resets to Classic per photo), and
+     **Retry / Print / Share**. Print uses the selected filter. Share uploads
+     the original colour JPEG and shows a QR to `/share/{uuid}.jpg`.
+     Review returns to the camera after 90 s idle. Portrait: preview on top,
+     controls below; landscape: side panel. Checked from 360 px phones to
+     12.9" iPads, both orientations.
+     Dev: `/?demo=/share/<uuid>.jpg` opens the review with that image.
   - Photos are saved as the preview showed them (mirrored for the front cam).
   - Keeps the screen awake (Wake Lock), fullscreen on first tap, PWA manifest.
 - `test.html` + `src/test.js` + `src/style.css` — printer test / calibration page.
 - `print.html` + `src/print.js` — print one chosen photo (full 576 or 552
   centred). `./print.sh` opens it on this Mac via http://localhost.
-- `src/photo.js` — shared photo print look (`PHOTO_DITHER`, `PHOTO_NOISE`,
+- `src/photo.js` — shared photo print looks (`PHOTO_FILTERS`,
   `PHOTO_DENSITY`), used by booth and print page.
 - `src/printer.js` — `PhomemoPrinter`: `connect`, `reconnect`, `init`,
   `printRaster`, `feed`, `disconnect`. Width constants live here.
-- `src/raster.js` — canvas → packed-bit bitmap (Floyd–Steinberg dither,
-  optional photo contrast stretch), `rasterToCanvas` preview, calibration
-  generators.
+- `src/raster.js` — canvas → packed-bit bitmap (error diffusion:
+  Floyd–Steinberg / Atkinson / Stucki; screens: halftone, comic; optional
+  photo contrast stretch + gamma + sharpen, sketch edges), `rasterToCanvas`
+  preview, calibration generators.
 - `server/share.js` — `POST /api/share` (JPEG body → `{id, url}`) and
   `GET /share/{uuid}.jpg`. Mounted in the Vite dev/preview server and the
   production server.
@@ -115,10 +122,11 @@ fall back to `writeValueWithoutResponse`.
 1. **iPad:** Bluefy is needed for Web Bluetooth — verify that camera
    (`getUserMedia`) works inside Bluefy.
 2. **Shares never expire** — add cleanup (cron/`find -mtime`) if needed.
-3. **Photo look** — booth uses Atkinson + threshold noise 16, gamma 0.6,
-   density 3 (`PHOTO_*` in `src/photo.js`). Plain Atkinson gave regular
-   hatching on flat walls and crushed backlit faces. Pending: confirm with
-   the dither comparison print on `/test.html`.
+3. **Photo look** — default filter "Classic" is Atkinson + threshold noise
+   16, gamma 0.6, density 3. Plain Atkinson gave regular hatching on flat
+   walls and crushed backlit faces. The other filters were tuned on screen
+   only — pending: real prints of each, especially Halftone and Comic
+   (dot gain).
 4. Photo layouts (2×2 / strip) — not started.
 
 ## Decisions / conventions

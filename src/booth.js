@@ -2,7 +2,7 @@
 // review (retry / print / share via QR).
 
 import qrcode from 'qrcode-generator';
-import { photoToRaster, printPhoto } from './photo.js';
+import { DEFAULT_FILTER, PHOTO_FILTERS, photoToRaster, printPhoto } from './photo.js';
 import { PhomemoPrinter } from './printer.js';
 import { rasterToCanvas } from './raster.js';
 
@@ -24,7 +24,7 @@ let delay = 3;
 let busy = false;
 
 // Current photo + derived data, reset on every capture.
-let photo = null; // { canvas, raster, shareUrl }
+let photo = null; // { canvas, rasters: {filterId: raster}, raster, filter, shareUrl }
 let reviewTimer = null;
 
 // ---------- helpers ----------
@@ -240,8 +240,7 @@ $('shutter').addEventListener('click', async () => {
     await countdown(delay);
     flash();
     const canvas = grabFrame();
-    const raster = photoToRaster(canvas);
-    photo = { canvas, raster, shareUrl: null };
+    photo = { canvas, rasters: {}, raster: null, filter: null, shareUrl: null };
     await sleep(350); // let the flash land before switching screens
     showReview();
   } finally {
@@ -260,21 +259,67 @@ function armReviewTimeout() {
   }, REVIEW_TIMEOUT_MS);
 }
 
-function showReview() {
-  $('photo').src = photo.canvas.toDataURL('image/jpeg', 0.85);
+function renderFilters() {
+  const list = $('filters');
+  list.replaceChildren(
+    ...PHOTO_FILTERS.map(({ id, label }) => {
+      const btn = document.createElement('button');
+      btn.className = 'filter';
+      btn.setAttribute('role', 'radio');
+      btn.dataset.filter = id;
+      btn.textContent = label;
+      btn.addEventListener('click', () => {
+        if (busy || !photo) return;
+        selectFilter(id);
+        armReviewTimeout();
+      });
+      return btn;
+    })
+  );
+}
+renderFilters();
+
+// Rasters are cached per filter, so flipping back and forth is instant.
+function selectFilter(id) {
+  photo.filter = id;
+  photo.raster = photo.rasters[id] ??= photoToRaster(photo.canvas, undefined, id);
+  for (const btn of document.querySelectorAll('.filter')) {
+    btn.setAttribute('aria-checked', String(btn.dataset.filter === id));
+  }
   const preview = rasterToCanvas(photo.raster);
   const sticker = $('sticker');
   sticker.width = preview.width;
   sticker.height = preview.height;
   sticker.getContext('2d').drawImage(preview, 0, 0);
-  // 1 dot = 1 device pixel (close to real size on a ~264 ppi tablet).
+  layoutSticker();
+}
+
+// Scale the preview by a whole number of device pixels per dot, as large as
+// fits. Half steps are fine too: 2.5× alternates 2- and 3-pixel dots, a beat
+// too fine to show as moire. Below 1:1 (tiny screens) it falls back to plain
+// fit-to-box.
+function layoutSticker() {
+  if (!photo?.raster || screens.review.hidden) return;
+  const { widthDots, heightDots } = photo.raster;
+  const box = $('review-preview');
+  const style = getComputedStyle(box);
+  const availW = box.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  const availH = box.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
   const dpr = window.devicePixelRatio || 1;
-  sticker.style.width = `${preview.width / dpr}px`;
-  sticker.style.height = `${preview.height / dpr}px`;
-  sticker.style.padding = `0 ${STICKER_MARGIN_DOTS / dpr}px`;
+  const fit = Math.min((availW * dpr) / (widthDots + 2 * STICKER_MARGIN_DOTS), (availH * dpr) / heightDots);
+  const scale = fit >= 1 ? Math.floor(fit * 2) / 2 : fit;
+  const sticker = $('sticker');
+  sticker.style.width = `${(widthDots * scale) / dpr}px`;
+  sticker.style.height = `${(heightDots * scale) / dpr}px`;
+  sticker.style.padding = `0 ${(STICKER_MARGIN_DOTS * scale) / dpr}px`;
+}
+new ResizeObserver(() => layoutSticker()).observe($('review-preview'));
+
+function showReview() {
   $('print').hidden = !printer;
   $('review-status').hidden = true;
   show('review');
+  selectFilter(DEFAULT_FILTER);
   armReviewTimeout();
 }
 
@@ -356,3 +401,19 @@ $('qr-close').addEventListener('click', () => {
   $('qr-dialog').hidden = true;
   armReviewTimeout();
 });
+
+// Dev only: /?demo=<image url> opens the review screen with that image, to
+// check filters and layout without a camera.
+const demo = import.meta.env.DEV && new URLSearchParams(location.search).get('demo');
+if (demo) {
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    canvas.getContext('2d').drawImage(img, 0, 0);
+    photo = { canvas, rasters: {}, raster: null, filter: null, shareUrl: null };
+    showReview();
+  };
+  img.src = demo;
+}

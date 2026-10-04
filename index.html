@@ -47,19 +47,18 @@
       </div>
     </section>
 
-    <!-- 3. Review: retry / print / share. -->
+    <!-- 3. Review: sticker preview, filters, retry / print / share. -->
     <section id="review" class="screen" hidden>
-      <div class="review-body">
-        <img id="photo" alt="Your photo" />
-        <figure class="sticker">
-          <canvas id="sticker"></canvas>
-          <figcaption class="muted small">Sticker preview</figcaption>
-        </figure>
+      <div id="review-preview" class="review-preview">
+        <canvas id="sticker" aria-label="Sticker preview"></canvas>
       </div>
-      <div class="bar">
-        <button id="retry" class="secondary big">Retry</button>
-        <button id="print" class="primary big">Print</button>
-        <button id="share" class="secondary big">Share</button>
+      <div class="review-side">
+        <div id="filters" class="filters" role="radiogroup" aria-label="Filter"></div>
+        <div class="actions">
+          <button id="retry" class="secondary big">Retry</button>
+          <button id="print" class="primary big">Print</button>
+          <button id="share" class="secondary big">Share</button>
+        </div>
       </div>
       <p id="review-status" class="toast" role="status" hidden></p>
     </section>

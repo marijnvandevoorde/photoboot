@@ -41,7 +41,7 @@ const DITHER_KERNELS = {
   },
 };
 // Non-diffusing screens, see `screen()`.
-const SCREENS = ['halftone', 'lines', 'stencil', 'comic'];
+const SCREENS = ['halftone', 'lines', 'stencil', 'comic', 'threshold'];
 export const DITHER_MODES = [...Object.keys(DITHER_KERNELS), ...SCREENS];
 
 // Canvas → packed MSB-first bitmap. 1 bit = black dot. Canvas width must be
@@ -58,26 +58,24 @@ export const DITHER_MODES = [...Object.keys(DITHER_KERNELS), ...SCREENS];
 // flat/soft and thermal prints come out dark. `sketch: true` then swaps the
 // image for its edges, drawn as pencil lines; `outline` (0–1) instead darkens
 // the edges, keeping features defined when the tones are very light.
-export function canvasToRaster(
-  canvas,
-  {
-    photo = false,
-    dither = 'floyd',
-    noise = 0,
-    gamma = 0.6,
-    clip = 0.01,
-    sharpen: amount = 0.6,
-    sketch = false,
-    outline = 0,
-  } = {}
-) {
+export function canvasToRaster(canvas, { dither = 'floyd', noise = 0, period, ...toneOptions } = {}) {
   const { width, height } = canvas;
   if (width % 8 !== 0) throw new Error(`Canvas width ${width} is not a multiple of 8.`);
   if (!DITHER_KERNELS[dither] && !SCREENS.includes(dither)) throw new Error(`Unknown dither mode: ${dither}`);
+  const gray = toGray(canvas, toneOptions);
+  const ink = DITHER_KERNELS[dither]
+    ? diffuse(gray, width, height, DITHER_KERNELS[dither], noise)
+    : screen(gray, width, height, dither, period);
+  return inkToRaster(ink, width, height);
+}
 
-  const ctx = canvas.getContext('2d');
-  const img = ctx.getImageData(0, 0, width, height);
-
+// Canvas → luminance 0–255, with the tone options of canvasToRaster applied.
+export function toGray(
+  canvas,
+  { photo = false, gamma = 0.6, clip = 0.01, sharpen: amount = 0.6, sketch = false, outline = 0 } = {}
+) {
+  const { width, height } = canvas;
+  const img = canvas.getContext('2d').getImageData(0, 0, width, height);
   const gray = new Float32Array(width * height);
   for (let i = 0, p = 0; i < gray.length; i++, p += 4) {
     gray[i] = 0.299 * img.data[p] + 0.587 * img.data[p + 1] + 0.114 * img.data[p + 2];
@@ -91,11 +89,11 @@ export function canvasToRaster(
     const edges = sobel(boxBlur(gray, width, height), width, height);
     for (let i = 0; i < gray.length; i++) gray[i] -= outline * Math.max(0, edges[i] - 40);
   }
+  return gray;
+}
 
-  const ink = DITHER_KERNELS[dither]
-    ? diffuse(gray, width, height, DITHER_KERNELS[dither], noise)
-    : screen(gray, width, height, dither);
-
+// 1-per-black-dot array → packed MSB-first raster.
+export function inkToRaster(ink, width, height) {
   const rowBytes = width / 8;
   const bitmap = new Uint8Array(rowBytes * height);
   for (let y = 0; y < height; y++) {
@@ -138,14 +136,19 @@ const BAYER_4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 //
 // halftone: newspaper-style round dots on a 45° grid. Clustered dots survive
 //   thermal dot gain far better than scattered single dots.
+// threshold: plain 50% cut, for canvases that are already black and white.
 // lines: engraving-style horizontal lines that swell where it's dark.
 // stencil: no dither at all, pure black or white.
 // comic: bold ink outlines over three flat tones (white, a fine ordered
 //   tint, black), like a printed comic panel.
-function screen(gray, width, height, mode) {
+function screen(gray, width, height, mode, period) {
   const ink = new Uint8Array(width * height);
+  if (mode === 'threshold') {
+    for (let i = 0; i < ink.length; i++) ink[i] = gray[i] < 128 ? 1 : 0;
+    return ink;
+  }
   if (mode === 'lines') {
-    const f = (2 * Math.PI) / LINES_PERIOD;
+    const f = (2 * Math.PI) / (period ?? LINES_PERIOD);
     for (let y = 0; y < height; y++) {
       const spot = (Math.cos(f * y) + 1) / 2; // 1 on a line's centre row
       for (let x = 0; x < width; x++) {
@@ -164,7 +167,7 @@ function screen(gray, width, height, mode) {
     return ink;
   }
   if (mode === 'halftone') {
-    const f = (2 * Math.PI) / (HALFTONE_PERIOD * Math.SQRT2);
+    const f = (2 * Math.PI) / ((period ?? HALFTONE_PERIOD) * Math.SQRT2);
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const i = y * width + x;
@@ -197,7 +200,7 @@ function toSketch(gray, width, height) {
   }
 }
 
-function boxBlur(gray, width, height) {
+export function boxBlur(gray, width, height) {
   const out = gray.slice();
   for (let y = 1; y < height - 1; y++) {
     for (let x = 1; x < width - 1; x++) {
@@ -213,7 +216,7 @@ function boxBlur(gray, width, height) {
 }
 
 // Mean over a (2r+1)² square around each dot, via an integral image.
-function localMean(gray, width, height, r) {
+export function localMean(gray, width, height, r) {
   const sums = new Float64Array((width + 1) * (height + 1));
   for (let y = 0; y < height; y++) {
     let row = 0;
@@ -235,7 +238,7 @@ function localMean(gray, width, height, r) {
 }
 
 // Sobel gradient magnitude (0 on the 1-px border).
-function sobel(gray, width, height) {
+export function sobel(gray, width, height) {
   const out = new Float32Array(width * height);
   for (let y = 1; y < height - 1; y++) {
     for (let x = 1; x < width - 1; x++) {

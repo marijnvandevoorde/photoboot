@@ -21,9 +21,11 @@ function selectedWidth() {
   return Number(document.querySelector('input[name="width"]:checked').value);
 }
 
+// The printer drops idle links (e.g. while the file picker is open), so
+// Print only needs a selected printer; the click handler reconnects.
 function updateButtons() {
   $('connect').disabled = printer.connected;
-  $('print').disabled = !(printer.connected && raster);
+  $('print').disabled = !(printer.device && raster);
 }
 
 function render() {

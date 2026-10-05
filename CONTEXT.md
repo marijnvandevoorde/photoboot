@@ -75,82 +75,74 @@ fall back to `writeValueWithoutResponse`.
 
 ## What's in the repo
 
+README.md has the user-facing feature list; this is the code map.
+
 - `index.html` + `src/booth.js` + `src/booth.css` — the booth app (kiosk):
   1. Setup screen: connect the printer once (or "Start without printer").
-     After that there is no UI to change printers; on a dropout it keeps
-     reconnecting to the same device. **Long-press the "Photoboot" title
-     for ~1 s** (or visit `/?admin=1`) to open the settings page.
-  2. Live camera (selfie cam by default, switch button if >1 camera),
-     timer 3 / 5 / 10 s (remembered), countdown + flash. If settings has
-     `shotCount > 1`, the shutter captures that many frames in a row,
-     each with its own countdown, and shows a `n / N` counter at the top.
-  3. Review: large sticker preview (scaled in whole/half device-pixel
-     steps per dot to avoid moire). **Style** row (Classic / Pop art /
-     Woodcut / Stipple) and **Twist** row (Normal / Mirror / Big head) if
-     the admin enabled filters — otherwise hidden. **Retry / Print /
-     Share**. The sticker is composed from the active template:
-       - `plain`:   no decoration, just stacked shots.
-       - `custom`:  admin-uploaded header + footer PNGs.
-     Prints end with a 72-dot (~6 mm) blank tear margin plus the feed.
-     Share uploads a composite JPEG (strip mode: shots stacked vertically)
-     and shows a QR to `/share/{uuid}.jpg`. Review auto-returns to the
-     camera after 90 s idle.
-     Dev: `/?demo=/share/<uuid>.jpg` opens the review with that image.
-  - Photos are saved as the preview showed them (mirrored for the front cam).
-  - Keeps the screen awake (Wake Lock), fullscreen on first tap, PWA manifest.
-- `settings.html` + `src/settings.js` + `src/settings.css` — admin page.
-  Picks the printer type (auto / phomemo / …), paper width, print density,
-  shot count, default countdown, filter on/off, active template, template
-  config (custom header/footer uploads), optional admin password.
-  Writes to `localStorage['photoboot:config']` via
-  `src/config.js`; template images live in IndexedDB (`src/storage.js`).
+     After that it keeps reconnecting to the same device on a dropout.
+     Settings: long-press the "Photoboot" title (~1 s), long-press the
+     top-left corner of the camera view (2 s), or `/?admin=1`.
+  2. Camera: timer chips (remembered), optional 1–4 photo chips
+     (`guestShotChoice`), shutter with caption, tap anywhere to start.
+     Live look chips (`livePreview`): Camera or a style + twist, rendered
+     from the video ~15 fps into `#live`; the pick carries into the review.
+     Countdown with "Get ready / Smile!", beeps, cancel; "Next pose!" and
+     "Photo n of N" between strip shots. Camera failures show a panel and
+     auto-retry. Idle → attract screen cycling recent local photos.
+  3. Review: sticker preview (whole/half device pixels per dot), style and
+     twist rows (allowed subset), Print / Get photo / Retake / Done.
+     Printing shows a full-screen overlay; copies, a per-photo limit, and
+     auto-print are settings. Back to the camera `doneTimeoutSec` after a
+     print/share, `reviewTimeoutSec` when idle. Leaving the review archives
+     the colour keepsake locally.
+  - Shared/archived photo = `renderColour`: the sticker layout in colour
+    (header, shots, gaps, footer, 24-dot side margins), with the twist.
+  - Writes a health heartbeat (`photoboot:status`) and counters (stats.js).
+- `settings.html` + `src/settings.js` — admin page: tonight (health, paper,
+  counters), event name + language, saved setups / export / import,
+  printer, paper (+ roll meter), printing, capture, looks, template,
+  guest screens + wording, local photos (ZIP), server events, PIN, reset.
+  Inputs use a small `bind()` helper; listeners are bound once.
 - `preview.html` + `src/preview.js` — renders a sticker through the current
-  config/template using a synthetic sample or an uploaded photo, 1 printer
-  dot per device pixel. Optional filter × twist grid for A/B'ing looks on
-  screen before burning paper.
+  config/template from a synthetic sample or an uploaded photo; reloads when
+  settings change in another tab.
 - `test.html` + `src/test.js` + `src/style.css` — printer test / calibration page.
-- `print.html` + `src/print.js` — print one chosen photo (full 576 or 552
-  centred). `./print.sh` opens it on this Mac via http://localhost.
-- `src/config.js` — single config source of truth. Keys: `printerType`,
-  `paperWidthDots`, `printDensity`, `filterEnabled`, `shotCount`,
-  `defaultDelay`, `templateId`, `templateConfig`, `adminPassword`.
-  localStorage-backed. `PAPER_PRESETS` lives here.
-- `src/photo.js` — print looks (`PHOTO_STYLES`, `PHOTO_TWISTS`),
-  `photoToRaster` (fit + twist + style → raster), `renderSticker`
-  (one or more shots + template → final sticker), `printPhoto` (adds the
-  tear margin).
-- `src/strip.js` — `composeStrip(shotRasters, template, stickerWidth)`
-  stacks header + shots + footer at the full sticker width and threshold-
-  dithers the whole thing back to 1-bit.
-- `src/templates.js` — registry of built-in templates (`plain`, `custom`)
-  + helpers to save/load custom header/footer images in IDB.
-- `src/effects.js` — custom styles (woodcut, stipple) and twists (mirror,
-  big head). 16 more effects were tried in a "filter lab" gallery and
-  dropped; they're in commit 8b32a21 if one is wanted back.
-- `src/printers/` — printer abstraction.
-    - `base.js`: `PrinterBase` interface (connect/reconnect/init/
-      printRaster/feed/disconnect).
-    - `phomemo.js`: `PhomemoPrinter` for the P2 / M02 / M03 / M04 / T02
-      family (ESC/POS over BLE, three service UUID candidates probed).
-    - `index.js`: `PRINTERS` registry + `connectPrinter(type, opts)`
-      factory. `type: 'auto'` opens a filter-wide BLE picker and routes
-      to the matching backend by name prefix. Settings exposes a dropdown
-      of registered types.
-- `src/printer.js` — compat shim: re-exports `PhomemoPrinter` and the width
-  constants for the test / print pages.
-- `src/raster.js` — canvas → packed-bit bitmap (error diffusion:
-  Floyd–Steinberg / Atkinson / Stucki; screens: halftone, threshold;
-  optional photo contrast stretch + gamma + sharpen + ink outlines),
-  `toGray` / `inkToRaster` building blocks, `rasterToCanvas`
-  preview, calibration generators.
-- `src/storage.js` — tiny async key/value store on IndexedDB, used for the
-  custom template's header/footer image blobs.
-- `server/share.js` — `POST /api/share` (JPEG body → `{id, url}`) and
-  `GET /share/{uuid}.jpg`. Mounted in the Vite dev/preview server and the
-  production server.
-- `server/index.js` — production server (node builtins only): `dist/` + share.
-- `Dockerfile` — build + slim runtime; photos in volume `/data/shares`.
+- `print.html` + `src/print.js` — print one chosen photo.
+- `src/config.js` — config source of truth (localStorage
+  `photoboot:config`); see DEFAULTS for every key. `portableConfig` drops
+  device keys for exports; `eventKey` groups stats/photos per event.
+- `src/i18n.js` — guest wording en/nl/fr + per-key overrides (`texts`).
+- `src/stats.js` — per-event counters, paper meter, booth heartbeat.
+- `src/archive.js` — local colour copies in IndexedDB (`photo:<event>:<iso>`)
+  and ZIP export (uses `server/zip.js`).
+- `src/remote.js` — client for the server event API.
+- `src/photo.js` — looks (`PHOTO_STYLES`, `PHOTO_TWISTS`), `photoToRaster`,
+  `renderSticker`, `renderColour`, `printPhoto` (copies + tear margin).
+- `src/strip.js` — `composeStrip` (1-bit sticker) and `composeColour`.
+- `src/templates.js` — `plain`, `text` (title / two lines / system font),
+  `custom` (header/footer images in IndexedDB); image export/import helpers.
+- `src/effects.js` — woodcut, stipple, mirror, big head. 16 more effects
+  were tried in a "filter lab" and dropped; they're in commit 8b32a21.
+- `src/printers/` — printer abstraction (`base.js`, `phomemo.js`, registry
+  + auto-detect in `index.js`). `src/printer.js` is a compat shim.
+- `src/raster.js` — canvas → packed-bit bitmap (error diffusion, screens,
+  tone options), `rasterToCanvas`, calibration generators.
+- `src/storage.js` — tiny IndexedDB key/value store (template images,
+  saved setups, local photos). Closes on `pagehide`.
+- `server/share.js` — the one middleware (Vite dev + prod): `POST
+  /api/share`, `/s/{uuid}` share page (save / delete), `/share/{uuid}.jpg`,
+  `DELETE /api/share/{uuid}`, rate limit, then event routes.
+- `server/photos.js` — photo files + `{id}.json` sidecars (event, created),
+  expiry cleanup (hourly), disk quota.
+- `server/events.js` — events: admin CRUD (`ADMIN_TOKEN`), setup load and
+  stats push (setup key), gallery `/g/{id}/{galleryKey}` + streamed ZIP.
+- `server/http.js` — helpers + the HTML shell of the public pages.
+- `server/zip.js` — stored-ZIP writer + CRC32, shared with the browser.
+- `server/index.js` — production server (node builtins only): `dist/` + routes.
+- `Dockerfile` / `docker-compose.yml` — volumes `/data/shares`, `/data/events`.
 - `run.sh` — self-contained local launcher (portable Node in `.node/`).
+- `deploy.sh` — tar over SSH + `docker compose up -d --build`; keeps the
+  server's `.env`, skips `template-assets/` (local, gitignored).
 
 ## Adding a new printer type
 
@@ -165,21 +157,21 @@ fall back to `writeValueWithoutResponse`.
 
 ## Config (env)
 
-- `BASE_URL` — public origin for QR links. Unset → derived from the request
-  host, so locally the QR uses whatever IP the tablet opened.
-- `SHARE_DIR` — photo folder (default `./shares`, Docker `/data/shares`).
-- `PORT` — production server port (default 8080).
+See the table in README.md: `BASE_URL`, `PORT`, `SHARE_DIR`, `EVENTS_DIR`,
+`SHARE_TTL_DAYS`, `SHARE_MAX_MB`, `ADMIN_TOKEN`, `UPLOAD_TOKEN`. On the
+production host the secrets are in `~/photoboot/.env`.
 
 ## Open questions / next things to do
 
 1. **iPad:** Bluefy is needed for Web Bluetooth — verify that camera
    (`getUserMedia`) works inside Bluefy.
-2. **Shares never expire** — add cleanup (cron/`find -mtime`) if needed.
+2. **Paper-out / lid / battery** — not detected. Would need reading the
+   printer's notify characteristic; never probe unknown opcodes.
 3. **Photo look** — default style "Classic" is Atkinson + threshold noise
    16, gamma 0.6, density 3. Plain Atkinson gave regular hatching on flat
-   walls and crushed backlit faces. Pop art / Woodcut / Stipple and the
-   frame were tuned on screen only — pending: real test prints (dot gain,
-   thin strokes, tear margin length).
+   walls and crushed backlit faces. Pop art / Woodcut / Stipple were
+   tuned on screen only — pending: real test prints (dot gain, thin
+   template strokes, tear margin length).
 
 ## Decisions / conventions
 

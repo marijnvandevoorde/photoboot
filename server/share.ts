@@ -39,6 +39,29 @@ const RATE_MAX = 120; // uploads per IP per hour without an event key
 
 const recent = new Map<string, number[]>(); // ip → timestamps
 
+// The iOS / Android app serves its pages from these origins and calls the
+// API cross-origin. Every API route still needs its own key or token.
+const CORS_ORIGINS = (process.env.CORS_ORIGINS ?? 'capacitor://localhost,https://localhost')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+// Adds CORS headers for the app; returns true when it answered a preflight.
+function cors(req: Req, res: Res, pathname: string): boolean {
+  const origin = req.headers.origin;
+  if (!origin || !CORS_ORIGINS.includes(origin) || !pathname.startsWith('/api/')) return false;
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Vary', 'Origin');
+  if (req.method !== 'OPTIONS') return false;
+  res.writeHead(204, {
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Event-Id, X-Event-Key, X-Upload-Token',
+    'Access-Control-Max-Age': '86400',
+  });
+  res.end();
+  return true;
+}
+
 function rateLimited(ip: string): boolean {
   const now = Date.now();
   const hits = (recent.get(ip) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
@@ -131,6 +154,7 @@ const SHARE_API = /^\/api\/share\/([0-9a-f-]{36})$/;
 async function route(req: Req, res: Res, next: Next): Promise<void> {
   const url = new URL(req.url ?? '/', 'http://x');
   const { pathname } = url;
+  if (cors(req, res, pathname)) return;
   if (pathname === '/api/share' && req.method === 'POST') return upload(req, res);
 
   // The photo id from `pattern`, if this request is `method` on it.

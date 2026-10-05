@@ -2,6 +2,7 @@
 // N shots → review (retake / print / share via QR / done). Config in
 // src/config.js drives everything guests see; change it via /settings.html.
 
+import './platform.ts';
 import qrcode from 'qrcode-generator';
 import { recentPhotos, savePhoto } from './archive.ts';
 import { getConfig } from './config.ts';
@@ -17,8 +18,10 @@ import {
   renderColour,
   renderSticker,
 } from './photo.ts';
+import { apiBase, keepScreenOn } from './platform.ts';
 import type { PrinterBase } from './printers/base.ts';
 import { connectPrinter } from './printers/index.ts';
+import { transport } from './printers/transport.ts';
 import { rasterToCanvas } from './raster.ts';
 import { deviceId, remote } from './remote.ts';
 import { getStats, paperLeft, record, setStatus } from './stats.ts';
@@ -116,6 +119,7 @@ document.addEventListener('click', () => {
 // Keep the screen on while the booth is running.
 let wakeLock: WakeLockSentinel | null | undefined = null;
 async function keepAwake() {
+  if (await keepScreenOn()) return; // the app keeps the screen on natively
   try {
     wakeLock = await navigator.wakeLock?.request('screen');
   } catch {
@@ -242,7 +246,7 @@ $<HTMLButtonElement>('skip-printer').addEventListener('click', () => {
   startBooth();
 });
 
-if (!navigator.bluetooth) {
+if (!transport().available) {
   $('no-bluetooth').hidden = false;
   $<HTMLButtonElement>('connect').disabled = true;
 }
@@ -908,7 +912,7 @@ async function uploadPhoto(): Promise<string> {
     headers['X-Event-Key'] = config.serverEvent.key;
   }
   if (config.uploadToken) headers['X-Upload-Token'] = config.uploadToken;
-  const res = await fetch('/api/share', { method: 'POST', headers, body: await colourJpeg() });
+  const res = await fetch(`${apiBase}/api/share`, { method: 'POST', headers, body: await colourJpeg() });
   const body: { url?: string; error?: string } = await res.json().catch(() => ({}));
   if (!res.ok || !body.url) throw new Error(body.error || `HTTP ${res.status}`);
   return body.url;

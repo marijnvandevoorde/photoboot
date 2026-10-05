@@ -1,5 +1,7 @@
+import './platform.ts';
 import { $, ctx2d, errorMessage } from './dom.ts';
 import { DEFAULT_PRINT_WIDTH_DOTS, PhomemoPrinter } from './printer.ts';
+import { transport } from './printers/transport.ts';
 import {
   canvasToRaster,
   fitToPrintWidth,
@@ -23,7 +25,7 @@ function log(msg: string) {
   console.log(line);
 }
 
-if (!navigator.bluetooth) {
+if (!transport().available) {
   $('unsupported').hidden = false;
   $<HTMLButtonElement>('connect').disabled = true;
 }
@@ -241,4 +243,4 @@ $<HTMLInputElement>('compare-file').addEventListener('change', async (e) => {
 
 $<HTMLInputElement>('width').value = String(targetWidth);
 log('Ready. Click "Connect printer" to begin.');
-if (!navigator.bluetooth) log('Web Bluetooth is NOT available in this browser.');
+if (!transport().available) log('Bluetooth is NOT available here.');

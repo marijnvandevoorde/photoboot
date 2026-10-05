@@ -3,6 +3,7 @@
 // 1 printer dot per device pixel. Also offers a filter × twist grid for
 // A/B'ing looks without burning paper.
 
+import './platform.ts';
 import { getConfig } from './config.ts';
 import { $, ctx2d } from './dom.ts';
 import { DEFAULT_LOOK, PHOTO_STYLES, PHOTO_TWISTS, renderSticker } from './photo.ts';

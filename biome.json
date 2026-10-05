@@ -13,7 +13,10 @@
       "!**/shares",
       "!**/events",
       "!**/template-assets",
-      "!**/package-lock.json"
+      "!**/package-lock.json",
+      "!**/ios/App/App/public",
+      "!**/ios/**/build",
+      "!**/ios/**/DerivedData"
     ]
   },
   "formatter": {

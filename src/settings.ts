@@ -6,6 +6,7 @@
 // hidden long-presses in the booth (and /?admin=1) are the only entry points —
 // this URL isn't linked from anywhere public.
 
+import './platform.ts';
 import qrcode from 'qrcode-generator';
 import { deletePhotos, exportZip, photoEvents } from './archive.ts';
 import type { Config, TextTemplateConfig } from './config.ts';
@@ -665,6 +666,9 @@ $<HTMLButtonElement>('publish-event').addEventListener('click', async () => {
   }
 });
 $<HTMLButtonElement>('refresh-events').addEventListener('click', refreshEvents);
+$<HTMLButtonElement>('use-setup-link').addEventListener('click', () =>
+  importSetupLink($<HTMLInputElement>('setup-link').value)
+);
 $<HTMLButtonElement>('leave-event').addEventListener('click', () => {
   if (!confirm('Unlink this booth from its server event? Settings stay as they are.')) return;
   save({ serverEvent: null });
@@ -674,11 +678,28 @@ $<HTMLButtonElement>('leave-event').addEventListener('click', () => {
 });
 
 // Setup QR: /settings.html#event=<id>.<setupKey>
+// Setup QR / link: …/settings.html#event=<id>.<setupKey>. Opened directly
+// in a browser, or pasted on a device where the link opens elsewhere (the
+// app: the camera's QR scanner opens Safari).
+const SETUP_LINK = /#event=([\w-]+)\.([\w-]+)$/;
+
 async function importFromHash() {
-  const m = location.hash.match(/^#event=([\w-]+)\.([\w-]+)$/);
-  if (!m) return;
+  if (!SETUP_LINK.test(location.hash)) return;
+  const link = location.hash;
   history.replaceState(null, '', location.pathname);
+  await importSetupLink(link);
+}
+
+async function importSetupLink(link: string) {
+  const m = link.trim().match(SETUP_LINK);
   const notice = $('import-status');
+  notice.classList.remove('warn');
+  if (!m) {
+    notice.hidden = false;
+    notice.textContent = "That isn't a setup link. It ends in #event=…";
+    notice.classList.add('warn');
+    return;
+  }
   notice.hidden = false;
   notice.textContent = 'Loading the event setup…';
   try {

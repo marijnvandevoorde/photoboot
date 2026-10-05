@@ -1,8 +1,10 @@
 // Standalone page: pick a photo and print it with the booth's photo look.
 
+import './platform.ts';
 import { $, errorMessage } from './dom.ts';
 import { photoToRaster, printPhoto } from './photo.ts';
 import { PhomemoPrinter } from './printer.ts';
+import { transport } from './printers/transport.ts';
 import { rasterToCanvas } from './raster.ts';
 import type { Raster } from './types.ts';
 
@@ -87,7 +89,7 @@ $<HTMLButtonElement>('print').addEventListener('click', async () => {
   updateButtons();
 });
 
-if (!navigator.bluetooth) {
+if (!transport().available) {
   $('unsupported').hidden = false;
   $<HTMLButtonElement>('connect').disabled = true;
 }

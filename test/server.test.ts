@@ -97,6 +97,31 @@ describe('sharing', () => {
   });
 });
 
+describe('CORS for the app', () => {
+  it('answers the preflight for the app origin only', async () => {
+    const ok = await fetch(`${base}/api/share`, {
+      method: 'OPTIONS',
+      headers: { Origin: 'capacitor://localhost', 'Access-Control-Request-Method': 'POST' },
+    });
+    expect(ok.status).toBe(204);
+    expect(ok.headers.get('access-control-allow-origin')).toBe('capacitor://localhost');
+    expect(ok.headers.get('access-control-allow-headers')).toContain('X-Event-Key');
+
+    const other = await fetch(`${base}/api/share`, {
+      method: 'POST',
+      body: JPEG,
+      headers: { Origin: 'https://evil.example' },
+    });
+    expect(other.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('marks real API responses for the app', async () => {
+    const res = await upload({ Origin: 'capacitor://localhost' });
+    expect(res.status).toBe(201);
+    expect(res.headers.get('access-control-allow-origin')).toBe('capacitor://localhost');
+  });
+});
+
 describe('events', () => {
   it('needs the admin token', async () => {
     expect((await fetch(`${base}/api/events`)).status).toBe(401);

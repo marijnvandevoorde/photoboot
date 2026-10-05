@@ -5,6 +5,7 @@
 // key, which the setup QR hands to each device.
 
 import type { PortableConfig } from './config.ts';
+import { apiBase, publicOrigin } from './platform.ts';
 import type { Stats } from './stats.ts';
 import type { TemplateImages } from './templates.ts';
 
@@ -58,7 +59,7 @@ async function call<T>(
   path: string,
   { body, headers = {} }: { body?: unknown; headers?: Record<string, string> } = {}
 ): Promise<T> {
-  const res = await fetch(path, {
+  const res = await fetch(`${apiBase}${path}`, {
     method,
     headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers },
     body: body ? JSON.stringify(body) : undefined,
@@ -99,5 +100,5 @@ export function deviceId(): string {
 }
 
 // Links the server hands out for an event.
-export const setupUrl = (id: string, setupKey: string) => `${location.origin}/settings.html#event=${id}.${setupKey}`;
-export const galleryUrl = (id: string, galleryKey: string) => `${location.origin}/g/${id}/${galleryKey}`;
+export const setupUrl = (id: string, setupKey: string) => `${publicOrigin}/settings.html#event=${id}.${setupKey}`;
+export const galleryUrl = (id: string, galleryKey: string) => `${publicOrigin}/g/${id}/${galleryKey}`;

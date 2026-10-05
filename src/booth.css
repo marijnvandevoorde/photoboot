@@ -83,6 +83,31 @@ button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
   background: #000;
 }
 #video.unmirrored { transform: none; }
+/* Live print look: drawn already mirrored, 1 dot per pixel, scaled up. */
+.live {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+.live.dots { image-rendering: pixelated; }
+.live-looks {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0.8rem;
+  display: grid;
+  gap: 0.4rem;
+  padding: 0 1rem;
+  pointer-events: none;
+}
+.live-looks .filters { pointer-events: auto; justify-content: safe center; }
+.live-looks .filter { background: var(--panel); min-height: 44px; }
+.live-looks .filter[aria-checked='true'] { background: var(--fg); color: #000; }
+#live-twists .filter { background: rgba(0, 0, 0, 0.55); box-shadow: inset 0 0 0 1px #666; }
+#live-twists .filter[aria-checked='true'] { background: var(--fg); box-shadow: none; }
 
 .bar {
   display: grid;
@@ -403,3 +428,15 @@ button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
   animation: pulse 2.4s ease-in-out infinite;
 }
 @keyframes pulse { 50% { transform: scale(1.05); } }
+
+/* Live look chips: one compact centred row each, whatever the orientation
+   (the review's landscape grid must not apply here). */
+.live-looks .filters,
+.live-looks #live-twists {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  grid-template-columns: none;
+  overflow: visible;
+}
+.live-looks .filter { flex: 0 0 auto; padding: 0.55rem 1.1rem; }

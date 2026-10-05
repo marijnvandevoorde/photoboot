@@ -31,6 +31,11 @@
     <section id="booth" class="screen" hidden>
       <div id="stage" class="stage">
         <video id="video" autoplay playsinline muted></video>
+        <canvas id="live" class="live" hidden aria-hidden="true"></canvas>
+        <div id="live-looks" class="live-looks" hidden>
+          <div id="live-styles" class="filters" role="radiogroup" aria-label="Look"></div>
+          <div id="live-twists" class="filters" role="radiogroup" aria-label="Twist"></div>
+        </div>
         <div id="countdown" class="countdown" hidden aria-live="assertive">
           <span id="countdown-number" class="countdown-number"></span>
           <span id="countdown-caption" class="countdown-caption"></span>

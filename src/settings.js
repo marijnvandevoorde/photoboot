@@ -309,6 +309,7 @@ bind('sound', 'sound');
 // ---------- looks ----------
 
 bind('filter-enabled', 'filterEnabled');
+bind('live-preview', 'livePreview');
 function renderLooks() {
   $('looks-config').hidden = !config.filterEnabled;
   for (const [boxId, key, list, defaultId, defaultKey] of [

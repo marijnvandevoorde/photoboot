@@ -38,6 +38,8 @@ export const STRINGS = {
     cameraError: "The camera isn't working right now.",
     cameraHint: 'Please ask the host to check the camera.',
     tryAgain: 'Try again',
+    camera: 'Camera',
+    printLook: 'Print look',
   },
   nl: {
     takePhoto: 'Neem foto',
@@ -67,6 +69,8 @@ export const STRINGS = {
     cameraError: 'De camera werkt nu even niet.',
     cameraHint: 'Vraag de gastheer om de camera na te kijken.',
     tryAgain: 'Opnieuw proberen',
+    camera: 'Camera',
+    printLook: 'Printversie',
   },
   fr: {
     takePhoto: 'Prendre la photo',
@@ -96,6 +100,8 @@ export const STRINGS = {
     cameraError: 'La caméra ne fonctionne pas pour le moment.',
     cameraHint: "Demandez à l'hôte de vérifier la caméra.",
     tryAgain: 'Réessayer',
+    camera: 'Caméra',
+    printLook: 'Rendu imprimé',
   },
 };
 

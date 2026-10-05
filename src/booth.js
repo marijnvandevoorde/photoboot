@@ -6,7 +6,16 @@ import qrcode from 'qrcode-generator';
 import { recentPhotos, savePhoto } from './archive.js';
 import { getConfig } from './config.js';
 import { translator } from './i18n.js';
-import { PHOTO_STYLES, PHOTO_TWISTS, PLAIN_LOOK, PRINT_EXTRA_DOTS, printPhoto, renderSticker } from './photo.js';
+import {
+  PHOTO_STYLES,
+  PHOTO_TWISTS,
+  PLAIN_LOOK,
+  PRINT_EXTRA_DOTS,
+  photoToRaster,
+  printPhoto,
+  renderColour,
+  renderSticker,
+} from './photo.js';
 import { connectPrinter } from './printers/index.js';
 import { rasterToCanvas } from './raster.js';
 import { deviceId, remote } from './remote.js';
@@ -46,8 +55,12 @@ let reviewTimer = null;
 
 function show(name) {
   for (const [key, el] of Object.entries(screens)) el.hidden = key !== name;
-  if (name === 'booth') armIdle();
-  else stopIdle();
+  if (name === 'booth') {
+    armIdle();
+    startLive();
+  } else {
+    stopIdle();
+  }
 }
 
 function storage(key, value) {
@@ -301,6 +314,7 @@ $('switch-camera').addEventListener('click', async (e) => {
 
 async function startBooth() {
   template = await loadTemplate(config.templateId, config.templateConfig?.[config.templateId]);
+  setupLiveLooks();
   show('booth');
   setPill();
   updateShotCounter(0);
@@ -361,6 +375,7 @@ async function showAttract() {
   $('attract-event').textContent = config.eventName || '';
   $('attract').hidden = false;
   setShotCount(Math.max(1, config.shotCount | 0)); // next guest starts from the default
+  setupLiveLooks();
   if (!config.attractShowPhotos || !config.keepLocalCopies) return;
   const photos = await recentPhotos(12).catch(() => []);
   if (!photos.length || $('attract').hidden) return;
@@ -389,11 +404,126 @@ $('attract').addEventListener('click', (e) => {
   e.stopPropagation();
   hideAttract();
   armIdle();
+  startLive();
 });
 for (const type of ['pointerdown', 'keydown']) {
   document.addEventListener(type, () => {
     if (!screens.booth.hidden && $('attract').hidden) armIdle();
   });
+}
+
+// ---------- live print look ----------
+
+// On the camera screen guests can pick a look and see the feed as it will
+// print (config.livePreview). 'camera' = the plain feed. The pick carries
+// over to the review.
+const LIVE_FRAME_MS = 66; // ~15 fps at most; slower machines just skip frames
+let live = { style: 'camera', twist: 'none' };
+let liveRunning = false;
+const liveCanvas = $('live');
+const frameCanvas = document.createElement('canvas');
+
+function setupLiveLooks() {
+  const mode = config.livePreview;
+  if (mode === 'off') return;
+  const { styles, twists, look } = looks();
+  const styleOptions = [
+    ...(mode === 'choice' ? [{ id: 'camera', label: `📷 ${t('camera')}` }] : []),
+    ...(styles.length ? styles : [{ id: PLAIN_LOOK.style, label: t('printLook') }]),
+  ];
+  live = { style: mode === 'always' ? look.style : 'camera', twist: look.twist };
+  const row = (id, key, options) => {
+    $(id).hidden = options.length < 2;
+    $(id).replaceChildren(
+      ...options.map((o) => {
+        const btn = document.createElement('button');
+        btn.className = 'filter';
+        btn.setAttribute('role', 'radio');
+        btn.dataset.key = key;
+        btn.dataset.value = o.id;
+        btn.textContent = o.label;
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          live = { ...live, [key]: o.id };
+          markLive();
+          startLive();
+        });
+        return btn;
+      })
+    );
+  };
+  row('live-styles', 'style', styleOptions);
+  row('live-twists', 'twist', twists);
+  $('live-looks').hidden = styleOptions.length < 2 && twists.length < 2;
+  markLive();
+}
+
+function markLive() {
+  for (const btn of document.querySelectorAll('#live-looks .filter')) {
+    btn.setAttribute('aria-checked', String(live[btn.dataset.key] === btn.dataset.value));
+  }
+}
+
+// The look the next capture starts with, or null to use the default.
+function captureLook() {
+  if (config.livePreview === 'off') return null;
+  const { look } = looks();
+  return { style: live.style === 'camera' ? look.style : live.style, twist: live.twist };
+}
+
+const liveNeeded = () =>
+  config.livePreview !== 'off' &&
+  !screens.booth.hidden &&
+  $('attract').hidden &&
+  (live.style !== 'camera' || live.twist !== 'none');
+
+async function startLive() {
+  if (liveRunning) return;
+  liveRunning = true;
+  try {
+    while (liveNeeded()) {
+      const started = performance.now();
+      if (video.videoWidth) renderLiveFrame();
+      await sleep(Math.max(15, LIVE_FRAME_MS - (performance.now() - started)));
+    }
+  } catch (err) {
+    console.error('Live preview failed', err);
+  } finally {
+    liveRunning = false;
+    liveCanvas.hidden = true;
+  }
+}
+
+function renderLiveFrame() {
+  const width = template?.photoWidth(config.paperWidthDots) ?? config.paperWidthDots;
+  const height = Math.round((video.videoHeight * width) / video.videoWidth);
+  if (frameCanvas.width !== width || frameCanvas.height !== height) {
+    frameCanvas.width = width;
+    frameCanvas.height = height;
+  }
+  const ctx = frameCanvas.getContext('2d', { willReadFrequently: true });
+  ctx.save();
+  if (mirrored) {
+    ctx.translate(width, 0);
+    ctx.scale(-1, 1);
+  }
+  ctx.drawImage(video, 0, 0, width, height);
+  ctx.restore();
+
+  let out;
+  if (live.style === 'camera') {
+    const twist = PHOTO_TWISTS.find((tw) => tw.id === live.twist);
+    out = twist?.apply ? twist.apply(frameCanvas) : frameCanvas;
+  } else {
+    out = rasterToCanvas(photoToRaster(frameCanvas, width, live));
+  }
+  if (liveCanvas.width !== out.width || liveCanvas.height !== out.height) {
+    liveCanvas.width = out.width;
+    liveCanvas.height = out.height;
+  }
+  liveCanvas.getContext('2d').drawImage(out, 0, 0);
+  liveCanvas.classList.toggle('dots', live.style !== 'camera');
+  liveCanvas.hidden = false;
 }
 
 // ---------- capture ----------
@@ -511,38 +641,31 @@ $('shutter').addEventListener('click', (e) => {
 // Tap anywhere on the camera view (not on its buttons) to start.
 $('stage').addEventListener('click', (e) => {
   if (!config.tapAnywhere) return;
-  if (e.target === video || e.target === $('stage')) capture();
+  if (e.target === video || e.target === liveCanvas || e.target === $('stage')) capture();
 });
 
 // ---------- session ----------
 
 function startSession(shots) {
-  session = { shots, rasters: {}, raster: null, look: null, shareUrl: null, prints: 0 };
-  session.jpeg = jpegOf(shareableCanvas(shots));
+  session = { shots, rasters: {}, raster: null, look: null, shareUrl: null, shareTwist: null, prints: 0, jpegs: {} };
   record('session');
   syncStats();
-  if (config.keepLocalCopies) {
-    session.jpeg.then((blob) => savePhoto(blob)).catch((err) => console.error('Local copy failed', err));
-  }
   showReview();
 }
 
-// The colour copy (shared + archived): the raw frames, strips stacked.
-function shareableCanvas(shots) {
-  if (shots.length === 1) return shots[0];
-  const refW = shots[0].width;
-  const totalH = shots.reduce((sum, s) => sum + Math.round((s.height * refW) / s.width), 0);
-  const canvas = document.createElement('canvas');
-  canvas.width = refW;
-  canvas.height = totalH;
-  const ctx = canvas.getContext('2d');
-  let y = 0;
-  for (const shot of shots) {
-    const h = Math.round((shot.height * refW) / shot.width);
-    ctx.drawImage(shot, 0, y, refW, h);
-    y += h;
-  }
-  return canvas;
+// The colour keepsake (shared + archived) for the session's current twist:
+// the sticker layout in colour. Cached per twist.
+function colourJpeg(s = session) {
+  const twist = s.look?.twist ?? 'none';
+  return (s.jpegs[twist] ??= jpegOf(renderColour(s.shots, template, { stickerWidth: config.paperWidthDots, look: s.look })));
+}
+
+// Archive when the guest leaves the review, so the copy has their final twist.
+function archiveSession(s) {
+  if (!config.keepLocalCopies || !s) return;
+  colourJpeg(s)
+    .then((blob) => savePhoto(blob))
+    .catch((err) => console.error('Local copy failed', err));
 }
 
 function jpegOf(canvas) {
@@ -618,7 +741,7 @@ function selectLook(look) {
     stickerWidth: config.paperWidthDots,
     look,
   });
-  for (const btn of document.querySelectorAll('.filter')) {
+  for (const btn of document.querySelectorAll('#review .filter')) {
     btn.setAttribute('aria-checked', String(look[btn.dataset.key] === btn.dataset.value));
   }
   const preview = rasterToCanvas(session.raster);
@@ -678,7 +801,7 @@ function showReview() {
   renderOptions('styles', 'style', styles);
   renderOptions('twists', 'twist', twists);
   show('review');
-  selectLook(look);
+  selectLook(captureLook() ?? look);
   updatePrintButton();
   armReviewTimeout();
   if (config.autoPrint && printer) doPrint();
@@ -688,6 +811,7 @@ function backToBooth() {
   clearTimeout(reviewTimer);
   $('qr-dialog').hidden = true;
   $('print-overlay').hidden = true;
+  archiveSession(session);
   session = null;
   show('booth');
   setPill();
@@ -758,7 +882,7 @@ async function uploadPhoto() {
     headers['X-Event-Key'] = config.serverEvent.key;
   }
   if (config.uploadToken) headers['X-Upload-Token'] = config.uploadToken;
-  const res = await fetch('/api/share', { method: 'POST', headers, body: await session.jpeg });
+  const res = await fetch('/api/share', { method: 'POST', headers, body: await colourJpeg() });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
   return body.url;
@@ -770,10 +894,13 @@ $('share').addEventListener('click', async () => {
   setActionsEnabled(false);
   clearTimeout(reviewTimer);
   try {
-    if (!session.shareUrl) {
+    // A new twist since the last share is a different photo: upload again.
+    if (!session.shareUrl || session.shareTwist !== session.look.twist) {
       toast(t('preparing'), 0);
+      const first = !session.shareUrl;
       session.shareUrl = await uploadPhoto();
-      record('share');
+      session.shareTwist = session.look.twist;
+      if (first) record('share');
       syncStats();
     }
     const qr = qrcode(0, 'M');

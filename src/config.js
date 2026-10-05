@@ -26,6 +26,9 @@ export const DEFAULTS = {
   allowedTwists: null,
   defaultStyle: 'classic',
   defaultTwist: 'none',
+  // Show the print look on the live camera: 'off', 'choice' (guests pick
+  // Camera or a look on the camera screen) or 'always'.
+  livePreview: 'choice',
 
   // Shots per session. 1 = single sticker, 3-4 = classic photo-strip.
   shotCount: 1,

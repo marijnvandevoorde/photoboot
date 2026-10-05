@@ -4,7 +4,7 @@
 import { get } from './config.js';
 import * as fx from './effects.js';
 import { canvasToRaster, fitToPrintWidth } from './raster.js';
-import { composeStrip } from './strip.js';
+import { composeColour, composeStrip } from './strip.js';
 
 export const PHOTO_DENSITY_DEFAULT = 3;
 
@@ -48,6 +48,12 @@ export function renderSticker(shots, template, { stickerWidth, look = DEFAULT_LO
   const photoWidth = template.photoWidth(stickerWidth);
   const rasters = shots.map((shot) => photoToRaster(shot, photoWidth, look));
   return composeStrip(rasters, template, stickerWidth);
+}
+
+// The colour keepsake (shared + archived): same layout as the sticker, in
+// colour, with the guest's twist but not the black-and-white style.
+export function renderColour(shots, template, { stickerWidth, look = DEFAULT_LOOK } = {}) {
+  return composeColour(shots, template, stickerWidth, { twist: find(PHOTO_TWISTS, look.twist).apply ?? null });
 }
 
 const FEED_DOTS = 80;

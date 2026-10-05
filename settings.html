@@ -190,6 +190,18 @@
             Let guests pick a style and twist
           </label>
           <p class="muted small">Off = a plain Atkinson-dithered print, no choices in the review.</p>
+          <label>
+            Live print look on the camera screen
+            <select id="live-preview">
+              <option value="choice">Guests can switch between camera and a look</option>
+              <option value="always">Always show the print look</option>
+              <option value="off">Off — plain camera feed</option>
+            </select>
+          </label>
+          <p class="muted small">
+            Renders the camera ~15× a second in the chosen style. Fine on a recent laptop or Mac mini;
+            switch it off on slow tablets.
+          </p>
           <div id="looks-config">
             <h3>Styles guests can pick</h3>
             <div id="allowed-styles" class="checks"></div>

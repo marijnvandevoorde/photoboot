@@ -16,11 +16,27 @@ function openDb() {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      const db = req.result;
+      // Let other pages upgrade / open the DB instead of waiting on us.
+      db.onversionchange = () => closeDb();
+      resolve(db);
+    };
     req.onerror = () => reject(req.error);
   });
   return dbPromise;
 }
+
+function closeDb() {
+  const pending = dbPromise;
+  dbPromise = null;
+  pending?.then((db) => db.close()).catch(() => {});
+}
+
+// A page kept in the back/forward cache with an open connection can stall
+// the next page's open (seen when leaving settings right after first load),
+// so close on the way out; the next call reopens.
+addEventListener('pagehide', closeDb);
 
 async function tx(mode, run) {
   const db = await openDb();

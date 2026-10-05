@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#111" />
     <meta name="robots" content="noindex,nofollow" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <title>Photoboot — Settings</title>
     <link rel="stylesheet" href="/src/settings.css" />
   </head>
@@ -21,13 +22,57 @@
 
       <section id="auth" class="card" hidden>
         <h2>Admin access</h2>
-        <p class="muted">An admin password has been set for this booth.</p>
-        <label>Password <input id="auth-password" type="password" autocomplete="current-password" /></label>
+        <p class="muted">An admin PIN has been set for this booth.</p>
+        <label>PIN <input id="auth-password" type="password" autocomplete="current-password" /></label>
         <button id="auth-submit" class="primary">Unlock</button>
-        <p id="auth-error" class="warn" hidden>Wrong password.</p>
+        <p id="auth-error" class="warn" hidden>Wrong PIN.</p>
       </section>
 
+      <p id="import-status" class="notice" hidden></p>
+
       <div id="panels" hidden>
+        <section class="card">
+          <h2>Tonight</h2>
+          <ul id="status-list" class="summary"></ul>
+          <div class="row">
+            <button id="new-roll">New paper roll</button>
+            <button id="reset-stats">Reset counters</button>
+          </div>
+          <p class="muted small">
+            Counters are per event (the event name below) and live on this device. The booth reports
+            its printer and camera here; reload to refresh.
+          </p>
+        </section>
+
+        <section class="card">
+          <h2>Event</h2>
+          <label>
+            Event name
+            <input id="event-name" type="text" placeholder="Anna &amp; Tom's wedding" />
+          </label>
+          <p class="muted small">Shown on the idle screen. Also groups counters and local photos.</p>
+          <label>
+            Guest language
+            <select id="language"></select>
+          </label>
+          <h3>Saved setups</h3>
+          <div class="row">
+            <select id="profile-list" aria-label="Saved setups"></select>
+            <button id="profile-load">Load</button>
+            <button id="profile-delete">Delete</button>
+          </div>
+          <div class="row">
+            <button id="profile-save" class="primary">Save current setup as…</button>
+            <button id="export-file">Export file</button>
+            <button id="import-file">Import file</button>
+            <input id="import-picker" type="file" accept="application/json,.json" hidden />
+          </div>
+          <p class="muted small">
+            A setup is every setting below (except the printer type) plus the template images.
+            Export it to move it to another device.
+          </p>
+        </section>
+
         <section class="card">
           <h2>Printer</h2>
           <label>
@@ -64,6 +109,45 @@
               <option value="4">4 — thick</option>
             </select>
           </label>
+          <label>
+            Roll length (metres, 0 = don't track)
+            <input id="roll-length" type="number" min="0" step="0.5" />
+          </label>
+          <label>
+            Warn when less than (metres) is left
+            <input id="paper-warn" type="number" min="0" step="0.1" />
+          </label>
+          <p class="muted small">
+            The booth counts the paper each sticker uses and shows “📄 low” on its printer badge — guests
+            don't see a warning. Tap <em>New paper roll</em> above after changing the roll.
+          </p>
+        </section>
+
+        <section class="card">
+          <h2>Printing</h2>
+          <label class="checkbox">
+            <input id="auto-print" type="checkbox" />
+            Print automatically as soon as the photo is taken
+          </label>
+          <label>
+            Stickers per Print tap
+            <select id="copies">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+            </select>
+          </label>
+          <label>
+            Print taps per photo
+            <select id="max-prints">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="5">5</option>
+              <option value="0">Unlimited</option>
+            </select>
+          </label>
         </section>
 
         <section class="card">
@@ -77,6 +161,10 @@
               <option value="4">4 — tall strip</option>
             </select>
           </label>
+          <label class="checkbox">
+            <input id="guest-shot-choice" type="checkbox" />
+            Let guests choose 1–4 photos (the setting above is the default)
+          </label>
           <label>
             Default countdown
             <select id="default-delay">
@@ -86,12 +174,32 @@
             </select>
           </label>
           <label class="checkbox">
-            <input id="filter-enabled" type="checkbox" />
-            Let guests pick a filter (Classic / Pop art / Woodcut / Stipple)
+            <input id="tap-anywhere" type="checkbox" />
+            Tapping anywhere on the camera view starts the countdown
           </label>
-          <p class="muted small">
-            Filter off = a plain Atkinson-dithered print, no style row in the review.
-          </p>
+          <label class="checkbox">
+            <input id="sound" type="checkbox" />
+            Countdown beeps and shutter sound
+          </label>
+        </section>
+
+        <section class="card">
+          <h2>Looks</h2>
+          <label class="checkbox">
+            <input id="filter-enabled" type="checkbox" />
+            Let guests pick a style and twist
+          </label>
+          <p class="muted small">Off = a plain Atkinson-dithered print, no choices in the review.</p>
+          <div id="looks-config">
+            <h3>Styles guests can pick</h3>
+            <div id="allowed-styles" class="checks"></div>
+            <h3>Twists guests can pick</h3>
+            <div id="allowed-twists" class="checks"></div>
+            <div class="row">
+              <label>Preselected style <select id="default-style"></select></label>
+              <label>Preselected twist <select id="default-twist"></select></label>
+            </div>
+          </div>
         </section>
 
         <section class="card">
@@ -104,23 +212,85 @@
         </section>
 
         <section class="card">
-          <h2>Admin password</h2>
+          <h2>Guest screens</h2>
           <label>
-            Password (empty = no gate)
-            <input id="admin-password" type="text" autocomplete="new-password" />
+            Back to the camera after an idle review (seconds)
+            <input id="review-timeout" type="number" min="10" step="5" />
           </label>
-          <p class="muted small">Guards /settings only. Not a security feature — stops curious guests.</p>
+          <label>
+            Back to the camera after a print or share (seconds)
+            <input id="done-timeout" type="number" min="5" step="5" />
+          </label>
+          <label>
+            Show the “tap to start” screen after (seconds idle, 0 = never)
+            <input id="attract-after" type="number" min="0" step="5" />
+          </label>
+          <label class="checkbox">
+            <input id="attract-photos" type="checkbox" />
+            Cycle recent photos on that screen (needs local copies on)
+          </label>
+          <details>
+            <summary>Wording</summary>
+            <p class="muted small">Leave a field empty to use the language default shown in grey.</p>
+            <div id="wording" class="wording"></div>
+          </details>
+        </section>
+
+        <section class="card">
+          <h2>Photos on this device</h2>
+          <label class="checkbox">
+            <input id="keep-local" type="checkbox" />
+            Keep a colour copy of every photo on this device
+          </label>
+          <ul id="local-photos" class="summary"></ul>
+          <div class="row">
+            <button id="download-zip" class="primary">Download this event as ZIP</button>
+            <button id="delete-local" class="danger">Delete this event's photos</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Server events &amp; sharing</h2>
+          <p class="muted small">
+            Publish a setup to the server, then scan its setup QR on any other device to get the same
+            booth. Shared photos are tagged with the event and show up in its gallery.
+          </p>
+          <p id="server-event" class="small"></p>
+          <label>
+            Server admin token
+            <input id="admin-token" type="password" autocomplete="off" placeholder="ADMIN_TOKEN from the server's .env" />
+          </label>
+          <div class="row">
+            <button id="publish-event" class="primary">Publish current setup</button>
+            <button id="refresh-events">Refresh list</button>
+            <button id="leave-event">Disconnect this booth</button>
+          </div>
+          <ul id="event-list" class="event-list"></ul>
+          <div id="event-qr" class="event-qr" hidden></div>
+          <label>
+            Upload token (only if the server sets UPLOAD_TOKEN)
+            <input id="upload-token" type="password" autocomplete="off" />
+          </label>
+        </section>
+
+        <section class="card">
+          <h2>Admin PIN</h2>
+          <label>
+            New PIN (empty = no gate)
+            <input id="admin-password" type="password" autocomplete="new-password" />
+          </label>
+          <button id="set-pin">Set PIN</button>
+          <p class="muted small">Guards this page only. Stops curious guests; not real security.</p>
         </section>
 
         <section class="card danger">
           <h2>Reset</h2>
           <button id="reset" class="danger">Reset to defaults</button>
-          <p class="muted small">Wipes config and uploaded template images.</p>
+          <p class="muted small">Wipes config and uploaded template images. Photos and counters stay.</p>
         </section>
-
-        <p id="save-status" class="muted small" role="status"></p>
       </div>
     </main>
+    <p id="save-status" class="save-toast" role="status" hidden></p>
     <script type="module" src="/src/settings.js"></script>
   </body>
 </html>

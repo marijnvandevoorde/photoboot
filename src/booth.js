@@ -1,13 +1,16 @@
 // Photo booth kiosk: connect printer once → live camera → timed capture of
-// N shots → review (retry / print / share via QR). Config in src/config.js
-// drives printer type, paper width, template, shot count and filter toggle;
-// change those via /settings.html.
+// N shots → review (retake / print / share via QR / done). Config in
+// src/config.js drives everything guests see; change it via /settings.html.
 
 import qrcode from 'qrcode-generator';
+import { recentPhotos, savePhoto } from './archive.js';
 import { getConfig } from './config.js';
-import { DEFAULT_LOOK, PHOTO_STYLES, PHOTO_TWISTS, printPhoto, renderSticker } from './photo.js';
+import { translator } from './i18n.js';
+import { PHOTO_STYLES, PHOTO_TWISTS, PLAIN_LOOK, PRINT_EXTRA_DOTS, printPhoto, renderSticker } from './photo.js';
 import { connectPrinter } from './printers/index.js';
 import { rasterToCanvas } from './raster.js';
+import { deviceId, remote } from './remote.js';
+import { getStats, paperLeft, record, setStatus } from './stats.js';
 import { loadTemplate } from './templates.js';
 
 const $ = (id) => document.getElementById(id);
@@ -15,9 +18,14 @@ const screens = { setup: $('setup'), booth: $('booth'), review: $('review') };
 const video = $('video');
 
 const STICKER_MARGIN_DOTS = 24; // unprintable strip each side, for the preview
-
-const REVIEW_TIMEOUT_MS = 90_000;
 const RECONNECT_INTERVAL_MS = 5_000;
+const RECONNECT_ON_PRINT_MS = 8_000;
+const CAMERA_RETRY_MS = 5_000;
+const ATTRACT_SLIDE_MS = 4_000;
+
+const config = getConfig();
+const t = translator(config);
+let template = null; // resolved from config.templateId
 
 let printer = null; // null = running without printer
 let stream = null;
@@ -25,14 +33,12 @@ let cameras = [];
 let cameraIndex = 0;
 let mirrored = true;
 let delay = 3;
+let shotCount = Math.max(1, config.shotCount | 0);
 let busy = false;
 
-let config = getConfig();
-let template = null; // resolved from config.templateId
-
-// Current session + derived data, reset on every capture.
-// shots: canvases captured this session (count === config.shotCount)
-// rasters: cache keyed by "style|twist", value is the composed sticker raster
+// Current session, reset on every capture.
+// shots: canvases captured; rasters: sticker cache keyed by "style|twist";
+// prints: Print taps that succeeded; jpeg: Promise<Blob> of the colour copy.
 let session = null;
 let reviewTimer = null;
 
@@ -40,6 +46,8 @@ let reviewTimer = null;
 
 function show(name) {
   for (const [key, el] of Object.entries(screens)) el.hidden = key !== name;
+  if (name === 'booth') armIdle();
+  else stopIdle();
 }
 
 function storage(key, value) {
@@ -61,6 +69,13 @@ function toast(msg, ms = 2500) {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function withTimeout(promise, ms) {
+  return Promise.race([promise, sleep(ms).then(() => Promise.reject(new Error('timed out')))]);
+}
+
+for (const el of document.querySelectorAll('[data-t]')) el.textContent = t(el.dataset.t);
+document.documentElement.lang = config.language || 'en';
 
 // Fullscreen consumes the tap's user activation, which requestDevice also
 // needs — so never call it from the Connect tap. Instead, go fullscreen on
@@ -84,26 +99,64 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && wakeLock?.released !== false) keepAwake();
 });
 
+// ---------- sound ----------
+
+let audio = null;
+function tone(freq, ms, { type = 'sine', gain = 0.2 } = {}) {
+  if (!config.sound) return;
+  try {
+    audio ??= new AudioContext();
+    const osc = audio.createOscillator();
+    const amp = audio.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    amp.gain.setValueAtTime(gain, audio.currentTime);
+    amp.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + ms / 1000);
+    osc.connect(amp).connect(audio.destination);
+    osc.start();
+    osc.stop(audio.currentTime + ms / 1000);
+  } catch {
+    /* no audio: fine */
+  }
+}
+
+function shutterSound() {
+  if (!config.sound) return;
+  try {
+    audio ??= new AudioContext();
+    const len = Math.floor(audio.sampleRate * 0.12);
+    const buffer = audio.createBuffer(1, len, audio.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 3;
+    const src = audio.createBufferSource();
+    src.buffer = buffer;
+    const amp = audio.createGain();
+    amp.gain.value = 0.5;
+    src.connect(amp).connect(audio.destination);
+    src.start();
+  } catch {
+    /* ignore */
+  }
+}
+
 // ---------- settings access ----------
 
-// Hidden entry: long-press the Photoboot title for a second to open settings.
-// Also exposed via /?admin=1 for keyboards.
-(function setupSettingsHatch() {
-  const title = document.querySelector('.setup-card h1');
-  if (!title) return;
+// Hidden entries: long-press the Photoboot title (setup screen) or the
+// top-left corner of the camera view to open settings. Also /?admin=1.
+function longPress(el, ms, action) {
+  if (!el) return;
   let timer = null;
-  const start = () => {
-    timer = setTimeout(() => (location.href = '/settings.html'), 1000);
-  };
   const cancel = () => clearTimeout(timer);
-  title.addEventListener('pointerdown', start);
-  title.addEventListener('pointerup', cancel);
-  title.addEventListener('pointerleave', cancel);
-  title.addEventListener('pointercancel', cancel);
-})();
-if (new URLSearchParams(location.search).get('admin') === '1') {
-  location.href = '/settings.html';
+  el.addEventListener('pointerdown', () => {
+    cancel();
+    timer = setTimeout(action, ms);
+  });
+  for (const type of ['pointerup', 'pointerleave', 'pointercancel']) el.addEventListener(type, cancel);
 }
+const openSettings = () => (location.href = '/settings.html');
+longPress(document.querySelector('.setup-card h1'), 1000, openSettings);
+longPress($('admin-hatch'), 2000, openSettings);
+if (new URLSearchParams(location.search).get('admin') === '1') openSettings();
 
 // ---------- printer ----------
 
@@ -115,8 +168,13 @@ function setPill() {
   }
   pill.hidden = false;
   const ok = printer.connected;
-  pill.textContent = ok ? `🖨 ${printer.device.name || 'Printer'}` : '🖨 Reconnecting…';
+  const paper = paperLeft(config);
+  pill.textContent =
+    (ok ? `🖨 ${printer.device.name || 'Printer'}` : '🖨 Reconnecting…') + (paper?.low ? ' · 📄 low' : '');
   pill.classList.toggle('bad', !ok);
+  pill.classList.toggle('low', !!paper?.low);
+  setStatus({ printer: printer.device?.name || 'Printer', printerConnected: ok });
+  updatePrintButton();
 }
 
 // After an unexpected disconnect, keep trying the same printer. There is
@@ -153,6 +211,7 @@ $('connect').addEventListener('click', async () => {
 });
 
 $('skip-printer').addEventListener('click', () => {
+  setStatus({ printer: null, printerConnected: false });
   startBooth();
 });
 
@@ -187,9 +246,13 @@ async function startCamera() {
   video.srcObject = stream;
   await video.play().catch(() => {});
 
+  const track = stream.getVideoTracks()[0];
+  // Unplugged / crashed camera: show the error panel and keep retrying.
+  track?.addEventListener('ended', () => cameraFailed(new Error('Camera disconnected')));
+
   // Mirror the front camera (and desktop webcams that don't say), so the
   // preview behaves like a mirror. Rear cameras are shown as-is.
-  const facing = stream.getVideoTracks()[0]?.getSettings().facingMode;
+  const facing = track?.getSettings().facingMode;
   mirrored = facing !== 'environment';
   video.classList.toggle('unmirrored', !mirrored);
 
@@ -197,16 +260,43 @@ async function startCamera() {
   if (!cameras.length) {
     const devices = await navigator.mediaDevices.enumerateDevices();
     cameras = devices.filter((d) => d.kind === 'videoinput');
-    const current = stream.getVideoTracks()[0]?.getSettings().deviceId;
+    const current = track?.getSettings().deviceId;
     cameraIndex = Math.max(0, cameras.findIndex((c) => c.deviceId === current));
   }
   $('switch-camera').hidden = cameras.length < 2;
 }
 
-$('switch-camera').addEventListener('click', async () => {
+let cameraRetryTimer = null;
+async function tryCamera() {
+  clearTimeout(cameraRetryTimer);
+  try {
+    await startCamera();
+    $('camera-error').hidden = true;
+    setStatus({ camera: 'ok' });
+  } catch (err) {
+    cameraFailed(err);
+  }
+}
+
+function cameraFailed(err) {
+  console.error(err);
+  $('camera-error').hidden = false;
+  setStatus({ camera: 'error', lastError: `Camera: ${err.message}` });
+  clearTimeout(cameraRetryTimer);
+  // Permission denials won't fix themselves; anything else might.
+  if (err.name !== 'NotAllowedError') cameraRetryTimer = setTimeout(tryCamera, CAMERA_RETRY_MS);
+}
+
+$('camera-retry').addEventListener('click', (e) => {
+  e.stopPropagation();
+  tryCamera();
+});
+
+$('switch-camera').addEventListener('click', async (e) => {
+  e.stopPropagation();
   if (busy) return;
   cameraIndex = (cameraIndex + 1) % cameras.length;
-  await startCamera().catch((err) => console.error(err));
+  await tryCamera();
 });
 
 async function startBooth() {
@@ -215,51 +305,141 @@ async function startBooth() {
   setPill();
   updateShotCounter(0);
   keepAwake();
-  try {
-    await startCamera();
-  } catch (err) {
-    alert(`Camera unavailable: ${err.message}`);
-  }
+  await tryCamera();
 }
 
-// ---------- capture ----------
+// ---------- capture options ----------
+
+function setChips(selector, attr, value) {
+  for (const btn of document.querySelectorAll(selector)) {
+    btn.setAttribute('aria-checked', String(Number(btn.dataset[attr]) === value));
+  }
+}
 
 function setDelay(value) {
   delay = value;
   storage('delay', String(value));
-  for (const btn of document.querySelectorAll('.delay')) {
-    btn.setAttribute('aria-checked', String(Number(btn.dataset.delay) === value));
-  }
+  setChips('.delay', 'delay', value);
 }
 for (const btn of document.querySelectorAll('.delay')) {
   btn.addEventListener('click', () => setDelay(Number(btn.dataset.delay)));
 }
 setDelay(Number(storage('delay')) || config.defaultDelay || 3);
 
+function setShotCount(value) {
+  shotCount = value;
+  setChips('.shots', 'shots', value);
+}
+$('shot-choice').hidden = !config.guestShotChoice;
+for (const btn of document.querySelectorAll('.shots')) {
+  btn.addEventListener('click', () => setShotCount(Number(btn.dataset.shots)));
+}
+setShotCount(shotCount);
+
 function setCaptureEnabled(enabled) {
   for (const btn of document.querySelectorAll('#capture-bar button, #switch-camera')) btn.disabled = !enabled;
+}
+
+// ---------- idle attract screen ----------
+
+let idleTimer = null;
+let slideTimer = null;
+let slideUrl = null;
+
+function armIdle() {
+  clearTimeout(idleTimer);
+  if (config.attractAfterSec > 0) idleTimer = setTimeout(showAttract, config.attractAfterSec * 1000);
+}
+
+function stopIdle() {
+  clearTimeout(idleTimer);
+  hideAttract();
+}
+
+async function showAttract() {
+  if (busy || screens.booth.hidden) return armIdle();
+  $('attract-event').textContent = config.eventName || '';
+  $('attract').hidden = false;
+  setShotCount(Math.max(1, config.shotCount | 0)); // next guest starts from the default
+  if (!config.attractShowPhotos || !config.keepLocalCopies) return;
+  const photos = await recentPhotos(12).catch(() => []);
+  if (!photos.length || $('attract').hidden) return;
+  let i = 0;
+  const next = () => {
+    if (slideUrl) URL.revokeObjectURL(slideUrl);
+    slideUrl = URL.createObjectURL(photos[i++ % photos.length]);
+    $('attract-photo').src = slideUrl;
+    $('attract-photo').hidden = false;
+  };
+  next();
+  slideTimer = setInterval(next, ATTRACT_SLIDE_MS);
+}
+
+function hideAttract() {
+  $('attract').hidden = true;
+  clearInterval(slideTimer);
+  $('attract-photo').hidden = true;
+  if (slideUrl) URL.revokeObjectURL(slideUrl);
+  slideUrl = null;
+}
+
+// Dismiss on click (not pointerdown) so the same tap doesn't also land on
+// the camera view underneath and start a countdown.
+$('attract').addEventListener('click', (e) => {
+  e.stopPropagation();
+  hideAttract();
+  armIdle();
+});
+for (const type of ['pointerdown', 'keydown']) {
+  document.addEventListener(type, () => {
+    if (!screens.booth.hidden && $('attract').hidden) armIdle();
+  });
+}
+
+// ---------- capture ----------
+
+let cancelled = false;
+const CANCEL = Symbol('cancel');
+
+// Sleep that ends early (by throwing) when the guest taps Cancel.
+async function wait(ms) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (cancelled) throw CANCEL;
+    await sleep(Math.min(100, end - Date.now()));
+  }
+  if (cancelled) throw CANCEL;
 }
 
 async function countdown(seconds) {
   const el = $('countdown');
   el.hidden = false;
   for (let s = seconds; s > 0; s--) {
-    el.textContent = s;
-    await sleep(1000);
+    $('countdown-number').textContent = s;
+    $('countdown-caption').textContent = s === 1 ? t('smile') : t('getReady');
+    tone(s === 1 ? 880 : 660, 150);
+    await wait(1000);
   }
   el.hidden = true;
 }
 
-function updateShotCounter(current) {
-  const total = config.shotCount;
+async function betweenShots(next, total) {
+  const el = $('countdown');
+  el.hidden = false;
+  $('countdown-number').textContent = '';
+  $('countdown-caption').textContent = t('nextPose');
+  updateShotCounter(next, total);
+  await wait(1200);
+}
+
+function updateShotCounter(current, total = shotCount) {
   const el = $('shot-counter');
-  if (!el) return;
-  if (total <= 1) {
+  if (total <= 1 || !current) {
     el.hidden = true;
     return;
   }
   el.hidden = false;
-  el.textContent = `${current} / ${total}`;
+  el.textContent = t('photoOf', { n: current, total });
 }
 
 function grabFrame() {
@@ -285,45 +465,133 @@ function flash() {
   el.classList.add('on');
 }
 
+$('cancel-countdown').addEventListener('click', (e) => {
+  e.stopPropagation();
+  cancelled = true;
+});
+
 // Capture one or more shots back-to-back with a countdown between each.
-$('shutter').addEventListener('click', async () => {
-  if (busy || !video.videoWidth) return;
+async function capture() {
+  if (busy || !video.videoWidth || !$('camera-error').hidden) return;
   busy = true;
+  cancelled = false;
+  hideAttract();
   setCaptureEnabled(false);
   const shots = [];
+  const total = shotCount;
   try {
-    const total = Math.max(1, config.shotCount | 0);
     for (let i = 0; i < total; i++) {
-      updateShotCounter(i + 1);
+      if (i > 0) await betweenShots(i + 1, total);
+      updateShotCounter(i + 1, total);
       await countdown(delay);
       flash();
+      shutterSound();
       shots.push(grabFrame());
-      // Short beat between shots so the flash animation lands before the
-      // next countdown kicks in. The final shot gets a longer pause to let
-      // the review screen show up gracefully.
-      await sleep(i === total - 1 ? 350 : 500);
+      // Let the flash land before the next step.
+      await sleep(i === total - 1 ? 350 : 300);
     }
-    session = { shots, rasters: {}, raster: null, look: null, shareUrl: null };
-    showReview();
+  } catch (err) {
+    if (err !== CANCEL) throw err;
   } finally {
+    $('countdown').hidden = true;
     busy = false;
     setCaptureEnabled(true);
     updateShotCounter(0);
   }
+  // Only once `busy` is cleared: the review (and auto-print) check it.
+  if (shots.length === total) startSession(shots);
+  else armIdle();
+}
+
+$('shutter').addEventListener('click', (e) => {
+  e.stopPropagation();
+  capture();
 });
+
+// Tap anywhere on the camera view (not on its buttons) to start.
+$('stage').addEventListener('click', (e) => {
+  if (!config.tapAnywhere) return;
+  if (e.target === video || e.target === $('stage')) capture();
+});
+
+// ---------- session ----------
+
+function startSession(shots) {
+  session = { shots, rasters: {}, raster: null, look: null, shareUrl: null, prints: 0 };
+  session.jpeg = jpegOf(shareableCanvas(shots));
+  record('session');
+  syncStats();
+  if (config.keepLocalCopies) {
+    session.jpeg.then((blob) => savePhoto(blob)).catch((err) => console.error('Local copy failed', err));
+  }
+  showReview();
+}
+
+// The colour copy (shared + archived): the raw frames, strips stacked.
+function shareableCanvas(shots) {
+  if (shots.length === 1) return shots[0];
+  const refW = shots[0].width;
+  const totalH = shots.reduce((sum, s) => sum + Math.round((s.height * refW) / s.width), 0);
+  const canvas = document.createElement('canvas');
+  canvas.width = refW;
+  canvas.height = totalH;
+  const ctx = canvas.getContext('2d');
+  let y = 0;
+  for (const shot of shots) {
+    const h = Math.round((shot.height * refW) / shot.width);
+    ctx.drawImage(shot, 0, y, refW, h);
+    y += h;
+  }
+  return canvas;
+}
+
+function jpegOf(canvas) {
+  return new Promise((resolve, reject) =>
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('JPEG encode failed'))), 'image/jpeg', 0.9)
+  );
+}
+
+// Server stats are pushed a few seconds after activity, so a burst of
+// prints becomes one request.
+let syncTimer = null;
+function syncStats() {
+  const ev = config.serverEvent;
+  if (!ev?.id) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    remote.pushStats(ev.id, ev.key, deviceId(), getStats()).catch((err) => console.warn('Stats sync failed', err));
+  }, 5000);
+}
 
 // ---------- review ----------
 
-function armReviewTimeout() {
+function armReviewTimeout(seconds = config.reviewTimeoutSec || 90) {
   clearTimeout(reviewTimer);
   reviewTimer = setTimeout(() => {
     if (!busy) backToBooth();
-    else armReviewTimeout();
-  }, REVIEW_TIMEOUT_MS);
+    else armReviewTimeout(seconds);
+  }, seconds * 1000);
+}
+
+// Styles / twists guests may pick, and the preselected look.
+function looks() {
+  if (!config.filterEnabled) return { styles: [], twists: [], look: PLAIN_LOOK };
+  const pick = (all, allowed) => {
+    const list = all.filter((o) => !Array.isArray(allowed) || allowed.includes(o.id));
+    return list.length ? list : all.slice(0, 1);
+  };
+  const styles = pick(PHOTO_STYLES, config.allowedStyles);
+  const twists = pick(PHOTO_TWISTS, config.allowedTwists);
+  const look = {
+    style: (styles.find((s) => s.id === config.defaultStyle) ?? styles[0]).id,
+    twist: (twists.find((tw) => tw.id === config.defaultTwist) ?? twists[0]).id,
+  };
+  return { styles, twists, look };
 }
 
 // One radio row per look option (style, twist).
 function renderOptions(listId, key, options) {
+  $(listId).hidden = options.length < 2;
   $(listId).replaceChildren(
     ...options.map(({ id, label }) => {
       const btn = document.createElement('button');
@@ -341,8 +609,6 @@ function renderOptions(listId, key, options) {
     })
   );
 }
-renderOptions('styles', 'style', PHOTO_STYLES);
-renderOptions('twists', 'twist', PHOTO_TWISTS);
 
 // Stickers are cached per look, so flipping back and forth is instant.
 function selectLook(look) {
@@ -384,21 +650,44 @@ function layoutSticker() {
 }
 new ResizeObserver(() => layoutSticker()).observe($('review-preview'));
 
-async function showReview() {
+const printLimitReached = () =>
+  config.maxPrintsPerSession > 0 && (session?.prints ?? 0) >= config.maxPrintsPerSession;
+
+function updatePrintButton() {
+  const btn = $('print');
+  const note = $('print-note');
+  if (!printer || !session) return;
+  btn.textContent = session.prints > 0 ? t('printAgain') : t('print');
+  btn.disabled = busy || printLimitReached();
+  if (printLimitReached()) {
+    note.textContent = t('printLimit');
+    note.hidden = false;
+  } else if (!printer.connected) {
+    note.textContent = t('printerOffline');
+    note.hidden = false;
+  } else {
+    note.hidden = true;
+  }
+}
+
+function showReview() {
   $('print').hidden = !printer;
   $('review-status').hidden = true;
-  // The filter row is hidden entirely when disabled in settings — a plain
-  // threshold is used instead.
-  $('styles').hidden = !config.filterEnabled;
-  $('twists').hidden = !config.filterEnabled;
+  $('print-note').hidden = true;
+  const { styles, twists, look } = looks();
+  renderOptions('styles', 'style', styles);
+  renderOptions('twists', 'twist', twists);
   show('review');
-  selectLook(config.filterEnabled ? DEFAULT_LOOK : { style: 'classic', twist: 'none' });
+  selectLook(look);
+  updatePrintButton();
   armReviewTimeout();
+  if (config.autoPrint && printer) doPrint();
 }
 
 function backToBooth() {
   clearTimeout(reviewTimer);
   $('qr-dialog').hidden = true;
+  $('print-overlay').hidden = true;
   session = null;
   show('booth');
   setPill();
@@ -407,94 +696,108 @@ function backToBooth() {
 $('retry').addEventListener('click', () => {
   if (!busy) backToBooth();
 });
+$('done').addEventListener('click', () => {
+  if (!busy) backToBooth();
+});
 
-async function withBusy(button, fn) {
-  if (busy) return;
+function setActionsEnabled(enabled) {
+  for (const btn of document.querySelectorAll('.actions button')) btn.disabled = !enabled;
+  if (enabled) updatePrintButton();
+}
+
+function printOverlay(title, sub = '', spinning = true) {
+  $('print-title').textContent = title;
+  $('print-sub').textContent = sub;
+  $('print-spinner').hidden = !spinning;
+  $('print-overlay').hidden = false;
+}
+
+async function doPrint() {
+  if (busy || !printer || !session || printLimitReached()) return;
   busy = true;
-  button.disabled = true;
-  armReviewTimeout();
+  setActionsEnabled(false);
+  clearTimeout(reviewTimer);
+  const raster = session.raster;
+  const copies = Math.max(1, config.copies | 0);
   try {
-    await fn();
+    printOverlay(t('printing'), t('grabSticker'));
+    if (!printer.connected) {
+      await withTimeout(printer.reconnect(), RECONNECT_ON_PRINT_MS);
+      setPill();
+    }
+    await printPhoto(printer, raster, { copies });
+    session.prints++;
+    record('print', { heightDots: raster.heightDots + PRINT_EXTRA_DOTS, copies });
+    syncStats();
+    printOverlay(t('printed'), t('grabSticker'), false);
+    await sleep(1800);
+    $('print-overlay').hidden = true;
+    armReviewTimeout(config.doneTimeoutSec || 20);
+  } catch (err) {
+    console.error(err);
+    record('printFail');
+    setStatus({ lastError: `Print: ${err.message}` });
+    $('print-overlay').hidden = true;
+    toast(printer.connected ? t('printFailed') : t('printerOffline'), 6000);
+    armReviewTimeout();
+    reconnectLoop();
   } finally {
     busy = false;
-    button.disabled = false;
+    setActionsEnabled(true);
+    setPill();
   }
 }
 
-$('print').addEventListener('click', () =>
-  withBusy($('print'), async () => {
-    try {
-      if (!printer.connected) {
-        toast('Reconnecting printer…', 0);
-        await printer.reconnect();
-        setPill();
-      }
-      toast('Printing…', 0);
-      await printPhoto(printer, session.raster);
-      toast('Printed!');
-    } catch (err) {
-      toast(`Print failed: ${err.message}`, 5000);
-      reconnectLoop();
-    }
-  })
-);
+$('print').addEventListener('click', () => doPrint());
 
-// Share uploads the first shot (or a composite if more than one), returning
-// a URL for the QR code. Strip mode: stitch shots into one JPEG.
+// Share uploads the colour copy and shows a QR to the photo's page.
 async function uploadPhoto() {
-  const toUpload = await shareableCanvas();
-  const blob = await new Promise((resolve) => toUpload.toBlob(resolve, 'image/jpeg', 0.9));
-  const res = await fetch('/api/share', {
-    method: 'POST',
-    headers: { 'Content-Type': 'image/jpeg' },
-    body: blob,
-  });
+  const headers = { 'Content-Type': 'image/jpeg' };
+  if (config.serverEvent?.id) {
+    headers['X-Event-Id'] = config.serverEvent.id;
+    headers['X-Event-Key'] = config.serverEvent.key;
+  }
+  if (config.uploadToken) headers['X-Upload-Token'] = config.uploadToken;
+  const res = await fetch('/api/share', { method: 'POST', headers, body: await session.jpeg });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
   return body.url;
 }
 
-function shareableCanvas() {
-  const shots = session.shots;
-  if (shots.length === 1) return shots[0];
-  // Vertical photostrip of the raw colour frames.
-  const refW = shots[0].width;
-  const totalH = shots.reduce((sum, s) => sum + Math.round((s.height * refW) / s.width), 0);
-  const canvas = document.createElement('canvas');
-  canvas.width = refW;
-  canvas.height = totalH;
-  const ctx = canvas.getContext('2d');
-  let y = 0;
-  for (const shot of shots) {
-    const h = Math.round((shot.height * refW) / shot.width);
-    ctx.drawImage(shot, 0, y, refW, h);
-    y += h;
-  }
-  return canvas;
-}
-
-$('share').addEventListener('click', () =>
-  withBusy($('share'), async () => {
-    try {
-      if (!session.shareUrl) {
-        toast('Preparing…', 0);
-        session.shareUrl = await uploadPhoto();
-      }
-      const qr = qrcode(0, 'M');
-      qr.addData(session.shareUrl);
-      qr.make();
-      $('qr').innerHTML = qr.createSvgTag({ cellSize: 8, margin: 2, scalable: true });
-      $('review-status').hidden = true;
-      $('qr-dialog').hidden = false;
-    } catch (err) {
-      toast(`Sharing failed: ${err.message}`, 5000);
+$('share').addEventListener('click', async () => {
+  if (busy || !session) return;
+  busy = true;
+  setActionsEnabled(false);
+  clearTimeout(reviewTimer);
+  try {
+    if (!session.shareUrl) {
+      toast(t('preparing'), 0);
+      session.shareUrl = await uploadPhoto();
+      record('share');
+      syncStats();
     }
-  })
-);
+    const qr = qrcode(0, 'M');
+    qr.addData(session.shareUrl);
+    qr.make();
+    $('qr').innerHTML = qr.createSvgTag({ cellSize: 8, margin: 2, scalable: true });
+    $('review-status').hidden = true;
+    $('qr-dialog').hidden = false;
+    // Long enough to find the camera app; resets on Done.
+    armReviewTimeout(Math.max(config.doneTimeoutSec || 20, 45));
+  } catch (err) {
+    console.error(err);
+    setStatus({ lastError: `Share: ${err.message}` });
+    toast(t('shareFailed'), 5000);
+    armReviewTimeout();
+  } finally {
+    busy = false;
+    setActionsEnabled(true);
+  }
+});
 
 $('qr-close').addEventListener('click', () => {
   $('qr-dialog').hidden = true;
-  armReviewTimeout();
+  armReviewTimeout(config.doneTimeoutSec || 20);
 });
 
 // Dev only: /?demo=<image url> opens the review screen with that image, to
@@ -508,9 +811,7 @@ if (demo) {
     canvas.width = img.naturalWidth;
     canvas.height = img.naturalHeight;
     canvas.getContext('2d').drawImage(img, 0, 0);
-    const shots = Array.from({ length: config.shotCount }, () => canvas);
-    session = { shots, rasters: {}, raster: null, look: null, shareUrl: null };
-    showReview();
+    startSession(Array.from({ length: shotCount }, () => canvas));
   };
   img.src = demo;
 }

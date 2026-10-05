@@ -146,4 +146,9 @@ async function buildSyntheticSample() {
   return canvas;
 }
 
+// Settings changed in another tab: re-render with the new config.
+window.addEventListener('storage', (e) => {
+  if (e.key === 'photoboot:config') location.reload();
+});
+
 init();

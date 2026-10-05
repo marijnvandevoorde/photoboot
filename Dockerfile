@@ -11,8 +11,8 @@ ENV NODE_ENV=production PORT=8080 SHARE_DIR=/data/shares
 COPY package.json ./
 COPY server ./server
 COPY --from=build /app/dist ./dist
-RUN mkdir -p /data/shares && chown node:node /data/shares
+RUN mkdir -p /data/shares /data/events && chown node:node /data/shares /data/events
 USER node
-VOLUME /data/shares
+VOLUME /data/shares /data/events
 EXPOSE 8080
 CMD ["node", "server/index.js"]

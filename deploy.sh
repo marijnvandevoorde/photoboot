@@ -11,7 +11,7 @@ TARGET="${1:?usage: ./deploy.sh ubuntu@<server>}"
 # Plain tar over ssh (no rsync on the server). Replaces everything in
 # ~/photoboot except a server-side .env.
 COPYFILE_DISABLE=1 tar -cz \
-  --exclude node_modules --exclude .node --exclude dist --exclude shares \
+  --exclude node_modules --exclude .node --exclude dist --exclude shares --exclude events \
   --exclude .git --exclude .env --exclude .DS_Store --exclude .vite --exclude template-assets \
   . | ssh "$TARGET" '
   mkdir -p ~/photoboot
@@ -21,8 +21,8 @@ COPYFILE_DISABLE=1 tar -cz \
 
 ssh "$TARGET" '
   set -e
-  sudo mkdir -p /storage/photoboot/shares
-  sudo chown -R 1000:1000 /storage/photoboot/shares
+  sudo mkdir -p /storage/photoboot/shares /storage/photoboot/events
+  sudo chown -R 1000:1000 /storage/photoboot/shares /storage/photoboot/events
   cd ~/photoboot
   docker compose up -d --build
   docker compose ps

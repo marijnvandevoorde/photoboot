@@ -50,11 +50,18 @@ export function renderSticker(shots, template, { stickerWidth, look = DEFAULT_LO
   return composeStrip(rasters, template, stickerWidth);
 }
 
-// Print a raster, followed by the tear margin.
-export async function printPhoto(printer, { bitmap, widthDots, heightDots }, { density } = {}) {
+const FEED_DOTS = 80;
+
+// Paper a sticker uses beyond its own height (tear margin + feed), in dots.
+export const PRINT_EXTRA_DOTS = TEAR_MARGIN_DOTS + FEED_DOTS;
+
+// Print a raster `copies` times, each followed by the tear margin.
+export async function printPhoto(printer, { bitmap, widthDots, heightDots }, { density, copies = 1 } = {}) {
   const padded = new Uint8Array(bitmap.length + (widthDots / 8) * TEAR_MARGIN_DOTS);
   padded.set(bitmap);
   await printer.init({ density: density ?? get('printDensity') ?? PHOTO_DENSITY_DEFAULT });
-  await printer.printRaster(padded, widthDots, heightDots + TEAR_MARGIN_DOTS);
-  await printer.feed(80);
+  for (let i = 0; i < Math.max(1, copies); i++) {
+    await printer.printRaster(padded, widthDots, heightDots + TEAR_MARGIN_DOTS);
+    await printer.feed(FEED_DOTS);
+  }
 }

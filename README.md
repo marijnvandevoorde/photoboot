@@ -1,16 +1,37 @@
-# Photoboot
+# Photoboot — a DIY photo booth that prints stickers
 
-A photo booth that runs in the browser and prints stickers on a pocket
-Bluetooth thermal printer. Put a laptop, tablet or Mac mini with a webcam at
-your party, connect a Phomemo printer, and guests walk away with a
-black-and-white sticker — plus a colour copy on their phone via a QR code.
+**Turn any laptop, tablet or Mac mini with a webcam into a party photo booth
+that prints black-and-white stickers on a cheap Bluetooth thermal printer.**
+Open-source, runs in the browser (PWA), self-hosted, no app to install.
 
-**Try it: [boot.small-victories.co](https://boot.small-victories.co)** — open
-it in Chrome (Android, Mac, Windows) or in [Bluefy](https://apps.apple.com/app/bluefy-web-ble-browser/id1492822055)
-on iPad / iPhone. “Start without printer” works on anything with a camera.
+[![Live demo](https://img.shields.io/badge/live%20demo-boot.small--victories.co-1f9e6e)](https://boot.small-victories.co)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+![Web Bluetooth](https://img.shields.io/badge/Web%20Bluetooth-Phomemo%20P2%20%2F%20M02-555)
+![No framework](https://img.shields.io/badge/vanilla%20JS-no%20framework-555)
 
-No app store, no account, no cloud service required: it's a static web app
-plus a tiny Node server for the QR sharing, which you can host yourself.
+![The four print styles — Classic, Pop art, Woodcut and Stipple — on a sticker with a typed title, names and date](docs/styles.png)
+
+Guests strike a pose, watch the countdown, and walk away with a sticker — plus
+a colour copy on their phone via a QR code. Great for weddings, birthdays,
+company parties, school fairs and festivals.
+
+**Try it now: [boot.small-victories.co](https://boot.small-victories.co)** —
+open it in Chrome (Android, Mac, Windows, ChromeOS) or in
+[Bluefy](https://apps.apple.com/app/bluefy-web-ble-browser/id1492822055) on
+iPad / iPhone. “Start without printer” works on anything with a camera.
+
+- 🖨️ **Prints over Bluetooth** to Phomemo P2 / P2S / M02 / M03 / M04 / T02
+  thermal sticker printers, straight from the browser (Web Bluetooth).
+- 🎨 **Live looks**: see the camera in Classic, Pop art, Woodcut or Stipple
+  before the photo is taken, plus Mirror and Big head twists.
+- 🎞️ **Photo strips** of 1–4 shots, with your own header and footer — typed
+  names and date, or your own artwork.
+- 📱 **QR sharing**: guests scan to get a colour copy; photos expire after
+  30 days and can be deleted by the guest.
+- 🎉 **Runs unattended**: auto-print, print limits, a paper-low warning, an
+  idle attract screen and self-healing camera and printer connections.
+- 🏠 **Self-hosted and private**: a static web app plus a tiny dependency-free
+  Node server, with a Dockerfile and Compose setup.
 
 ## What guests get
 

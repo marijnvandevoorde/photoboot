@@ -123,3 +123,7 @@ the browser (`src/raster.js`, `src/effects.js`), composed with the template
 (`src/strip.js`) and sent to the printer as ESC/POS raster commands over
 Web Bluetooth. [CONTEXT.md](CONTEXT.md) has the full map of the code, the
 printer protocol and the decisions behind it.
+
+## License
+
+[MIT](LICENSE) © Marijn Van de Voorde

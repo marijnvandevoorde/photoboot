@@ -27,8 +27,9 @@ async function tx(mode, run) {
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORE, mode);
     const store = transaction.objectStore(STORE);
-    const result = run(store);
-    transaction.oncomplete = () => resolve(result?.result ?? result);
+    // run() returns an IDBRequest; a missing key resolves to undefined.
+    const request = run(store);
+    transaction.oncomplete = () => resolve(request.result);
     transaction.onerror = () => reject(transaction.error);
     transaction.onabort = () => reject(transaction.error);
   });

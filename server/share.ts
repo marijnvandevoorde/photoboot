@@ -17,8 +17,20 @@ import { randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { eventRoutes, verifyEventKey } from './events.ts';
-import { HttpError, type Next, type Req, type Res, baseUrl, clientIp, escapeHtml, page, readBody, sendHtml, sendJson } from './http.ts';
-import { ID, TTL_DAYS, deletePhoto, expiresAt, hasRoomFor, jpgPath, photoMeta, savePhoto } from './photos.ts';
+import {
+  baseUrl,
+  clientIp,
+  escapeHtml,
+  HttpError,
+  type Next,
+  page,
+  type Req,
+  type Res,
+  readBody,
+  sendHtml,
+  sendJson,
+} from './http.ts';
+import { deletePhoto, expiresAt, hasRoomFor, ID, jpgPath, photoMeta, savePhoto, TTL_DAYS } from './photos.ts';
 
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const UPLOAD_TOKEN = process.env.UPLOAD_TOKEN || '';
@@ -37,7 +49,9 @@ function rateLimited(ip: string): boolean {
 }
 
 async function upload(req: Req, res: Res): Promise<void> {
-  const event = req.headers['x-event-id'] ? await verifyEventKey(req.headers['x-event-id'], req.headers['x-event-key']) : null;
+  const event = req.headers['x-event-id']
+    ? await verifyEventKey(req.headers['x-event-id'], req.headers['x-event-key'])
+    : null;
   if (req.headers['x-event-id'] && !event) return sendJson(res, 401, { error: 'Unknown event or wrong event key.' });
   if (!event && UPLOAD_TOKEN && req.headers['x-upload-token'] !== UPLOAD_TOKEN) {
     return sendJson(res, 401, { error: 'Upload token required.' });
@@ -75,7 +89,11 @@ async function serveJpg(id: string, res: Res): Promise<void> {
 async function sharePage(id: string, res: Res): Promise<void> {
   const meta = await photoMeta(id);
   if (!meta) {
-    return sendHtml(res, 404, page('Photo not found', '<h1>This photo is gone</h1><p class="muted">It was deleted, or it expired.</p>'));
+    return sendHtml(
+      res,
+      404,
+      page('Photo not found', '<h1>This photo is gone</h1><p class="muted">It was deleted, or it expired.</p>')
+    );
   }
   const expires = expiresAt(meta.created);
   const expiryText = expires
@@ -115,11 +133,18 @@ async function route(req: Req, res: Res, next: Next): Promise<void> {
   const { pathname } = url;
   if (pathname === '/api/share' && req.method === 'POST') return upload(req, res);
 
-  let m: RegExpMatchArray | null;
-  if (req.method === 'GET' && (m = pathname.match(SHARE_JPG)) && ID.test(m[1])) return serveJpg(m[1], res);
-  if (req.method === 'GET' && (m = pathname.match(SHARE_PAGE)) && ID.test(m[1])) return sharePage(m[1], res);
-  if (req.method === 'DELETE' && (m = pathname.match(SHARE_API)) && ID.test(m[1])) {
-    await deletePhoto(m[1]);
+  // The photo id from `pattern`, if this request is `method` on it.
+  const photoId = (method: string, pattern: RegExp) => {
+    const id = req.method === method ? pathname.match(pattern)?.[1] : undefined;
+    return id && ID.test(id) ? id : null;
+  };
+  let id = photoId('GET', SHARE_JPG);
+  if (id) return serveJpg(id, res);
+  id = photoId('GET', SHARE_PAGE);
+  if (id) return sharePage(id, res);
+  id = photoId('DELETE', SHARE_API);
+  if (id) {
+    await deletePhoto(id);
     return sendJson(res, 200, { ok: true });
   }
   if (await eventRoutes(req, res, url)) return;

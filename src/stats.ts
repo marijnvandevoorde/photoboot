@@ -74,10 +74,7 @@ export function resetStats(key = eventKey()) {
 
 // kind: 'session' | 'print' | 'share' | 'printFail'. For prints, pass the
 // sticker height in dots (tear margin included) and the number of copies.
-export function record(
-  kind: 'session' | 'print' | 'share' | 'printFail',
-  { heightDots = 0, copies = 1 } = {}
-): Stats {
+export function record(kind: 'session' | 'print' | 'share' | 'printFail', { heightDots = 0, copies = 1 } = {}): Stats {
   const key = eventKey();
   const s = getStats(key);
   const now = new Date();

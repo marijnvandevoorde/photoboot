@@ -21,22 +21,22 @@
       </section>
 
       <section class="controls">
-        <button id="connect">1. Connect printer</button>
-        <button id="print-calibration" disabled>2. Print width calibration (0–640, step 32)</button>
-        <button id="print-cal-narrow" disabled>3. Fine calibration (0–576, step 16)</button>
+        <button type="button" id="connect">1. Connect printer</button>
+        <button type="button" id="print-calibration" disabled>2. Print width calibration (0–640, step 32)</button>
+        <button type="button" id="print-cal-narrow" disabled>3. Fine calibration (0–576, step 16)</button>
         <label class="width-field">
           Target width (dots, multiple of 8):
           <input id="width" type="number" min="8" step="8" />
         </label>
-        <button id="print-text" disabled>Print text (at target width)</button>
-        <button id="print-pattern" disabled>Print test pattern (at target width)</button>
-        <button id="print-image" disabled>Print image (fit to target width)</button>
-        <button id="compare-dither">Compare dithering on screen (no printing)</button>
-        <button id="print-dither" disabled>Dither comparison (pick a photo → 4 strips)</button>
+        <button type="button" id="print-text" disabled>Print text (at target width)</button>
+        <button type="button" id="print-pattern" disabled>Print test pattern (at target width)</button>
+        <button type="button" id="print-image" disabled>Print image (fit to target width)</button>
+        <button type="button" id="compare-dither">Compare dithering on screen (no printing)</button>
+        <button type="button" id="print-dither" disabled>Dither comparison (pick a photo → 4 strips)</button>
         <input type="file" id="file" accept="image/*" hidden />
         <input type="file" id="dither-file" accept="image/*" hidden />
         <input type="file" id="compare-file" accept="image/*" hidden />
-        <button id="disconnect" disabled>Disconnect</button>
+        <button type="button" id="disconnect" disabled>Disconnect</button>
       </section>
 
       <section class="help">

@@ -3,8 +3,8 @@
 
 import { get } from './config.ts';
 import * as fx from './effects.ts';
-import { canvasToRaster, fitToPrintWidth } from './raster.ts';
 import type { PrinterBase } from './printers/base.ts';
+import { canvasToRaster, fitToPrintWidth } from './raster.ts';
 import { composeColour, composeStrip } from './strip.ts';
 import type { ImageSource, Look, Raster, RasterOptions, Template } from './types.ts';
 
@@ -31,7 +31,11 @@ const TEAR_MARGIN_DOTS = 72;
 // is a plain threshold — useful when filters are disabled.
 export const PHOTO_STYLES: PhotoStyle[] = [
   { id: 'classic', label: 'Classic', options: { dither: 'atkinson', noise: 16 } },
-  { id: 'pop', label: 'Pop art', options: { dither: 'halftone', period: 11, gamma: 0.55, clip: 0.05, sharpen: 1, outline: 1 } },
+  {
+    id: 'pop',
+    label: 'Pop art',
+    options: { dither: 'halftone', period: 11, gamma: 0.55, clip: 0.05, sharpen: 1, outline: 1 },
+  },
   { id: 'woodcut', label: 'Woodcut', render: fx.woodcut },
   { id: 'stipple', label: 'Stipple', render: fx.stipple },
 ];

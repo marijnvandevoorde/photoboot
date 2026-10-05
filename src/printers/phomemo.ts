@@ -86,9 +86,14 @@ export class PhomemoPrinter extends PrinterBase {
     for (let y = 0; y < heightDots; y += BAND) {
       const rows = Math.min(BAND, heightDots - y);
       const header = new Uint8Array([
-        0x1d, 0x76, 0x30, 0x00,
-        rowBytes & 0xff, (rowBytes >> 8) & 0xff,
-        rows & 0xff, (rows >> 8) & 0xff,
+        0x1d,
+        0x76,
+        0x30,
+        0x00,
+        rowBytes & 0xff,
+        (rowBytes >> 8) & 0xff,
+        rows & 0xff,
+        (rows >> 8) & 0xff,
       ]);
       const slice = bitmap.subarray(y * rowBytes, (y + rows) * rowBytes);
       const packet = new Uint8Array(header.length + slice.length);

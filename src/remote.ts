@@ -73,7 +73,8 @@ const admin = () => ({ Authorization: `Bearer ${getAdminToken()}` });
 export const remote = {
   listEvents: () => call<{ events: EventSummary[] }>('GET', '/api/events', { headers: admin() }),
   createEvent: (event: Setup) => call<CreatedEvent>('POST', '/api/events', { body: event, headers: admin() }),
-  updateEvent: (id: string, event: Setup) => call<{ ok: true }>('PUT', `/api/events/${id}`, { body: event, headers: admin() }),
+  updateEvent: (id: string, event: Setup) =>
+    call<{ ok: true }>('PUT', `/api/events/${id}`, { body: event, headers: admin() }),
   deleteEvent: (id: string) => call<{ ok: true }>('DELETE', `/api/events/${id}`, { headers: admin() }),
   // Booth side: fetch a setup with its key; push this device's stats.
   loadEvent: (id: string, key: string) =>

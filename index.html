@@ -17,13 +17,13 @@
       <div class="setup-card">
         <h1>Photoboot</h1>
         <p class="muted">Turn on the printer, then connect to it.</p>
-        <button id="connect" class="primary big">Connect printer</button>
+        <button type="button" id="connect" class="primary big">Connect printer</button>
         <p id="setup-status" class="muted small" role="status"></p>
         <p id="no-bluetooth" class="warn" hidden>
           This browser can't connect to Bluetooth printers.
           Use Chrome on Android, or the Bluefy browser on iPad.
         </p>
-        <button id="skip-printer" class="link">Start without printer</button>
+        <button type="button" id="skip-printer" class="link">Start without printer</button>
       </div>
     </section>
 
@@ -39,20 +39,20 @@
         <div id="countdown" class="countdown" hidden aria-live="assertive">
           <span id="countdown-number" class="countdown-number"></span>
           <span id="countdown-caption" class="countdown-caption"></span>
-          <button id="cancel-countdown" class="secondary cancel" data-t="cancel">Cancel</button>
+          <button type="button" id="cancel-countdown" class="secondary cancel" data-t="cancel">Cancel</button>
         </div>
         <div id="flash" class="flash"></div>
 
-        <button id="printer-pill" class="pill" hidden tabindex="-1"></button>
+        <button type="button" id="printer-pill" class="pill" hidden tabindex="-1"></button>
         <div id="shot-counter" class="shot-counter" hidden aria-live="polite"></div>
-        <button id="switch-camera" class="icon-btn" hidden aria-label="Switch camera" title="Switch camera">⟲</button>
+        <button type="button" id="switch-camera" class="icon-btn" hidden aria-label="Switch camera" title="Switch camera">⟲</button>
         <!-- Hidden host entry: long-press this corner for 2 s to open settings. -->
         <div id="admin-hatch" class="admin-hatch" aria-hidden="true"></div>
 
         <div id="camera-error" class="camera-error" hidden role="alert">
           <p id="camera-error-text" class="big-text" data-t="cameraError"></p>
           <p class="muted" data-t="cameraHint"></p>
-          <button id="camera-retry" class="primary big" data-t="tryAgain"></button>
+          <button type="button" id="camera-retry" class="primary big" data-t="tryAgain"></button>
         </div>
       </div>
 
@@ -60,20 +60,20 @@
         <div class="options">
           <div class="chips" role="radiogroup" aria-labelledby="timer-label">
             <span id="timer-label" class="chips-label" data-t="timer"></span>
-            <button class="delay" data-delay="3" role="radio">3s</button>
-            <button class="delay" data-delay="5" role="radio">5s</button>
-            <button class="delay" data-delay="10" role="radio">10s</button>
+            <button type="button" class="delay" data-delay="3" role="radio" aria-checked="false">3s</button>
+            <button type="button" class="delay" data-delay="5" role="radio" aria-checked="false">5s</button>
+            <button type="button" class="delay" data-delay="10" role="radio" aria-checked="false">10s</button>
           </div>
           <div id="shot-choice" class="chips" role="radiogroup" aria-labelledby="shots-label" hidden>
             <span id="shots-label" class="chips-label" data-t="photos"></span>
-            <button class="shots" data-shots="1" role="radio">1</button>
-            <button class="shots" data-shots="2" role="radio">2</button>
-            <button class="shots" data-shots="3" role="radio">3</button>
-            <button class="shots" data-shots="4" role="radio">4</button>
+            <button type="button" class="shots" data-shots="1" role="radio" aria-checked="false">1</button>
+            <button type="button" class="shots" data-shots="2" role="radio" aria-checked="false">2</button>
+            <button type="button" class="shots" data-shots="3" role="radio" aria-checked="false">3</button>
+            <button type="button" class="shots" data-shots="4" role="radio" aria-checked="false">4</button>
           </div>
         </div>
         <div class="shutter-wrap">
-          <button id="shutter" class="shutter" aria-labelledby="shutter-label"></button>
+          <button type="button" id="shutter" class="shutter" aria-labelledby="shutter-label"></button>
           <span id="shutter-label" class="shutter-label" data-t="takePhoto"></span>
         </div>
         <div class="bar-spacer"></div>
@@ -100,10 +100,10 @@
           <div id="twists" class="filters" role="radiogroup" aria-label="Twist"></div>
         </div>
         <div class="actions">
-          <button id="print" class="primary big" data-t="print"></button>
-          <button id="share" class="secondary big" data-t="share"></button>
-          <button id="retry" class="secondary big" data-t="retake"></button>
-          <button id="done" class="secondary big" data-t="done"></button>
+          <button type="button" id="print" class="primary big" data-t="print"></button>
+          <button type="button" id="share" class="secondary big" data-t="share"></button>
+          <button type="button" id="retry" class="secondary big" data-t="retake"></button>
+          <button type="button" id="done" class="secondary big" data-t="done"></button>
         </div>
         <p id="print-note" class="muted note" hidden></p>
       </div>
@@ -125,7 +125,7 @@
         <p class="qr-title" data-t="scanQr"></p>
         <div id="qr"></div>
         <p class="qr-sub" data-t="colourVersion"></p>
-        <button id="qr-close" class="primary big" data-t="done"></button>
+        <button type="button" id="qr-close" class="primary big" data-t="done"></button>
       </div>
     </div>
 

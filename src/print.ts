@@ -1,9 +1,9 @@
 // Standalone page: pick a photo and print it with the booth's photo look.
 
+import { $, errorMessage } from './dom.ts';
 import { photoToRaster, printPhoto } from './photo.ts';
 import { PhomemoPrinter } from './printer.ts';
 import { rasterToCanvas } from './raster.ts';
-import { $, errorMessage } from './dom.ts';
 import type { Raster } from './types.ts';
 
 let image: HTMLImageElement | null = null;

@@ -13,9 +13,9 @@
 // guest picked. This step is pure composition: no dithering happens here
 // except on the (vector) header/footer canvases, which get a 50% threshold.
 
+import { ctx2d } from './dom.ts';
 import { whiteCanvas } from './effects.ts';
 import { canvasToRaster, rasterToCanvas } from './raster.ts';
-import { ctx2d } from './dom.ts';
 import type { Raster, Template } from './types.ts';
 
 export function composeStrip(shotRasters: Raster[], template: Template, stickerWidth: number): Raster {
@@ -66,7 +66,10 @@ export function composeColour(
   shots: HTMLCanvasElement[],
   template: Template,
   stickerWidth: number,
-  { marginDots = 24, twist = null }: { marginDots?: number; twist?: ((c: HTMLCanvasElement) => HTMLCanvasElement) | null } = {}
+  {
+    marginDots = 24,
+    twist = null,
+  }: { marginDots?: number; twist?: ((c: HTMLCanvasElement) => HTMLCanvasElement) | null } = {}
 ): HTMLCanvasElement {
   const scale = Math.max(1, Math.min(3, shots[0].width / stickerWidth));
   const W = Math.round((stickerWidth * scale) / 8) * 8;
@@ -87,7 +90,12 @@ export function composeColour(
   const topPad = Math.round((template.topPadding ?? 0) * k);
   const botPad = Math.round((template.bottomPadding ?? 0) * k);
   const height =
-    (header?.height ?? 0) + topPad + photos.reduce((s, p) => s + p.height, 0) + gap * (photos.length - 1) + botPad + (footer?.height ?? 0);
+    (header?.height ?? 0) +
+    topPad +
+    photos.reduce((s, p) => s + p.height, 0) +
+    gap * (photos.length - 1) +
+    botPad +
+    (footer?.height ?? 0);
 
   const canvas = whiteCanvas(W + 2 * margin, height);
   const ctx = ctx2d(canvas);

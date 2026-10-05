@@ -5,8 +5,8 @@
 // More looks (8-bit, ASCII, spiral, glitch, Warhol, …) were tried in the
 // filter lab and dropped; see git history (8b32a21) if you want one back.
 
-import { boxBlur, inkToRaster, sobel, toGray } from './raster.ts';
 import { ctx2d } from './dom.ts';
+import { boxBlur, inkToRaster, sobel, toGray } from './raster.ts';
 import type { Raster } from './types.ts';
 
 const TONE = { photo: true, gamma: 0.6, clip: 0.02, sharpen: 0.8 };
@@ -72,7 +72,8 @@ export function stipple(canvas: HTMLCanvasElement): Raster {
   const rows = Math.ceil(height / C);
   const cells = new Float32Array(cols * rows);
   for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) cells[Math.floor(y / C) * cols + Math.floor(x / C)] += gray[y * width + x] / (C * C);
+    for (let x = 0; x < width; x++)
+      cells[Math.floor(y / C) * cols + Math.floor(x / C)] += gray[y * width + x] / (C * C);
   }
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
@@ -90,7 +91,8 @@ export function stipple(canvas: HTMLCanvasElement): Raster {
       const py = r * C + 1.5 + (rand() - 0.5) * 1.4;
       for (let y = Math.floor(py - 2); y <= py + 2; y++) {
         for (let x = Math.floor(px - 2); x <= px + 2; x++) {
-          if (x >= 0 && y >= 0 && x < width && y < height && (x - px) ** 2 + (y - py) ** 2 <= 2.6) ink[y * width + x] = 1;
+          if (x >= 0 && y >= 0 && x < width && y < height && (x - px) ** 2 + (y - py) ** 2 <= 2.6)
+            ink[y * width + x] = 1;
         }
       }
     }
@@ -128,7 +130,7 @@ export function bigHead(canvas: HTMLCanvasElement): HTMLCanvasElement {
       const dx = x - cx;
       const dy = y - cy;
       const r = Math.hypot(dx, dy);
-      const k = r < R && r > 0 ? Math.pow(r / R, 0.7) : 1; // < 1 → magnify
+      const k = r < R && r > 0 ? (r / R) ** 0.7 : 1; // < 1 → magnify
       const sx = Math.max(0, Math.min(width - 1.001, cx + dx * k));
       const sy = Math.max(0, Math.min(height - 1.001, cy + dy * k));
       const x0 = Math.floor(sx);
@@ -139,7 +141,10 @@ export function bigHead(canvas: HTMLCanvasElement): HTMLCanvasElement {
       for (let c = 0; c < 3; c++) {
         const at = (xx: number, yy: number) => src.data[(yy * width + xx) * 4 + c];
         dst.data[p + c] =
-          at(x0, y0) * (1 - fx) * (1 - fy) + at(x0 + 1, y0) * fx * (1 - fy) + at(x0, y0 + 1) * (1 - fx) * fy + at(x0 + 1, y0 + 1) * fx * fy;
+          at(x0, y0) * (1 - fx) * (1 - fy) +
+          at(x0 + 1, y0) * fx * (1 - fy) +
+          at(x0, y0 + 1) * (1 - fx) * fy +
+          at(x0 + 1, y0 + 1) * fx * fy;
       }
       dst.data[p + 3] = 255;
     }

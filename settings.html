@@ -24,7 +24,7 @@
         <h2>Admin access</h2>
         <p class="muted">An admin PIN has been set for this booth.</p>
         <label>PIN <input id="auth-password" type="password" autocomplete="current-password" /></label>
-        <button id="auth-submit" class="primary">Unlock</button>
+        <button type="button" id="auth-submit" class="primary">Unlock</button>
         <p id="auth-error" class="warn" hidden>Wrong PIN.</p>
       </section>
 
@@ -35,8 +35,8 @@
           <h2>Tonight</h2>
           <ul id="status-list" class="summary"></ul>
           <div class="row">
-            <button id="new-roll">New paper roll</button>
-            <button id="reset-stats">Reset counters</button>
+            <button type="button" id="new-roll">New paper roll</button>
+            <button type="button" id="reset-stats">Reset counters</button>
           </div>
           <p class="muted small">
             Counters are per event (the event name below) and live on this device. The booth reports
@@ -58,13 +58,13 @@
           <h3>Saved setups</h3>
           <div class="row">
             <select id="profile-list" aria-label="Saved setups"></select>
-            <button id="profile-load">Load</button>
-            <button id="profile-delete">Delete</button>
+            <button type="button" id="profile-load">Load</button>
+            <button type="button" id="profile-delete">Delete</button>
           </div>
           <div class="row">
-            <button id="profile-save" class="primary">Save current setup as…</button>
-            <button id="export-file">Export file</button>
-            <button id="import-file">Import file</button>
+            <button type="button" id="profile-save" class="primary">Save current setup as…</button>
+            <button type="button" id="export-file">Export file</button>
+            <button type="button" id="import-file">Import file</button>
             <input id="import-picker" type="file" accept="application/json,.json" hidden />
           </div>
           <p class="muted small">
@@ -256,8 +256,8 @@
           </label>
           <ul id="local-photos" class="summary"></ul>
           <div class="row">
-            <button id="download-zip" class="primary">Download this event as ZIP</button>
-            <button id="delete-local" class="danger">Delete this event's photos</button>
+            <button type="button" id="download-zip" class="primary">Download this event as ZIP</button>
+            <button type="button" id="delete-local" class="danger">Delete this event's photos</button>
           </div>
         </section>
 
@@ -273,9 +273,9 @@
             <input id="admin-token" type="password" autocomplete="off" placeholder="ADMIN_TOKEN from the server's .env" />
           </label>
           <div class="row">
-            <button id="publish-event" class="primary">Publish current setup</button>
-            <button id="refresh-events">Refresh list</button>
-            <button id="leave-event">Disconnect this booth</button>
+            <button type="button" id="publish-event" class="primary">Publish current setup</button>
+            <button type="button" id="refresh-events">Refresh list</button>
+            <button type="button" id="leave-event">Disconnect this booth</button>
           </div>
           <ul id="event-list" class="event-list"></ul>
           <div id="event-qr" class="event-qr" hidden></div>
@@ -291,13 +291,13 @@
             New PIN (empty = no gate)
             <input id="admin-password" type="password" autocomplete="new-password" />
           </label>
-          <button id="set-pin">Set PIN</button>
+          <button type="button" id="set-pin">Set PIN</button>
           <p class="muted small">Guards this page only. Stops curious guests; not real security.</p>
         </section>
 
         <section class="card danger">
           <h2>Reset</h2>
-          <button id="reset" class="danger">Reset to defaults</button>
+          <button type="button" id="reset" class="danger">Reset to defaults</button>
           <p class="muted small">Wipes config and uploaded template images. Photos and counters stay.</p>
         </section>
       </div>

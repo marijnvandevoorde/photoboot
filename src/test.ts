@@ -1,4 +1,5 @@
-import { PhomemoPrinter, DEFAULT_PRINT_WIDTH_DOTS } from './printer.ts';
+import { $, ctx2d, errorMessage } from './dom.ts';
+import { DEFAULT_PRINT_WIDTH_DOTS, PhomemoPrinter } from './printer.ts';
 import {
   canvasToRaster,
   fitToPrintWidth,
@@ -7,7 +8,6 @@ import {
   textToCanvas,
   widthCalibrationCanvas,
 } from './raster.ts';
-import { $, ctx2d, errorMessage } from './dom.ts';
 
 const logEl = $('log');
 const previewWrap = $('preview-wrap');
@@ -18,7 +18,7 @@ let targetWidth = DEFAULT_PRINT_WIDTH_DOTS;
 
 function log(msg: string) {
   const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
-  logEl.textContent += line + '\n';
+  logEl.textContent += `${line}\n`;
   logEl.scrollTop = logEl.scrollHeight;
   console.log(line);
 }
@@ -78,10 +78,10 @@ $<HTMLButtonElement>('disconnect').addEventListener('click', async () => {
 
 $<HTMLButtonElement>('print-text').addEventListener('click', async () => {
   try {
-    const canvas = textToCanvas(
-      `Hello from the photoboot!\n\n${new Date().toLocaleString()}`,
-      { width: targetWidth, fontSize: 36 }
-    );
+    const canvas = textToCanvas(`Hello from the photoboot!\n\n${new Date().toLocaleString()}`, {
+      width: targetWidth,
+      fontSize: 36,
+    });
     await printCanvas(canvas, { fit: false });
   } catch (err) {
     log(`ERROR: ${errorMessage(err)}`);

@@ -5,6 +5,7 @@
 import qrcode from 'qrcode-generator';
 import { recentPhotos, savePhoto } from './archive.ts';
 import { getConfig } from './config.ts';
+import { $, ctx2d, errorMessage } from './dom.ts';
 import { translator } from './i18n.ts';
 import {
   PHOTO_STYLES,
@@ -16,14 +17,13 @@ import {
   renderColour,
   renderSticker,
 } from './photo.ts';
+import type { PrinterBase } from './printers/base.ts';
 import { connectPrinter } from './printers/index.ts';
 import { rasterToCanvas } from './raster.ts';
 import { deviceId, remote } from './remote.ts';
 import { getStats, paperLeft, record, setStatus } from './stats.ts';
 import { loadTemplate } from './templates.ts';
-import type { PrinterBase } from './printers/base.ts';
 import type { Look, Raster, Template } from './types.ts';
-import { $, ctx2d, errorMessage } from './dom.ts';
 
 const screens = { setup: $('setup'), booth: $('booth'), review: $('review') };
 const video = $<HTMLVideoElement>('video');
@@ -250,7 +250,7 @@ if (!navigator.bluetooth) {
 // ---------- camera ----------
 
 async function startCamera() {
-  stream?.getTracks().forEach((t) => t.stop());
+  for (const track of stream?.getTracks() ?? []) track.stop();
   const deviceId = cameras[cameraIndex]?.deviceId;
   // 1280×960 is plenty for a 552-dot sticker. Without a frame rate the
   // browser only matches the size and can pick a slow mode (a Logitech
@@ -268,7 +268,10 @@ async function startCamera() {
     });
   } catch (err) {
     if ((err as Error).name !== 'OverconstrainedError') throw err;
-    stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { ...camera, frameRate: { ideal: 30 } } });
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { ...camera, frameRate: { ideal: 30 } },
+    });
   }
   video.srcObject = stream;
   await video.play().catch(() => {});
@@ -288,7 +291,10 @@ async function startCamera() {
     const devices = await navigator.mediaDevices.enumerateDevices();
     cameras = devices.filter((d) => d.kind === 'videoinput');
     const current = track?.getSettings().deviceId;
-    cameraIndex = Math.max(0, cameras.findIndex((c) => c.deviceId === current));
+    cameraIndex = Math.max(
+      0,
+      cameras.findIndex((c) => c.deviceId === current)
+    );
   }
   $<HTMLButtonElement>('switch-camera').hidden = cameras.length < 2;
 }
@@ -365,7 +371,8 @@ for (const btn of document.querySelectorAll<HTMLElement>('.shots')) {
 setShotCount(shotCount);
 
 function setCaptureEnabled(enabled: boolean) {
-  for (const btn of document.querySelectorAll<HTMLButtonElement>('#capture-bar button, #switch-camera')) btn.disabled = !enabled;
+  for (const btn of document.querySelectorAll<HTMLButtonElement>('#capture-bar button, #switch-camera'))
+    btn.disabled = !enabled;
 }
 
 // ---------- idle attract screen ----------
@@ -524,7 +531,7 @@ function renderLiveFrame() {
   ctx.drawImage(video, 0, 0, width, height);
   ctx.restore();
 
-  let out;
+  let out: HTMLCanvasElement;
   if (live.style === 'camera') {
     const twist = PHOTO_TWISTS.find((tw) => tw.id === live.twist);
     out = twist?.apply ? twist.apply(frameCanvas) : frameCanvas;
@@ -672,9 +679,10 @@ function startSession(shots: HTMLCanvasElement[]) {
 function colourJpeg(s: Session | null = session): Promise<Blob> {
   if (!s || !template) return Promise.reject(new Error('No session.'));
   const twist = s.look?.twist ?? 'none';
-  return (s.jpegs[twist] ??= jpegOf(
+  s.jpegs[twist] ??= jpegOf(
     renderColour(s.shots, template, { stickerWidth: config.paperWidthDots, look: s.look ?? undefined })
-  ));
+  );
+  return s.jpegs[twist];
 }
 
 // Archive when the guest leaves the review, so the copy has their final twist.
@@ -791,8 +799,7 @@ function layoutSticker() {
 }
 new ResizeObserver(() => layoutSticker()).observe($('review-preview'));
 
-const printLimitReached = () =>
-  config.maxPrintsPerSession > 0 && (session?.prints ?? 0) >= config.maxPrintsPerSession;
+const printLimitReached = () => config.maxPrintsPerSession > 0 && (session?.prints ?? 0) >= config.maxPrintsPerSession;
 
 function updatePrintButton() {
   const btn = $<HTMLButtonElement>('print');

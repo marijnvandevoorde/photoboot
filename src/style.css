@@ -2,7 +2,9 @@
   color-scheme: dark;
   font-family: -apple-system, system-ui, sans-serif;
 }
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 body {
   margin: 0;
   background: #111;
@@ -17,8 +19,17 @@ main {
   flex-direction: column;
   gap: 1.25rem;
 }
-h1 { font-size: 1.25rem; margin: 0; }
-h2 { font-size: 0.9rem; margin: 0 0 0.5rem; color: #aaa; text-transform: uppercase; letter-spacing: 0.05em; }
+h1 {
+  font-size: 1.25rem;
+  margin: 0;
+}
+h2 {
+  font-size: 0.9rem;
+  margin: 0 0 0.5rem;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
 .controls {
   display: flex;
   flex-direction: column;
@@ -35,8 +46,14 @@ button {
   font-weight: 600;
   cursor: pointer;
 }
-button:disabled { background: #333; color: #777; cursor: not-allowed; }
-#disconnect { background: #633; }
+button:disabled {
+  background: #333;
+  color: #777;
+  cursor: not-allowed;
+}
+#disconnect {
+  background: #633;
+}
 pre {
   background: #000;
   color: #0f0;
@@ -55,7 +72,10 @@ pre {
   padding: 0.75rem 1rem;
   border-radius: 8px;
 }
-.warn ul { margin: 0.5rem 0 0 1rem; padding: 0; }
+.warn ul {
+  margin: 0.5rem 0 0 1rem;
+  padding: 0;
+}
 canvas {
   background: #fff;
   width: 100%;
@@ -69,8 +89,13 @@ canvas {
   font-size: 0.85rem;
   color: #ccc;
 }
-.help ol { margin: 0.5rem 0 0 1.2rem; padding: 0; }
-.help li { margin-bottom: 0.3rem; }
+.help ol {
+  margin: 0.5rem 0 0 1.2rem;
+  padding: 0;
+}
+.help li {
+  margin-bottom: 0.3rem;
+}
 .width-field {
   display: flex;
   flex-direction: column;
@@ -91,10 +116,19 @@ canvas {
   flex-wrap: wrap;
   gap: 1rem;
 }
-.compare figure { margin: 0; }
-.compare figcaption { font-size: 0.85rem; color: #aaa; margin-top: 0.3rem; }
+.compare figure {
+  margin: 0;
+}
+.compare figcaption {
+  font-size: 0.85rem;
+  color: #aaa;
+  margin-top: 0.3rem;
+}
 /* width/height set inline so one dot maps to one device pixel */
-.compare canvas { width: auto; border-radius: 0; }
+.compare canvas {
+  width: auto;
+  border-radius: 0;
+}
 .choice {
   border: 1px solid #333;
   border-radius: 8px;
@@ -104,5 +138,11 @@ canvas {
   gap: 0.4rem;
   font-size: 0.9rem;
 }
-.choice legend { color: #aaa; padding: 0 0.3rem; }
-#preview canvas { width: auto; border-radius: 0; }
+.choice legend {
+  color: #aaa;
+  padding: 0 0.3rem;
+}
+#preview canvas {
+  width: auto;
+  border-radius: 0;
+}

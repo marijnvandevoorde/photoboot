@@ -15,11 +15,11 @@
 // loadTemplate(), and (if it needs text/choices) surface those keys in the
 // settings page.
 
+import type { TextTemplateConfig } from './config.ts';
+import { ctx2d } from './dom.ts';
 import { whiteCanvas } from './effects.ts';
 import { fitToPrintWidth } from './raster.ts';
 import { kv } from './storage.ts';
-import type { TextTemplateConfig } from './config.ts';
-import { ctx2d } from './dom.ts';
 import type { Template } from './types.ts';
 
 export type Slot = 'header' | 'footer';
@@ -37,7 +37,11 @@ export const TEXT_FONTS = [
   { id: 'sans', label: 'Clean', stack: '700 {px}px system-ui, -apple-system, "Helvetica Neue", sans-serif' },
   { id: 'serif', label: 'Classic serif', stack: '700 {px}px Georgia, "Times New Roman", serif' },
   { id: 'script', label: 'Handwritten', stack: '{px}px "Snell Roundhand", "Brush Script MT", "Segoe Script", cursive' },
-  { id: 'rounded', label: 'Rounded', stack: '700 {px}px "Arial Rounded MT Bold", "Avenir Next", system-ui, sans-serif' },
+  {
+    id: 'rounded',
+    label: 'Rounded',
+    stack: '700 {px}px "Arial Rounded MT Bold", "Avenir Next", system-ui, sans-serif',
+  },
   { id: 'mono', label: 'Typewriter', stack: '700 {px}px "American Typewriter", "Courier New", monospace' },
 ];
 
@@ -100,7 +104,13 @@ interface TextLine {
   size: number;
 }
 
-function textBlock(width: number, stack: string, lines: TextLine[], padTop: number, padBottom: number): HTMLCanvasElement {
+function textBlock(
+  width: number,
+  stack: string,
+  lines: TextLine[],
+  padTop: number,
+  padBottom: number
+): HTMLCanvasElement {
   const k = width / 552;
   const margin = Math.round(16 * k);
   const measure = ctx2d(document.createElement('canvas'));

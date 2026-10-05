@@ -6,7 +6,7 @@
 //   SHARE_TTL_DAYS  delete photos older than this (default 30, 0 = keep forever)
 //   SHARE_MAX_MB    refuse uploads once the folder is this big (default 5000)
 
-import { readFile, readdir, rm, stat, writeFile, mkdir } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 export const SHARE_DIR = path.resolve(process.env.SHARE_DIR || 'shares');
@@ -24,6 +24,7 @@ export interface PhotoMeta {
 
 const jpgPath = (id: string) => path.join(SHARE_DIR, `${id}.jpg`);
 const metaPath = (id: string) => path.join(SHARE_DIR, `${id}.json`);
+
 export { jpgPath };
 
 let usedBytes: number | null = null; // folder size, computed lazily, then kept up to date
@@ -71,7 +72,10 @@ export async function deletePhoto(id: string): Promise<void> {
 
 export async function listPhotos({ event }: { event?: string | null } = {}): Promise<PhotoMeta[]> {
   const names = await readdir(SHARE_DIR).catch(() => []);
-  const ids = names.filter((n) => n.endsWith('.jpg')).map((n) => n.slice(0, -4)).filter((id) => ID.test(id));
+  const ids = names
+    .filter((n) => n.endsWith('.jpg'))
+    .map((n) => n.slice(0, -4))
+    .filter((id) => ID.test(id));
   const metas = await Promise.all(ids.map(photoMeta));
   return metas
     .filter((m): m is PhotoMeta => !!m && (event === undefined || m.event === event))

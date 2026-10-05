@@ -1,7 +1,7 @@
 // Convert canvases / images into packed-bit monochrome rasters for the printer.
 
-import { DEFAULT_PRINT_WIDTH_DOTS } from './printer.ts';
 import { ctx2d } from './dom.ts';
+import { DEFAULT_PRINT_WIDTH_DOTS } from './printer.ts';
 import type { ImageSource, Raster, RasterOptions, ToneOptions } from './types.ts';
 
 // Fit a source image onto a canvas of exactly `targetWidth` dots wide,
@@ -41,14 +41,41 @@ interface Kernel {
 }
 
 const DITHER_KERNELS: Record<string, Kernel> = {
-  floyd: { div: 16, taps: [[1, 0, 7], [-1, 1, 3], [0, 1, 5], [1, 1, 1]] },
-  atkinson: { div: 8, taps: [[1, 0, 1], [2, 0, 1], [-1, 1, 1], [0, 1, 1], [1, 1, 1], [0, 2, 1]] },
+  floyd: {
+    div: 16,
+    taps: [
+      [1, 0, 7],
+      [-1, 1, 3],
+      [0, 1, 5],
+      [1, 1, 1],
+    ],
+  },
+  atkinson: {
+    div: 8,
+    taps: [
+      [1, 0, 1],
+      [2, 0, 1],
+      [-1, 1, 1],
+      [0, 1, 1],
+      [1, 1, 1],
+      [0, 2, 1],
+    ],
+  },
   stucki: {
     div: 42,
     taps: [
-      [1, 0, 8], [2, 0, 4],
-      [-2, 1, 2], [-1, 1, 4], [0, 1, 8], [1, 1, 4], [2, 1, 2],
-      [-2, 2, 1], [-1, 2, 2], [0, 2, 4], [1, 2, 2], [2, 2, 1],
+      [1, 0, 8],
+      [2, 0, 4],
+      [-2, 1, 2],
+      [-1, 1, 4],
+      [0, 1, 8],
+      [1, 1, 4],
+      [2, 1, 2],
+      [-2, 2, 1],
+      [-1, 2, 2],
+      [0, 2, 4],
+      [1, 2, 2],
+      [2, 2, 1],
     ],
   },
 };
@@ -189,9 +216,14 @@ export function sobel(gray: Float32Array, width: number, height: number): Float3
   for (let y = 1; y < height - 1; y++) {
     for (let x = 1; x < width - 1; x++) {
       const i = y * width + x;
-      const a = gray[i - width - 1], b = gray[i - width], c = gray[i - width + 1];
-      const d = gray[i - 1], f = gray[i + 1];
-      const g = gray[i + width - 1], h = gray[i + width], k = gray[i + width + 1];
+      const a = gray[i - width - 1],
+        b = gray[i - width],
+        c = gray[i - width + 1];
+      const d = gray[i - 1],
+        f = gray[i + 1];
+      const g = gray[i + width - 1],
+        h = gray[i + width],
+        k = gray[i + width + 1];
       out[i] = Math.hypot(c + 2 * f + k - a - 2 * d - g, g + 2 * h + k - a - 2 * b - c);
     }
   }
@@ -216,7 +248,7 @@ function enhanceForThermal(gray: Float32Array, { gamma = 0.6, clip = 0.01 } = {}
   const hi = Math.max(lo + 1, percentile(1 - clip));
   for (let i = 0; i < gray.length; i++) {
     const t = Math.max(0, Math.min(1, (gray[i] - lo) / (hi - lo)));
-    gray[i] = 255 * Math.pow(t, gamma);
+    gray[i] = 255 * t ** gamma;
   }
 }
 
@@ -283,7 +315,7 @@ export function textToCanvas(
   ctx2.fillStyle = '#000';
   ctx2.font = `${fontSize}px -apple-system, system-ui, sans-serif`;
   ctx2.textBaseline = 'top';
-  lines.forEach((ln, i) => ctx2.fillText(ln, padding, padding + i * rowH));
+  for (const [i, ln] of lines.entries()) ctx2.fillText(ln, padding, padding + i * rowH);
   return canvas;
 }
 

@@ -5,7 +5,9 @@
   gap: 0.3rem;
   font-size: 0.95rem;
 }
-.summary strong { font-weight: 600; }
+.summary strong {
+  font-weight: 600;
+}
 
 .row {
   display: flex;

@@ -4,10 +4,10 @@
 // A/B'ing looks without burning paper.
 
 import { getConfig } from './config.ts';
+import { $, ctx2d } from './dom.ts';
 import { DEFAULT_LOOK, PHOTO_STYLES, PHOTO_TWISTS, renderSticker } from './photo.ts';
 import { rasterToCanvas } from './raster.ts';
-import { loadTemplate, BUILT_IN_TEMPLATES } from './templates.ts';
-import { $, ctx2d } from './dom.ts';
+import { BUILT_IN_TEMPLATES, loadTemplate } from './templates.ts';
 import type { ImageSource, Template } from './types.ts';
 
 const config = getConfig();
@@ -128,7 +128,10 @@ async function buildSyntheticSample() {
   ctx.fill();
 
   ctx.fillStyle = '#2b2b2b';
-  for (const [cx, cy] of [[w * 0.42, h * 0.44], [w * 0.58, h * 0.44]]) {
+  for (const [cx, cy] of [
+    [w * 0.42, h * 0.44],
+    [w * 0.58, h * 0.44],
+  ]) {
     ctx.beginPath();
     ctx.ellipse(cx, cy, 24, 18, 0, 0, Math.PI * 2);
     ctx.fill();

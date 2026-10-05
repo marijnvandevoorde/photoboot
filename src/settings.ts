@@ -8,32 +8,30 @@
 
 import qrcode from 'qrcode-generator';
 import { deletePhotos, exportZip, photoEvents } from './archive.ts';
-import { DEFAULTS, PAPER_PRESETS, eventKey, getConfig, portableConfig, resetConfig, setConfig } from './config.ts';
-import { LANGUAGES, STRINGS, STRING_KEYS } from './i18n.ts';
+import type { Config, TextTemplateConfig } from './config.ts';
+import { DEFAULTS, eventKey, getConfig, PAPER_PRESETS, portableConfig, resetConfig, setConfig } from './config.ts';
+import { $, errorMessage, option } from './dom.ts';
+import { LANGUAGES, STRING_KEYS, STRINGS } from './i18n.ts';
 import { PHOTO_STYLES, PHOTO_TWISTS } from './photo.ts';
 import { listPrinters } from './printers/index.ts';
+import type { EventSummary, Setup } from './remote.ts';
 import { galleryUrl, getAdminToken, remote, setAdminToken, setupUrl } from './remote.ts';
 import { getPaper, getStats, getStatus, newRoll, paperLeft, resetStats } from './stats.ts';
 import { kv } from './storage.ts';
+import type { Slot } from './templates.ts';
 import {
   BUILT_IN_TEMPLATES,
-  TEXT_DEFAULTS,
-  TEXT_FONTS,
   clearTemplateImage,
   exportTemplateImages,
   hasTemplateImage,
   importTemplateImages,
   saveTemplateImage,
+  TEXT_DEFAULTS,
+  TEXT_FONTS,
   templateImageUrl,
 } from './templates.ts';
-import { $, errorMessage, option } from './dom.ts';
-import type { Config, TextTemplateConfig } from './config.ts';
-import type { EventSummary, Setup } from './remote.ts';
-import type { Slot } from './templates.ts';
-
 
 let config = getConfig();
-
 
 // ---------- auth ----------
 
@@ -109,10 +107,12 @@ function bind(id: string, key: keyof Config, { to = String, from = (v) => v, eve
 }
 const fillers: (() => void)[] = [];
 
-const num = (min: number, max = Infinity) => (v: string) => {
-  const n = Number(v);
-  return Number.isFinite(n) && n >= min && n <= max ? n : undefined;
-};
+const num =
+  (min: number, max = Infinity) =>
+  (v: string) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= min && n <= max ? n : undefined;
+  };
 
 // ---------- tonight: status + counters ----------
 
@@ -129,7 +129,7 @@ function renderStatus() {
     const printer = status.printer
       ? `${status.printer} — ${status.printerConnected ? 'connected' : '<strong class="bad">reconnecting</strong>'}`
       : 'no printer';
-    const camera = status.camera === 'error' ? '<strong class="bad">not working</strong>' : status.camera ?? '—';
+    const camera = status.camera === 'error' ? '<strong class="bad">not working</strong>' : (status.camera ?? '—');
     items.push(`Booth: printer ${printer}; camera ${camera} <span class="muted">(as of ${fmtTime(status.at)})</span>`);
     if (status.lastError) items.push(`Last problem: ${escapeHtml(status.lastError)}`);
   } else {
@@ -143,7 +143,9 @@ function renderStatus() {
     );
   } else {
     const { usedMm, since } = getPaper();
-    items.push(`Paper: ${(usedMm / 1000).toFixed(2)} m used${since ? ` since ${fmtTime(since)}` : ''} (roll not tracked)`);
+    items.push(
+      `Paper: ${(usedMm / 1000).toFixed(2)} m used${since ? ` since ${fmtTime(since)}` : ''} (roll not tracked)`
+    );
   }
   const busiest = Object.entries(stats.byHour).sort((a, b) => b[1] - a[1])[0];
   items.push(
@@ -238,7 +240,10 @@ function download(blob: Blob, filename: string) {
 
 $<HTMLButtonElement>('export-file').addEventListener('click', async () => {
   const setup = await currentSetup();
-  download(new Blob([JSON.stringify(setup, null, 2)], { type: 'application/json' }), `photoboot-${eventKey(config)}.json`);
+  download(
+    new Blob([JSON.stringify(setup, null, 2)], { type: 'application/json' }),
+    `photoboot-${eventKey(config)}.json`
+  );
 });
 $<HTMLButtonElement>('import-file').addEventListener('click', () => $<HTMLInputElement>('import-picker').click());
 $<HTMLInputElement>('import-picker').addEventListener('change', async (e) => {
@@ -264,7 +269,8 @@ const printerItems = [
 $<HTMLSelectElement>('printer-type').replaceChildren(...printerItems.map(({ id, label }) => option(id, label)));
 bind('printer-type', 'printerType');
 const printerHint = () =>
-  ($('printer-hint').textContent = printerItems.find((i) => i.id === $<HTMLSelectElement>('printer-type').value)?.hint ?? '');
+  ($('printer-hint').textContent =
+    printerItems.find((i) => i.id === $<HTMLSelectElement>('printer-type').value)?.hint ?? '');
 $<HTMLSelectElement>('printer-type').addEventListener('change', printerHint);
 fillers.push(printerHint);
 
@@ -326,8 +332,20 @@ const LOOK_SETTINGS: {
   defaultId: string;
   defaultKey: 'defaultStyle' | 'defaultTwist';
 }[] = [
-  { boxId: 'allowed-styles', key: 'allowedStyles', list: PHOTO_STYLES, defaultId: 'default-style', defaultKey: 'defaultStyle' },
-  { boxId: 'allowed-twists', key: 'allowedTwists', list: PHOTO_TWISTS, defaultId: 'default-twist', defaultKey: 'defaultTwist' },
+  {
+    boxId: 'allowed-styles',
+    key: 'allowedStyles',
+    list: PHOTO_STYLES,
+    defaultId: 'default-style',
+    defaultKey: 'defaultStyle',
+  },
+  {
+    boxId: 'allowed-twists',
+    key: 'allowedTwists',
+    list: PHOTO_TWISTS,
+    defaultId: 'default-twist',
+    defaultKey: 'defaultTwist',
+  },
 ];
 
 function renderLooks() {
@@ -361,8 +379,12 @@ function renderLooks() {
   }
 }
 $<HTMLInputElement>('filter-enabled').addEventListener('change', renderLooks);
-$<HTMLSelectElement>('default-style').addEventListener('change', (e) => save({ defaultStyle: (e.target as HTMLInputElement).value }));
-$<HTMLSelectElement>('default-twist').addEventListener('change', (e) => save({ defaultTwist: (e.target as HTMLInputElement).value }));
+$<HTMLSelectElement>('default-style').addEventListener('change', (e) =>
+  save({ defaultStyle: (e.target as HTMLInputElement).value })
+);
+$<HTMLSelectElement>('default-twist').addEventListener('change', (e) =>
+  save({ defaultTwist: (e.target as HTMLInputElement).value })
+);
 fillers.push(renderLooks);
 
 // ---------- template ----------
@@ -382,7 +404,12 @@ function renderTemplateConfig() {
 function renderTextConfig(box: HTMLElement) {
   const current = { ...TEXT_DEFAULTS, ...config.templateConfig?.text };
   const update = (key: keyof TextTemplateConfig, value: string) =>
-    save({ templateConfig: { ...config.templateConfig, text: { ...TEXT_DEFAULTS, ...config.templateConfig?.text, [key]: value } } });
+    save({
+      templateConfig: {
+        ...config.templateConfig,
+        text: { ...TEXT_DEFAULTS, ...config.templateConfig?.text, [key]: value },
+      },
+    });
   const field = (key: keyof TextTemplateConfig, label: string, placeholder: string) => {
     const wrap = document.createElement('label');
     wrap.textContent = label;
@@ -583,7 +610,9 @@ async function refreshEvents() {
         b.addEventListener('click', fn);
         row.append(b);
       };
-      btn('Setup QR', () => showQr(`Scan on a booth device to set it up as “${ev.name}”`, setupUrl(ev.id, ev.setupKey)));
+      btn('Setup QR', () =>
+        showQr(`Scan on a booth device to set it up as “${ev.name}”`, setupUrl(ev.id, ev.setupKey))
+      );
       btn('Gallery', () => showQr(`Gallery for “${ev.name}” — share with the host`, galleryUrl(ev.id, ev.galleryKey)));
       btn('Use here', () => useEvent(ev));
       btn('Overwrite with current setup', async () => {

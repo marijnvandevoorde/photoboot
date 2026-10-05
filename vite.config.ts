@@ -1,5 +1,5 @@
-import { type Plugin, defineConfig } from 'vite';
 import basicSsl from '@vitejs/plugin-basic-ssl';
+import { defineConfig, type Plugin } from 'vite';
 import { shareMiddleware } from './server/share.ts';
 
 // Mount the share routes (/api/share, /share/{uuid}.jpg) on the dev and

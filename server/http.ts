@@ -59,7 +59,9 @@ export function escapeHtml(s: unknown): string {
 export function clientIp(req: Req): string {
   return (
     String(req.headers['cf-connecting-ip'] || '') ||
-    String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() ||
+    String(req.headers['x-forwarded-for'] || '')
+      .split(',')[0]
+      .trim() ||
     req.socket.remoteAddress ||
     'unknown'
   );
@@ -68,7 +70,8 @@ export function clientIp(req: Req): string {
 export function baseUrl(req: Req): string {
   const fixed = (process.env.BASE_URL || '').replace(/\/+$/, '');
   if (fixed) return fixed;
-  const proto = req.headers['x-forwarded-proto'] || ('encrypted' in req.socket && req.socket.encrypted ? 'https' : 'http');
+  const proto =
+    req.headers['x-forwarded-proto'] || ('encrypted' in req.socket && req.socket.encrypted ? 'https' : 'http');
   // HTTP/2 (Vite's HTTPS dev server) sends the host as :authority.
   const host = req.headers['x-forwarded-host'] || req.headers[':authority'] || req.headers.host;
   return `${proto}://${host}`;

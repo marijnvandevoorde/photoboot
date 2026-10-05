@@ -10,10 +10,10 @@
 // Stored as EVENTS_DIR/<id>.json (default: next to SHARE_DIR, in ./events).
 
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { HttpError, type Req, type Res, escapeHtml, page, readJson, sendHtml, sendJson } from './http.ts';
-import { SHARE_DIR, TTL_DAYS, deletePhoto, jpgPath, listPhotos } from './photos.ts';
+import { escapeHtml, HttpError, page, type Req, type Res, readJson, sendHtml, sendJson } from './http.ts';
+import { deletePhoto, jpgPath, listPhotos, SHARE_DIR, TTL_DAYS } from './photos.ts';
 import { crc32 } from './zip.ts';
 
 const EVENTS_DIR = path.resolve(process.env.EVENTS_DIR || path.join(SHARE_DIR, '..', 'events'));
@@ -80,7 +80,16 @@ const STAT_FIELDS = ['sessions', 'prints', 'stickers', 'shares', 'failedPrints',
 type Totals = Record<(typeof STAT_FIELDS)[number], number> & { byHour: Record<string, number>; booths: number };
 
 function sumStats(byDevice: Record<string, DeviceStats> = {}): Totals {
-  const total: Totals = { sessions: 0, prints: 0, stickers: 0, shares: 0, failedPrints: 0, printedMm: 0, byHour: {}, booths: 0 };
+  const total: Totals = {
+    sessions: 0,
+    prints: 0,
+    stickers: 0,
+    shares: 0,
+    failedPrints: 0,
+    printedMm: 0,
+    byHour: {},
+    booths: 0,
+  };
   for (const s of Object.values(byDevice)) {
     for (const f of STAT_FIELDS) total[f] += Number(s?.[f]) || 0;
     for (const [h, n] of Object.entries(s?.byHour ?? {})) total.byHour[h] = (total.byHour[h] ?? 0) + (Number(n) || 0);
@@ -122,7 +131,14 @@ export async function eventRoutes(req: Req, res: Res, url: URL): Promise<boolean
   if (gallery) {
     const ev = await readEvent(gallery[1]);
     if (!ev || !safeEqual(gallery[2], ev.galleryKey)) {
-      sendHtml(res, 404, page('Not found', '<h1>Gallery not found</h1><p class="muted">The link may be wrong or the event was deleted.</p>'));
+      sendHtml(
+        res,
+        404,
+        page(
+          'Not found',
+          '<h1>Gallery not found</h1><p class="muted">The link may be wrong or the event was deleted.</p>'
+        )
+      );
     } else if (gallery[3]) {
       await sendZip(res, ev);
     } else {
@@ -143,7 +159,15 @@ async function apiRoute(req: Req, res: Res, id: string | undefined, isStats: boo
     if (method === 'POST') {
       const setup = setupOf(await readJson<SetupBody>(req, MAX_EVENT_BYTES));
       const now = new Date().toISOString();
-      const ev = { id: newKey(9), ...setup, created: now, updated: now, setupKey: newKey(16), galleryKey: newKey(16), stats: {} };
+      const ev = {
+        id: newKey(9),
+        ...setup,
+        created: now,
+        updated: now,
+        setupKey: newKey(16),
+        galleryKey: newKey(16),
+        stats: {},
+      };
       await writeEvent(ev);
       return sendJson(res, 201, { id: ev.id, name: ev.name, setupKey: ev.setupKey, galleryKey: ev.galleryKey });
     }
@@ -158,7 +182,8 @@ async function apiRoute(req: Req, res: Res, id: string | undefined, isStats: boo
     if (method !== 'POST') return sendJson(res, 405, { error: 'Method not allowed.' });
     if (!booth) return sendJson(res, 401, { error: 'Wrong event key.' });
     const { device, stats } = await readJson<{ device?: unknown; stats?: DeviceStats }>(req, 64 * 1024);
-    if (typeof device !== 'string' || !/^[\w-]{1,64}$/.test(device)) return sendJson(res, 400, { error: 'Bad device id.' });
+    if (typeof device !== 'string' || !/^[\w-]{1,64}$/.test(device))
+      return sendJson(res, 400, { error: 'Bad device id.' });
     ev.stats = { ...ev.stats, [device]: stats ?? {} };
     await writeEvent(ev);
     return sendJson(res, 200, { ok: true });
@@ -219,7 +244,10 @@ async function sendGallery(res: Res, ev: StoredEvent, base: string): Promise<voi
     .join(' · ');
   const expiry = TTL_DAYS > 0 ? `Photos are deleted automatically ${TTL_DAYS} days after they were taken.` : '';
   const grid = photos
-    .map((p) => `<a href="/s/${p.id}"><img src="/share/${p.id}.jpg" loading="lazy" alt="Photo from ${escapeHtml(p.created)}"></a>`)
+    .map(
+      (p) =>
+        `<a href="/s/${p.id}"><img src="/share/${p.id}.jpg" loading="lazy" alt="Photo from ${escapeHtml(p.created)}"></a>`
+    )
     .join('');
   sendHtml(
     res,
@@ -238,7 +266,11 @@ ${photos.length ? `<div class="actions"><a class="btn" href="${escapeHtml(base)}
 // Streams a stored (uncompressed) ZIP, one photo in memory at a time.
 async function sendZip(res: Res, ev: StoredEvent): Promise<void> {
   const photos = await listPhotos({ event: ev.id });
-  const slug = ev.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || ev.id;
+  const slug =
+    ev.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || ev.id;
   res.writeHead(200, {
     'Content-Type': 'application/zip',
     'Content-Disposition': `attachment; filename="${slug}.zip"`,

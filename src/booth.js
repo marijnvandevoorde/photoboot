@@ -166,15 +166,24 @@ if (!navigator.bluetooth) {
 async function startCamera() {
   stream?.getTracks().forEach((t) => t.stop());
   const deviceId = cameras[cameraIndex]?.deviceId;
-  const constraints = {
-    audio: false,
-    video: {
-      ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'user' }),
-      width: { ideal: 1920 },
-      height: { ideal: 1440 },
-    },
+  // 1280×960 is plenty for a 552-dot sticker. Without a frame rate the
+  // browser only matches the size and can pick a slow mode (a Logitech
+  // webcam gave 1920×1440 cropped from a 2 fps mode), so ask for 30 and
+  // insist on at least 15, falling back if the camera can't do that.
+  const camera = {
+    ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'user' }),
+    width: { ideal: 1280 },
+    height: { ideal: 960 },
   };
-  stream = await navigator.mediaDevices.getUserMedia(constraints);
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { ...camera, frameRate: { ideal: 30, min: 15 } },
+    });
+  } catch (err) {
+    if (err.name !== 'OverconstrainedError') throw err;
+    stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { ...camera, frameRate: { ideal: 30 } } });
+  }
   video.srcObject = stream;
   await video.play().catch(() => {});
 

@@ -78,38 +78,90 @@ fall back to `writeValueWithoutResponse`.
 - `index.html` + `src/booth.js` + `src/booth.css` — the booth app (kiosk):
   1. Setup screen: connect the printer once (or "Start without printer").
      After that there is no UI to change printers; on a dropout it keeps
-     reconnecting to the same device.
+     reconnecting to the same device. **Long-press the "Photoboot" title
+     for ~1 s** (or visit `/?admin=1`) to open the settings page.
   2. Live camera (selfie cam by default, switch button if >1 camera),
-     timer 3 / 5 / 10 s (remembered), countdown + flash.
-  3. Review: large sticker preview only (scaled in whole/half device-pixel
-     steps per dot to avoid moire), a row of filters (Classic, Light, Stencil,
-     Lines, Halftone, Comic, Sketch — resets to Classic per photo), and
-     **Retry / Print / Share**. Print uses the selected filter. Share uploads
-     the original colour JPEG and shows a QR to `/share/{uuid}.jpg`.
-     Review returns to the camera after 90 s idle. Portrait: preview on top,
-     controls below; landscape: side panel. Checked from 360 px phones to
-     12.9" iPads, both orientations.
+     timer 3 / 5 / 10 s (remembered), countdown + flash. If settings has
+     `shotCount > 1`, the shutter captures that many frames in a row,
+     each with its own countdown, and shows a `n / N` counter at the top.
+  3. Review: large sticker preview (scaled in whole/half device-pixel
+     steps per dot to avoid moire). **Style** row (Classic / Pop art /
+     Woodcut / Stipple) and **Twist** row (Normal / Mirror / Big head) if
+     the admin enabled filters — otherwise hidden. **Retry / Print /
+     Share**. The sticker is composed from the active template:
+       - `plain`:   no decoration, just stacked shots.
+       - `custom`:  admin-uploaded header + footer PNGs.
+     Prints end with a 72-dot (~6 mm) blank tear margin plus the feed.
+     Share uploads a composite JPEG (strip mode: shots stacked vertically)
+     and shows a QR to `/share/{uuid}.jpg`. Review auto-returns to the
+     camera after 90 s idle.
      Dev: `/?demo=/share/<uuid>.jpg` opens the review with that image.
   - Photos are saved as the preview showed them (mirrored for the front cam).
   - Keeps the screen awake (Wake Lock), fullscreen on first tap, PWA manifest.
+- `settings.html` + `src/settings.js` + `src/settings.css` — admin page.
+  Picks the printer type (auto / phomemo / …), paper width, print density,
+  shot count, default countdown, filter on/off, active template, template
+  config (custom header/footer uploads), optional admin password.
+  Writes to `localStorage['photoboot:config']` via
+  `src/config.js`; template images live in IndexedDB (`src/storage.js`).
+- `preview.html` + `src/preview.js` — renders a sticker through the current
+  config/template using a synthetic sample or an uploaded photo, 1 printer
+  dot per device pixel. Optional filter × twist grid for A/B'ing looks on
+  screen before burning paper.
 - `test.html` + `src/test.js` + `src/style.css` — printer test / calibration page.
 - `print.html` + `src/print.js` — print one chosen photo (full 576 or 552
   centred). `./print.sh` opens it on this Mac via http://localhost.
-- `src/photo.js` — shared photo print looks (`PHOTO_FILTERS`,
-  `PHOTO_DENSITY`), used by booth and print page.
-- `src/printer.js` — `PhomemoPrinter`: `connect`, `reconnect`, `init`,
-  `printRaster`, `feed`, `disconnect`. Width constants live here.
+- `src/config.js` — single config source of truth. Keys: `printerType`,
+  `paperWidthDots`, `printDensity`, `filterEnabled`, `shotCount`,
+  `defaultDelay`, `templateId`, `templateConfig`, `adminPassword`.
+  localStorage-backed. `PAPER_PRESETS` lives here.
+- `src/photo.js` — print looks (`PHOTO_STYLES`, `PHOTO_TWISTS`),
+  `photoToRaster` (fit + twist + style → raster), `renderSticker`
+  (one or more shots + template → final sticker), `printPhoto` (adds the
+  tear margin).
+- `src/strip.js` — `composeStrip(shotRasters, template, stickerWidth)`
+  stacks header + shots + footer at the full sticker width and threshold-
+  dithers the whole thing back to 1-bit.
+- `src/templates.js` — registry of built-in templates (`plain`, `custom`)
+  + helpers to save/load custom header/footer images in IDB.
+- `src/effects.js` — custom styles (woodcut, stipple) and twists (mirror,
+  big head). 16 more effects were tried in a "filter lab" gallery and
+  dropped; they're in commit 8b32a21 if one is wanted back.
+- `src/printers/` — printer abstraction.
+    - `base.js`: `PrinterBase` interface (connect/reconnect/init/
+      printRaster/feed/disconnect).
+    - `phomemo.js`: `PhomemoPrinter` for the P2 / M02 / M03 / M04 / T02
+      family (ESC/POS over BLE, three service UUID candidates probed).
+    - `index.js`: `PRINTERS` registry + `connectPrinter(type, opts)`
+      factory. `type: 'auto'` opens a filter-wide BLE picker and routes
+      to the matching backend by name prefix. Settings exposes a dropdown
+      of registered types.
+- `src/printer.js` — compat shim: re-exports `PhomemoPrinter` and the width
+  constants for the test / print pages.
 - `src/raster.js` — canvas → packed-bit bitmap (error diffusion:
-  Floyd–Steinberg / Atkinson / Stucki; screens: halftone, lines, stencil
-  (adaptive threshold), comic; optional photo contrast stretch + gamma +
-  sharpen, sketch edges, ink outlines), `rasterToCanvas`
+  Floyd–Steinberg / Atkinson / Stucki; screens: halftone, threshold;
+  optional photo contrast stretch + gamma + sharpen + ink outlines),
+  `toGray` / `inkToRaster` building blocks, `rasterToCanvas`
   preview, calibration generators.
+- `src/storage.js` — tiny async key/value store on IndexedDB, used for the
+  custom template's header/footer image blobs.
 - `server/share.js` — `POST /api/share` (JPEG body → `{id, url}`) and
   `GET /share/{uuid}.jpg`. Mounted in the Vite dev/preview server and the
   production server.
 - `server/index.js` — production server (node builtins only): `dist/` + share.
 - `Dockerfile` — build + slim runtime; photos in volume `/data/shares`.
 - `run.sh` — self-contained local launcher (portable Node in `.node/`).
+
+## Adding a new printer type
+
+1. Subclass `PrinterBase` in `src/printers/<brand>.js`. Implement `connect`,
+   `attach`, `init`, `printRaster`, `feed` for that brand's BLE/USB
+   protocol. Keep width constants as class fields.
+2. Register it in `src/printers/index.js` under `PRINTERS`: label, hint,
+   `defaultWidthDots`, `headWidthDots`, `namePrefixes`, `uuids`, `create`.
+3. That's it — the settings dropdown picks it up, auto-detect routes to it
+   by name prefix, and the booth / preview / print pages see the same
+   `PrinterBase` interface.
 
 ## Config (env)
 
@@ -123,19 +175,21 @@ fall back to `writeValueWithoutResponse`.
 1. **iPad:** Bluefy is needed for Web Bluetooth — verify that camera
    (`getUserMedia`) works inside Bluefy.
 2. **Shares never expire** — add cleanup (cron/`find -mtime`) if needed.
-3. **Photo look** — default filter "Classic" is Atkinson + threshold noise
+3. **Photo look** — default style "Classic" is Atkinson + threshold noise
    16, gamma 0.6, density 3. Plain Atkinson gave regular hatching on flat
-   walls and crushed backlit faces. The other filters were tuned on screen
-   only — pending: real prints of each, especially Halftone and Comic
-   (dot gain).
-4. Photo layouts (2×2 / strip) — not started.
+   walls and crushed backlit faces. Pop art / Woodcut / Stipple and the
+   frame were tuned on screen only — pending: real test prints (dot gain,
+   thin strokes, tear margin length).
 
 ## Decisions / conventions
 
-- Print width 552, left-aligned at col 0 → equal ~24-dot margins.
+- Default print width 552, left-aligned at col 0 → equal ~24-dot margins
+  on the user's 53/50 mm sticker roll. Overridable in settings.
 - Width must be a multiple of 8 (byte alignment).
 - Deps: Vite + basic-ssl (dev), `qrcode-generator` (client). Server uses
   node builtins only.
+- Config lives in localStorage (`photoboot:config`); binary template assets
+  in IndexedDB (`photoboot` DB, `blobs` store). Reset both from Settings.
 
 ## How to run
 

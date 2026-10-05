@@ -5,3 +5,5 @@ dist
 .node
 shares
 .env
+# One-off generated template assets (upload via settings → Custom template).
+template-assets

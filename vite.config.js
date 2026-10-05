@@ -31,6 +31,8 @@ export default defineConfig({
         booth: 'index.html',
         test: 'test.html',
         print: 'print.html',
+        settings: 'settings.html',
+        preview: 'preview.html',
       },
     },
   },

@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#111" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>Photoboot — Settings</title>
+    <link rel="stylesheet" href="/src/settings.css" />
+  </head>
+  <body>
+    <main>
+      <header class="topbar">
+        <h1>Photoboot settings</h1>
+        <nav>
+          <a href="/">Back to booth</a>
+          <a href="/preview.html">Print preview</a>
+          <a href="/test.html">Printer calibration</a>
+        </nav>
+      </header>
+
+      <section id="auth" class="card" hidden>
+        <h2>Admin access</h2>
+        <p class="muted">An admin password has been set for this booth.</p>
+        <label>Password <input id="auth-password" type="password" autocomplete="current-password" /></label>
+        <button id="auth-submit" class="primary">Unlock</button>
+        <p id="auth-error" class="warn" hidden>Wrong password.</p>
+      </section>
+
+      <div id="panels" hidden>
+        <section class="card">
+          <h2>Printer</h2>
+          <label>
+            Type
+            <select id="printer-type"></select>
+          </label>
+          <p id="printer-hint" class="muted small"></p>
+          <p class="muted small">
+            Auto tries to recognise the printer by its Bluetooth name when you tap <em>Connect</em>.
+            Pick an explicit type here if auto-detect doesn't find your printer.
+          </p>
+        </section>
+
+        <section class="card">
+          <h2>Paper</h2>
+          <label>
+            Preset
+            <select id="paper-preset"></select>
+          </label>
+          <label>
+            Width (dots, multiple of 8)
+            <input id="paper-width" type="number" min="8" step="8" />
+          </label>
+          <p class="muted small">
+            Phomemo-class printers run at ~11.8 dots/mm. 552 dots = classic 53/50 mm sticker roll.
+            Narrower rolls: 384 dots (32 mm), 288 dots (25 mm). Confirm the real width with
+            <a href="/test.html">calibration</a> before you commit.
+          </p>
+          <label>
+            Print density
+            <select id="density">
+              <option value="1">1 — thin</option>
+              <option value="3">3 — normal</option>
+              <option value="4">4 — thick</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="card">
+          <h2>Capture</h2>
+          <label>
+            Shots per session
+            <select id="shot-count">
+              <option value="1">1 — single sticker</option>
+              <option value="2">2 — pair</option>
+              <option value="3">3 — classic strip</option>
+              <option value="4">4 — tall strip</option>
+            </select>
+          </label>
+          <label>
+            Default countdown
+            <select id="default-delay">
+              <option value="3">3 s</option>
+              <option value="5">5 s</option>
+              <option value="10">10 s</option>
+            </select>
+          </label>
+          <label class="checkbox">
+            <input id="filter-enabled" type="checkbox" />
+            Let guests pick a filter (Classic / Pop art / Woodcut / Stipple)
+          </label>
+          <p class="muted small">
+            Filter off = a plain Atkinson-dithered print, no style row in the review.
+          </p>
+        </section>
+
+        <section class="card">
+          <h2>Template</h2>
+          <label>
+            Active template
+            <select id="template-id"></select>
+          </label>
+          <div id="template-config"></div>
+        </section>
+
+        <section class="card">
+          <h2>Admin password</h2>
+          <label>
+            Password (empty = no gate)
+            <input id="admin-password" type="text" autocomplete="new-password" />
+          </label>
+          <p class="muted small">Guards /settings only. Not a security feature — stops curious guests.</p>
+        </section>
+
+        <section class="card danger">
+          <h2>Reset</h2>
+          <button id="reset" class="danger">Reset to defaults</button>
+          <p class="muted small">Wipes config and uploaded template images.</p>
+        </section>
+
+        <p id="save-status" class="muted small" role="status"></p>
+      </div>
+    </main>
+    <script type="module" src="/src/settings.js"></script>
+  </body>
+</html>

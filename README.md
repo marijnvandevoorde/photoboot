@@ -5,9 +5,10 @@ that prints black-and-white stickers on a cheap Bluetooth thermal printer.**
 Open-source, runs in the browser (PWA), self-hosted, no app to install.
 
 [![Live demo](https://img.shields.io/badge/live%20demo-boot.small--victories.co-1f9e6e)](https://boot.small-victories.co)
+[![CI](https://github.com/marijnvandevoorde/photoboot/actions/workflows/ci.yml/badge.svg)](https://github.com/marijnvandevoorde/photoboot/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 ![Web Bluetooth](https://img.shields.io/badge/Web%20Bluetooth-Phomemo%20P2%20%2F%20M02-555)
-![No framework](https://img.shields.io/badge/vanilla%20JS-no%20framework-555)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6)
 
 ![The four print styles — Classic, Pop art, Woodcut and Stipple — on a sticker with a typed title, names and date](docs/styles.png)
 
@@ -93,6 +94,24 @@ HTTPS or `localhost`. Shared photos land in `./shares`.
 Other scripts: `./run.sh build` builds into `dist/`; `./print.sh` opens a page
 to print a single photo from this computer.
 
+## Develop
+
+TypeScript (strict) with no framework, built by Vite, linted and formatted
+by Biome, tested with Vitest. The server runs its `.ts` files directly on
+Node 24 — no build step.
+
+```sh
+npm ci
+npm run dev        # Vite dev server with HTTPS + the share/event API
+npm run check      # typecheck + lint + unit/server tests
+npm run test:e2e   # builds, then drives headless Chrome with a fake camera
+                   # and a fake Bluetooth printer (needs Google Chrome)
+npm run format     # Biome: format + safe fixes
+```
+
+Tests need Node 22+. Running the booth itself only needs Node 20.19+
+(`./run.sh` picks the right Node for older Macs).
+
 ## Host it
 
 The production server is plain Node (no dependencies) serving `dist/` plus
@@ -139,7 +158,7 @@ settings and in auto-detect. The Phomemo protocol notes are in
 
 ## How it's built
 
-Vanilla JavaScript and Vite, no framework. Photos are dithered to 1-bit in
+TypeScript and Vite, no framework. Photos are dithered to 1-bit in
 the browser (`src/raster.js`, `src/effects.js`), composed with the template
 (`src/strip.js`) and sent to the printer as ESC/POS raster commands over
 Web Bluetooth. [CONTEXT.md](CONTEXT.md) has the full map of the code, the

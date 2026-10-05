@@ -29,7 +29,7 @@ printer from the browser.
   be printed. The head's right end (col 575) lands right on the sticker's
   right edge.
 - **Chosen print width: 552 dots**, left-aligned at col 0, giving ~24 dots
-  of margin each side (`DEFAULT_PRINT_WIDTH_DOTS` in `src/printer.js`).
+  of margin each side (`DEFAULT_PRINT_WIDTH_DOTS` in `src/printer.ts`).
   Phomemo's own app leaves an even bigger margin, so this is final.
 
 ## Browser support
@@ -46,7 +46,7 @@ printer from the browser.
 The printer presents a BLE GATT service with one write characteristic that
 accepts a stream of ESC/POS-flavoured bytes.
 
-**UUID candidates tried in order** (`src/printer.js`):
+**UUID candidates tried in order** (`src/printer.ts`):
 
 1. service `0000ff00-…`, write `0000ff02-…` ← most common
 2. service `0000ae30-…`, write `0000ae01-…` ← newer M02S variant
@@ -77,7 +77,14 @@ fall back to `writeValueWithoutResponse`.
 
 README.md has the user-facing feature list; this is the code map.
 
-- `index.html` + `src/booth.js` + `src/booth.css` — the booth app (kiosk):
+Tooling: TypeScript strict (`tsc` = typecheck only, `erasableSyntaxOnly`
+so Node 24 runs `server/*.ts` directly), Biome (lint + format, see
+biome.json), Vitest (`test/*.test.ts`; happy-dom where localStorage is
+needed — no canvas there, so pixels are covered by `test/e2e`). CI in
+.github/workflows/ci.yml. Shared types: src/types.ts; DOM helpers
+(`$`, `ctx2d`, `errorMessage`): src/dom.ts.
+
+- `index.html` + `src/booth.ts` + `src/booth.css` — the booth app (kiosk):
   1. Setup screen: connect the printer once (or "Start without printer").
      After that it keeps reconnecting to the same device on a dropout.
      Settings: long-press the "Photoboot" title (~1 s), long-press the
@@ -97,48 +104,51 @@ README.md has the user-facing feature list; this is the code map.
      the colour keepsake locally.
   - Shared/archived photo = `renderColour`: the sticker layout in colour
     (header, shots, gaps, footer, 24-dot side margins), with the twist.
-  - Writes a health heartbeat (`photoboot:status`) and counters (stats.js).
-- `settings.html` + `src/settings.js` — admin page: tonight (health, paper,
+  - Writes a health heartbeat (`photoboot:status`) and counters (stats.ts).
+- `settings.html` + `src/settings.ts` — admin page: tonight (health, paper,
   counters), event name + language, saved setups / export / import,
   printer, paper (+ roll meter), printing, capture, looks, template,
   guest screens + wording, local photos (ZIP), server events, PIN, reset.
   Inputs use a small `bind()` helper; listeners are bound once.
-- `preview.html` + `src/preview.js` — renders a sticker through the current
+- `preview.html` + `src/preview.ts` — renders a sticker through the current
   config/template from a synthetic sample or an uploaded photo; reloads when
   settings change in another tab.
-- `test.html` + `src/test.js` + `src/style.css` — printer test / calibration page.
-- `print.html` + `src/print.js` — print one chosen photo.
-- `src/config.js` — config source of truth (localStorage
+- `test.html` + `src/test.ts` + `src/style.css` — printer test / calibration page.
+- `print.html` + `src/print.ts` — print one chosen photo.
+- `src/config.ts` — config source of truth (localStorage
   `photoboot:config`); see DEFAULTS for every key. `portableConfig` drops
   device keys for exports; `eventKey` groups stats/photos per event.
-- `src/i18n.js` — guest wording en/nl/fr + per-key overrides (`texts`).
-- `src/stats.js` — per-event counters, paper meter, booth heartbeat.
-- `src/archive.js` — local colour copies in IndexedDB (`photo:<event>:<iso>`)
-  and ZIP export (uses `server/zip.js`).
-- `src/remote.js` — client for the server event API.
-- `src/photo.js` — looks (`PHOTO_STYLES`, `PHOTO_TWISTS`), `photoToRaster`,
+- `src/i18n.ts` — guest wording en/nl/fr + per-key overrides (`texts`).
+- `src/stats.ts` — per-event counters, paper meter, booth heartbeat.
+- `src/archive.ts` — local colour copies in IndexedDB (`photo:<event>:<iso>`)
+  and ZIP export (uses `server/zip.ts`).
+- `src/remote.ts` — client for the server event API.
+- `src/photo.ts` — looks (`PHOTO_STYLES`, `PHOTO_TWISTS`), `photoToRaster`,
   `renderSticker`, `renderColour`, `printPhoto` (copies + tear margin).
-- `src/strip.js` — `composeStrip` (1-bit sticker) and `composeColour`.
-- `src/templates.js` — `plain`, `text` (title / two lines / system font),
+- `src/strip.ts` — `composeStrip` (1-bit sticker) and `composeColour`.
+- `src/templates.ts` — `plain`, `text` (title / two lines / system font),
   `custom` (header/footer images in IndexedDB); image export/import helpers.
-- `src/effects.js` — woodcut, stipple, mirror, big head. 16 more effects
+- `src/effects.ts` — woodcut, stipple, mirror, big head. 16 more effects
   were tried in a "filter lab" and dropped; they're in commit 8b32a21.
-- `src/printers/` — printer abstraction (`base.js`, `phomemo.js`, registry
-  + auto-detect in `index.js`). `src/printer.js` is a compat shim.
-- `src/raster.js` — canvas → packed-bit bitmap (error diffusion, screens,
+- `src/printers/` — printer abstraction: `transport.ts` (BleTransport —
+  Web Bluetooth today, a native plugin in the app), `base.ts`,
+  `phomemo.ts`, registry + auto-detect in `index.ts`. `src/printer.ts` is a
+  compat shim.
+- `src/raster.ts` — canvas → packed-bit bitmap (error diffusion, screens,
   tone options), `rasterToCanvas`, calibration generators.
-- `src/storage.js` — tiny IndexedDB key/value store (template images,
+- `src/storage.ts` — tiny IndexedDB key/value store (template images,
   saved setups, local photos). Closes on `pagehide`.
-- `server/share.js` — the one middleware (Vite dev + prod): `POST
+- `server/share.ts` — the one middleware (Vite dev + prod): `POST
   /api/share`, `/s/{uuid}` share page (save / delete), `/share/{uuid}.jpg`,
   `DELETE /api/share/{uuid}`, rate limit, then event routes.
-- `server/photos.js` — photo files + `{id}.json` sidecars (event, created),
+- `server/photos.ts` — photo files + `{id}.json` sidecars (event, created),
   expiry cleanup (hourly), disk quota.
-- `server/events.js` — events: admin CRUD (`ADMIN_TOKEN`), setup load and
+- `server/events.ts` — events: admin CRUD (`ADMIN_TOKEN`), setup load and
   stats push (setup key), gallery `/g/{id}/{galleryKey}` + streamed ZIP.
-- `server/http.js` — helpers + the HTML shell of the public pages.
-- `server/zip.js` — stored-ZIP writer + CRC32, shared with the browser.
-- `server/index.js` — production server (node builtins only): `dist/` + routes.
+- `server/http.ts` — helpers + the HTML shell of the public pages.
+- `server/zip.ts` — stored-ZIP writer + CRC32, shared with the browser.
+- `server/index.ts` — production server (node builtins only): `dist/` +
+  routes; `createApp()` is what the tests start.
 - `Dockerfile` / `docker-compose.yml` — volumes `/data/shares`, `/data/events`.
 - `run.sh` — self-contained local launcher (portable Node in `.node/`).
 - `deploy.sh` — tar over SSH + `docker compose up -d --build`; keeps the
@@ -146,10 +156,12 @@ README.md has the user-facing feature list; this is the code map.
 
 ## Adding a new printer type
 
-1. Subclass `PrinterBase` in `src/printers/<brand>.js`. Implement `connect`,
-   `attach`, `init`, `printRaster`, `feed` for that brand's BLE/USB
-   protocol. Keep width constants as class fields.
-2. Register it in `src/printers/index.js` under `PRINTERS`: label, hint,
+1. Subclass `PrinterBase` in `src/printers/<brand>.ts`. Implement `connect`
+   (picker via `this.ble.requestDevice`), `attach`, `init`, `printRaster`,
+   `feed` for that brand's protocol, writing bytes through `this.ble` (the
+   BleTransport) — never navigator.bluetooth directly, so the app works too.
+   Add a fake-transport test like test/phomemo.test.ts.
+2. Register it in `src/printers/index.ts` under `PRINTERS`: label, hint,
    `defaultWidthDots`, `headWidthDots`, `namePrefixes`, `uuids`, `create`.
 3. That's it — the settings dropdown picks it up, auto-detect routes to it
    by name prefix, and the booth / preview / print pages see the same

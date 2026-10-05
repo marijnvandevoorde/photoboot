@@ -6,7 +6,7 @@
 
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
-import { createServer } from 'node:http';
+import { createServer, type Server } from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Req, Res } from './http.ts';
@@ -54,13 +54,20 @@ async function serveStatic(req: Req, res: Res): Promise<void> {
   }
 }
 
-createServer((req, res) =>
-  shareMiddleware(req, res, () => {
-    serveStatic(req, res).catch((err: unknown) => {
-      console.error(err);
-      if (!res.headersSent) res.writeHead(500).end();
-    });
-  })
-).listen(PORT, () => {
-  console.log(`photoboot listening on :${PORT}`);
-});
+// The whole app as a Node HTTP server (not listening yet), for tests too.
+export function createApp(): Server {
+  return createServer((req, res) =>
+    shareMiddleware(req, res, () => {
+      serveStatic(req, res).catch((err: unknown) => {
+        console.error(err);
+        if (!res.headersSent) res.writeHead(500).end();
+      });
+    })
+  );
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  createApp().listen(PORT, () => {
+    console.log(`photoboot listening on :${PORT}`);
+  });
+}

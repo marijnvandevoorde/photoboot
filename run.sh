@@ -5,7 +5,9 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-NODE_LINE="latest-v24.x"
+# v20 is the newest Node LTS that still ships macOS 10.15 (Catalina) binaries.
+# Bump this once every machine running the booth is on macOS 11+.
+NODE_LINE="latest-v20.x"
 ROOT="$PWD/.node"
 export npm_config_cache="$ROOT/npm-cache"
 export npm_config_update_notifier=false

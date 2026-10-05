@@ -5,14 +5,16 @@
 // More looks (8-bit, ASCII, spiral, glitch, Warhol, …) were tried in the
 // filter lab and dropped; see git history (8b32a21) if you want one back.
 
-import { boxBlur, inkToRaster, sobel, toGray } from './raster.js';
+import { boxBlur, inkToRaster, sobel, toGray } from './raster.ts';
+import { ctx2d } from './dom.ts';
+import type { Raster } from './types.ts';
 
 const TONE = { photo: true, gamma: 0.6, clip: 0.02, sharpen: 0.8 };
 
-const frac = (v) => v - Math.floor(v);
+const frac = (v: number) => v - Math.floor(v);
 
 // Small seeded PRNG (mulberry32): the same photo renders the same twice.
-function seededRandom(seed) {
+function seededRandom(seed: number) {
   let s = seed | 0;
   return () => {
     s = (s + 0x6d2b79f5) | 0;
@@ -22,11 +24,11 @@ function seededRandom(seed) {
   };
 }
 
-export function whiteCanvas(width, height) {
+export function whiteCanvas(width: number, height: number): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
-  const ctx = canvas.getContext('2d');
+  const ctx = ctx2d(canvas);
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, width, height);
   ctx.fillStyle = '#000';
@@ -38,7 +40,7 @@ export function whiteCanvas(width, height) {
 
 // Solid shadows, bold outlines and carved diagonal strokes that bend with
 // the tone, like a linocut.
-export function woodcut(canvas) {
+export function woodcut(canvas: HTMLCanvasElement): Raster {
   const { width, height } = canvas;
   const gray = boxBlur(toGray(canvas, { ...TONE, gamma: 0.5, clip: 0.03, sharpen: 0.6 }), width, height);
   const edges = sobel(gray, width, height);
@@ -60,7 +62,7 @@ export function woodcut(canvas) {
 
 // Pointillism: error-diffuse a 3-dot grid (keeps features), then stamp a
 // slightly jittered round dot wherever it inks (looks hand-placed).
-export function stipple(canvas) {
+export function stipple(canvas: HTMLCanvasElement): Raster {
   const { width, height } = canvas;
   const gray = toGray(canvas, { ...TONE, gamma: 0.42, clip: 0.03, sharpen: 1.4, outline: 1 });
   const rand = seededRandom(1);
@@ -99,10 +101,10 @@ export function stipple(canvas) {
 // ---------- twists ----------
 
 // Left half + its mirror image: a perfectly symmetrical face.
-export function mirror(canvas) {
+export function mirror(canvas: HTMLCanvasElement): HTMLCanvasElement {
   const { width, height } = canvas;
   const out = whiteCanvas(width, height);
-  const ctx = out.getContext('2d');
+  const ctx = ctx2d(out);
   const half = width / 2;
   ctx.drawImage(canvas, 0, 0, half, height, 0, 0, half, height);
   ctx.translate(width, 0);
@@ -112,11 +114,11 @@ export function mirror(canvas) {
 }
 
 // Fisheye bulge around the upper centre, where faces usually are.
-export function bigHead(canvas) {
+export function bigHead(canvas: HTMLCanvasElement): HTMLCanvasElement {
   const { width, height } = canvas;
-  const src = canvas.getContext('2d').getImageData(0, 0, width, height);
+  const src = ctx2d(canvas).getImageData(0, 0, width, height);
   const out = whiteCanvas(width, height);
-  const ctx = out.getContext('2d');
+  const ctx = ctx2d(out);
   const dst = ctx.getImageData(0, 0, width, height);
   const cx = width / 2;
   const cy = height * 0.42;
@@ -135,7 +137,7 @@ export function bigHead(canvas) {
       const fy = sy - y0;
       const p = (y * width + x) * 4;
       for (let c = 0; c < 3; c++) {
-        const at = (xx, yy) => src.data[(yy * width + xx) * 4 + c];
+        const at = (xx: number, yy: number) => src.data[(yy * width + xx) * 4 + c];
         dst.data[p + c] =
           at(x0, y0) * (1 - fx) * (1 - fy) + at(x0 + 1, y0) * fx * (1 - fy) + at(x0, y0 + 1) * (1 - fx) * fy + at(x0 + 1, y0 + 1) * fx * fy;
       }

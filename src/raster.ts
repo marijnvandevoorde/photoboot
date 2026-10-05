@@ -1,13 +1,14 @@
 // Convert canvases / images into packed-bit monochrome rasters for the printer.
 
-import { DEFAULT_PRINT_WIDTH_DOTS } from './printer.js';
+import { DEFAULT_PRINT_WIDTH_DOTS } from './printer.ts';
+import { ctx2d } from './dom.ts';
+import type { ImageSource, Raster, RasterOptions, ToneOptions } from './types.ts';
 
 // Fit a source image onto a canvas of exactly `targetWidth` dots wide,
 // preserving aspect ratio. White background.
-export function fitToPrintWidth(source, targetWidth = DEFAULT_PRINT_WIDTH_DOTS) {
+export function fitToPrintWidth(source: ImageSource, targetWidth = DEFAULT_PRINT_WIDTH_DOTS): HTMLCanvasElement {
   if (targetWidth % 8 !== 0) throw new Error('targetWidth must be a multiple of 8.');
-  const sw = source.width || source.videoWidth || source.naturalWidth;
-  const sh = source.height || source.videoHeight || source.naturalHeight;
+  const { width: sw, height: sh } = sourceSize(source);
   if (!sw || !sh) throw new Error('Source has no dimensions.');
 
   const scale = targetWidth / sw;
@@ -17,7 +18,7 @@ export function fitToPrintWidth(source, targetWidth = DEFAULT_PRINT_WIDTH_DOTS) 
   const canvas = document.createElement('canvas');
   canvas.width = dw;
   canvas.height = dh;
-  const ctx = canvas.getContext('2d');
+  const ctx = ctx2d(canvas);
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, dw, dh);
   ctx.imageSmoothingQuality = 'high'; // default 'low' aliases on big downscales
@@ -25,10 +26,21 @@ export function fitToPrintWidth(source, targetWidth = DEFAULT_PRINT_WIDTH_DOTS) 
   return canvas;
 }
 
+export function sourceSize(source: ImageSource): { width: number; height: number } {
+  if (source instanceof HTMLVideoElement) return { width: source.videoWidth, height: source.videoHeight };
+  if (source instanceof HTMLImageElement) return { width: source.naturalWidth, height: source.naturalHeight };
+  return { width: source.width, height: source.height };
+}
+
 // Error-diffusion kernels: [dx, dy, weight]. Atkinson only diffuses 6/8 of
 // the error, which gives cleaner highlights/shadows and less midtone grain —
 // usually nicer on thermal paper. Floyd–Steinberg keeps more tonal detail.
-const DITHER_KERNELS = {
+interface Kernel {
+  div: number;
+  taps: [number, number, number][];
+}
+
+const DITHER_KERNELS: Record<string, Kernel> = {
   floyd: { div: 16, taps: [[1, 0, 7], [-1, 1, 3], [0, 1, 5], [1, 1, 1]] },
   atkinson: { div: 8, taps: [[1, 0, 1], [2, 0, 1], [-1, 1, 1], [0, 1, 1], [1, 1, 1], [0, 2, 1]] },
   stucki: {
@@ -57,7 +69,10 @@ export const DITHER_MODES = [...Object.keys(DITHER_KERNELS), ...SCREENS];
 // `gamma` (< 1 lifts midtones) and sharpens by `sharpen` — camera frames are
 // flat/soft and thermal prints come out dark. `outline` (0–1) darkens the
 // edges, keeping features defined when the tones are very light.
-export function canvasToRaster(canvas, { dither = 'floyd', noise = 0, period, ...toneOptions } = {}) {
+export function canvasToRaster(
+  canvas: HTMLCanvasElement,
+  { dither = 'floyd', noise = 0, period, ...toneOptions }: RasterOptions = {}
+): Raster {
   const { width, height } = canvas;
   if (width % 8 !== 0) throw new Error(`Canvas width ${width} is not a multiple of 8.`);
   if (!DITHER_KERNELS[dither] && !SCREENS.includes(dither)) throw new Error(`Unknown dither mode: ${dither}`);
@@ -70,11 +85,11 @@ export function canvasToRaster(canvas, { dither = 'floyd', noise = 0, period, ..
 
 // Canvas → luminance 0–255, with the tone options of canvasToRaster applied.
 export function toGray(
-  canvas,
-  { photo = false, gamma = 0.6, clip = 0.01, sharpen: amount = 0.6, outline = 0 } = {}
-) {
+  canvas: HTMLCanvasElement,
+  { photo = false, gamma = 0.6, clip = 0.01, sharpen: amount = 0.6, outline = 0 }: ToneOptions = {}
+): Float32Array {
   const { width, height } = canvas;
-  const img = canvas.getContext('2d').getImageData(0, 0, width, height);
+  const img = ctx2d(canvas).getImageData(0, 0, width, height);
   const gray = new Float32Array(width * height);
   for (let i = 0, p = 0; i < gray.length; i++, p += 4) {
     gray[i] = 0.299 * img.data[p] + 0.587 * img.data[p + 1] + 0.114 * img.data[p + 2];
@@ -91,7 +106,7 @@ export function toGray(
 }
 
 // 1-per-black-dot array → packed MSB-first raster.
-export function inkToRaster(ink, width, height) {
+export function inkToRaster(ink: ArrayLike<number>, width: number, height: number): Raster {
   const rowBytes = width / 8;
   const bitmap = new Uint8Array(rowBytes * height);
   for (let y = 0; y < height; y++) {
@@ -103,7 +118,7 @@ export function inkToRaster(ink, width, height) {
 }
 
 // Error diffusion → 1 per black dot.
-function diffuse(gray, width, height, kernel, noise) {
+function diffuse(gray: Float32Array, width: number, height: number, kernel: Kernel, noise: number) {
   const ink = new Uint8Array(width * height);
   for (let y = 0; y < height; y++) {
     const dir = y % 2 === 0 ? 1 : -1;
@@ -132,7 +147,7 @@ const HALFTONE_PERIOD = 5; // dots per cell (~60 lpi at 300 dpi)
 // halftone: newspaper-style round dots on a 45° grid. Clustered dots survive
 //   thermal dot gain far better than scattered single dots.
 // threshold: plain 50% cut, for canvases that are already black and white.
-function screen(gray, width, height, mode, period) {
+function screen(gray: Float32Array, width: number, height: number, mode: string, period?: number) {
   const ink = new Uint8Array(width * height);
   if (mode === 'threshold') {
     for (let i = 0; i < ink.length; i++) ink[i] = gray[i] < 128 ? 1 : 0;
@@ -153,7 +168,7 @@ function screen(gray, width, height, mode, period) {
   throw new Error(`Unknown screen: ${mode}`);
 }
 
-export function boxBlur(gray, width, height) {
+export function boxBlur(gray: Float32Array, width: number, height: number): Float32Array {
   const out = gray.slice();
   for (let y = 1; y < height - 1; y++) {
     for (let x = 1; x < width - 1; x++) {
@@ -169,7 +184,7 @@ export function boxBlur(gray, width, height) {
 }
 
 // Sobel gradient magnitude (0 on the 1-px border).
-export function sobel(gray, width, height) {
+export function sobel(gray: Float32Array, width: number, height: number): Float32Array {
   const out = new Float32Array(width * height);
   for (let y = 1; y < height - 1; y++) {
     for (let x = 1; x < width - 1; x++) {
@@ -185,10 +200,10 @@ export function sobel(gray, width, height) {
 
 // Contrast stretch between the `clip` and 1−`clip` percentiles, then gamma.
 // gamma < 1 lifts midtones: compensates thermal dot gain and backlit faces.
-function enhanceForThermal(gray, { gamma = 0.6, clip = 0.01 } = {}) {
+function enhanceForThermal(gray: Float32Array, { gamma = 0.6, clip = 0.01 } = {}) {
   const hist = new Uint32Array(256);
   for (const v of gray) hist[Math.max(0, Math.min(255, v | 0))]++;
-  const percentile = (p) => {
+  const percentile = (p: number) => {
     const target = gray.length * p;
     let sum = 0;
     for (let v = 0; v < 256; v++) {
@@ -207,7 +222,7 @@ function enhanceForThermal(gray, { gamma = 0.6, clip = 0.01 } = {}) {
 
 // Unsharp mask with a 3×3 box blur: restores edges (eyes, hair) that the
 // downscale + dither would otherwise smear.
-function sharpen(gray, width, height, amount = 0.6) {
+function sharpen(gray: Float32Array, width: number, height: number, amount = 0.6) {
   const blurred = boxBlur(gray, width, height);
   for (let i = 0; i < gray.length; i++) {
     gray[i] = Math.max(0, Math.min(255, gray[i] + amount * (gray[i] - blurred[i])));
@@ -215,11 +230,11 @@ function sharpen(gray, width, height, amount = 0.6) {
 }
 
 // Draw a packed raster back onto a canvas, for an on-screen print preview.
-export function rasterToCanvas({ bitmap, widthDots, heightDots }) {
+export function rasterToCanvas({ bitmap, widthDots, heightDots }: Raster): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = widthDots;
   canvas.height = heightDots;
-  const ctx = canvas.getContext('2d');
+  const ctx = ctx2d(canvas);
   const img = ctx.createImageData(widthDots, heightDots);
   const rowBytes = widthDots / 8;
   for (let y = 0; y < heightDots; y++) {
@@ -236,15 +251,18 @@ export function rasterToCanvas({ bitmap, widthDots, heightDots }) {
 }
 
 // Render text as a canvas sized to `width` dots.
-export function textToCanvas(text, { width = DEFAULT_PRINT_WIDTH_DOTS, fontSize = 32, padding = 16, lineHeight = 1.2 } = {}) {
+export function textToCanvas(
+  text: string,
+  { width = DEFAULT_PRINT_WIDTH_DOTS, fontSize = 32, padding = 16, lineHeight = 1.2 } = {}
+): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = width;
 
-  const ctx = canvas.getContext('2d');
+  const ctx = ctx2d(canvas);
   ctx.font = `${fontSize}px -apple-system, system-ui, sans-serif`;
   const words = text.split(/\s+/);
   const maxWidth = width - padding * 2;
-  const lines = [];
+  const lines: string[] = [];
   let line = '';
   for (const word of words) {
     const test = line ? `${line} ${word}` : word;
@@ -259,7 +277,7 @@ export function textToCanvas(text, { width = DEFAULT_PRINT_WIDTH_DOTS, fontSize 
 
   const rowH = Math.round(fontSize * lineHeight);
   canvas.height = padding * 2 + rowH * lines.length;
-  const ctx2 = canvas.getContext('2d');
+  const ctx2 = ctx2d(canvas);
   ctx2.fillStyle = '#fff';
   ctx2.fillRect(0, 0, canvas.width, canvas.height);
   ctx2.fillStyle = '#000';
@@ -273,7 +291,7 @@ export function testPatternCanvas(height = 240, width = DEFAULT_PRINT_WIDTH_DOTS
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
-  const ctx = canvas.getContext('2d');
+  const ctx = ctx2d(canvas);
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, canvas.width, height);
 
@@ -331,7 +349,7 @@ export function widthCalibrationCanvas({ maxDots = 640, step = 32 } = {}) {
   const canvas = document.createElement('canvas');
   canvas.width = WIDTH;
   canvas.height = HEIGHT;
-  const ctx = canvas.getContext('2d');
+  const ctx = ctx2d(canvas);
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
   ctx.fillStyle = '#000';
@@ -349,7 +367,7 @@ export function widthCalibrationCanvas({ maxDots = 640, step = 32 } = {}) {
   y += BAR_H + PAD;
 
   // Numbered ticks every `step` dots.
-  const positions = [];
+  const positions: number[] = [];
   for (let p = 0; p <= maxDots; p += step) positions.push(p);
 
   const tickTop = y;

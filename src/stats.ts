@@ -6,21 +6,41 @@
 // The paper meter is per device, not per event: it follows the roll that's
 // in the printer. { usedMm } since the last "new roll".
 
-import { DOTS_PER_MM, eventKey, getConfig } from './config.js';
+import { type Config, DOTS_PER_MM, eventKey, getConfig } from './config.ts';
+
+export interface Stats {
+  sessions: number;
+  prints: number;
+  stickers: number;
+  shares: number;
+  failedPrints: number;
+  printedMm: number;
+  byHour: Record<string, number>;
+  first: string | null;
+  last: string | null;
+}
+
+export interface BoothStatus {
+  printer?: string | null;
+  printerConnected?: boolean;
+  camera?: 'ok' | 'error';
+  lastError?: string;
+  at?: string;
+}
 
 const STATS_PREFIX = 'photoboot:stats:';
 const PAPER_KEY = 'photoboot:paper';
 const STATUS_KEY = 'photoboot:status';
 
-function readJson(key, fallback) {
+function readJson<T>(key: string, fallback: T): T {
   try {
-    return JSON.parse(localStorage.getItem(key)) ?? fallback;
+    return JSON.parse(localStorage.getItem(key) ?? 'null') ?? fallback;
   } catch {
     return fallback;
   }
 }
 
-function writeJson(key, value) {
+function writeJson(key: string, value: unknown) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
@@ -28,7 +48,7 @@ function writeJson(key, value) {
   }
 }
 
-const empty = () => ({
+const empty = (): Stats => ({
   sessions: 0,
   prints: 0,
   stickers: 0,
@@ -40,8 +60,8 @@ const empty = () => ({
   last: null,
 });
 
-export function getStats(key = eventKey()) {
-  return { ...empty(), ...readJson(STATS_PREFIX + key, {}) };
+export function getStats(key = eventKey()): Stats {
+  return { ...empty(), ...readJson<Partial<Stats>>(STATS_PREFIX + key, {}) };
 }
 
 export function resetStats(key = eventKey()) {
@@ -54,7 +74,10 @@ export function resetStats(key = eventKey()) {
 
 // kind: 'session' | 'print' | 'share' | 'printFail'. For prints, pass the
 // sticker height in dots (tear margin included) and the number of copies.
-export function record(kind, { heightDots = 0, copies = 1 } = {}) {
+export function record(
+  kind: 'session' | 'print' | 'share' | 'printFail',
+  { heightDots = 0, copies = 1 } = {}
+): Stats {
   const key = eventKey();
   const s = getStats(key);
   const now = new Date();
@@ -80,7 +103,7 @@ export function record(kind, { heightDots = 0, copies = 1 } = {}) {
   return s;
 }
 
-export function getPaper() {
+export function getPaper(): { usedMm: number; since: string | null } {
   return { usedMm: 0, since: null, ...readJson(PAPER_KEY, {}) };
 }
 
@@ -89,7 +112,9 @@ export function newRoll() {
 }
 
 // { rollMm, usedMm, leftMm, low } or null when the roll isn't tracked.
-export function paperLeft(config = getConfig()) {
+export function paperLeft(
+  config: Pick<Config, 'rollLengthMm' | 'paperWarnMm'> = getConfig()
+): { rollMm: number; usedMm: number; leftMm: number; low: boolean } | null {
   if (!config.rollLengthMm) return null;
   const { usedMm } = getPaper();
   const leftMm = Math.max(0, config.rollLengthMm - usedMm);
@@ -97,10 +122,10 @@ export function paperLeft(config = getConfig()) {
 }
 
 // Booth health heartbeat: { printer, printerConnected, camera, lastError, at }.
-export function setStatus(updates) {
+export function setStatus(updates: BoothStatus) {
   writeJson(STATUS_KEY, { ...readJson(STATUS_KEY, {}), ...updates, at: new Date().toISOString() });
 }
 
-export function getStatus() {
-  return readJson(STATUS_KEY, null);
+export function getStatus(): BoothStatus | null {
+  return readJson<BoothStatus | null>(STATUS_KEY, null);
 }

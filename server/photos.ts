@@ -16,13 +16,19 @@ const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 
 export const ID = /^[0-9a-f-]{36}$/;
 
-const jpgPath = (id) => path.join(SHARE_DIR, `${id}.jpg`);
-const metaPath = (id) => path.join(SHARE_DIR, `${id}.json`);
+export interface PhotoMeta {
+  id: string;
+  event: string | null;
+  created: string;
+}
+
+const jpgPath = (id: string) => path.join(SHARE_DIR, `${id}.jpg`);
+const metaPath = (id: string) => path.join(SHARE_DIR, `${id}.json`);
 export { jpgPath };
 
-let usedBytes = null; // folder size, computed lazily, then kept up to date
+let usedBytes: number | null = null; // folder size, computed lazily, then kept up to date
 
-async function folderBytes() {
+async function folderBytes(): Promise<number> {
   if (usedBytes !== null) return usedBytes;
   let total = 0;
   for (const name of await readdir(SHARE_DIR).catch(() => [])) {
@@ -32,11 +38,11 @@ async function folderBytes() {
   return total;
 }
 
-export async function hasRoomFor(bytes) {
+export async function hasRoomFor(bytes: number): Promise<boolean> {
   return (await folderBytes()) + bytes <= MAX_BYTES;
 }
 
-export async function savePhoto(id, body, event = null) {
+export async function savePhoto(id: string, body: Buffer, event: string | null = null): Promise<void> {
   await mkdir(SHARE_DIR, { recursive: true });
   const meta = JSON.stringify({ id, event, created: new Date().toISOString() });
   await writeFile(jpgPath(id), body);
@@ -46,7 +52,7 @@ export async function savePhoto(id, body, event = null) {
 
 // { id, event, created } — falls back to the file time for photos uploaded
 // before sidecars existed.
-export async function photoMeta(id) {
+export async function photoMeta(id: string): Promise<PhotoMeta | null> {
   try {
     return JSON.parse(await readFile(metaPath(id), 'utf8'));
   } catch {
@@ -55,7 +61,7 @@ export async function photoMeta(id) {
   }
 }
 
-export async function deletePhoto(id) {
+export async function deletePhoto(id: string): Promise<void> {
   for (const file of [jpgPath(id), metaPath(id)]) {
     const size = (await stat(file).catch(() => ({ size: 0 }))).size;
     await rm(file, { force: true });
@@ -63,16 +69,16 @@ export async function deletePhoto(id) {
   }
 }
 
-export async function listPhotos({ event } = {}) {
+export async function listPhotos({ event }: { event?: string | null } = {}): Promise<PhotoMeta[]> {
   const names = await readdir(SHARE_DIR).catch(() => []);
   const ids = names.filter((n) => n.endsWith('.jpg')).map((n) => n.slice(0, -4)).filter((id) => ID.test(id));
   const metas = await Promise.all(ids.map(photoMeta));
   return metas
-    .filter((m) => m && (event === undefined || m.event === event))
+    .filter((m): m is PhotoMeta => !!m && (event === undefined || m.event === event))
     .sort((a, b) => a.created.localeCompare(b.created));
 }
 
-export function expiresAt(created) {
+export function expiresAt(created: string): Date | null {
   return TTL_DAYS > 0 ? new Date(new Date(created).getTime() + TTL_DAYS * 86_400_000) : null;
 }
 
@@ -81,7 +87,8 @@ export async function cleanup() {
   const now = Date.now();
   let removed = 0;
   for (const meta of await listPhotos()) {
-    if (expiresAt(meta.created).getTime() < now) {
+    const expires = expiresAt(meta.created);
+    if (expires && expires.getTime() < now) {
       await deletePhoto(meta.id);
       removed++;
     }

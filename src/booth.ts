@@ -3,9 +3,9 @@
 // src/config.js drives everything guests see; change it via /settings.html.
 
 import qrcode from 'qrcode-generator';
-import { recentPhotos, savePhoto } from './archive.js';
-import { getConfig } from './config.js';
-import { translator } from './i18n.js';
+import { recentPhotos, savePhoto } from './archive.ts';
+import { getConfig } from './config.ts';
+import { translator } from './i18n.ts';
 import {
   PHOTO_STYLES,
   PHOTO_TWISTS,
@@ -15,16 +15,18 @@ import {
   printPhoto,
   renderColour,
   renderSticker,
-} from './photo.js';
-import { connectPrinter } from './printers/index.js';
-import { rasterToCanvas } from './raster.js';
-import { deviceId, remote } from './remote.js';
-import { getStats, paperLeft, record, setStatus } from './stats.js';
-import { loadTemplate } from './templates.js';
+} from './photo.ts';
+import { connectPrinter } from './printers/index.ts';
+import { rasterToCanvas } from './raster.ts';
+import { deviceId, remote } from './remote.ts';
+import { getStats, paperLeft, record, setStatus } from './stats.ts';
+import { loadTemplate } from './templates.ts';
+import type { PrinterBase } from './printers/base.ts';
+import type { Look, Raster, Template } from './types.ts';
+import { $, ctx2d, errorMessage } from './dom.ts';
 
-const $ = (id) => document.getElementById(id);
 const screens = { setup: $('setup'), booth: $('booth'), review: $('review') };
-const video = $('video');
+const video = $<HTMLVideoElement>('video');
 
 const STICKER_MARGIN_DOTS = 24; // unprintable strip each side, for the preview
 const RECONNECT_INTERVAL_MS = 5_000;
@@ -34,11 +36,11 @@ const ATTRACT_SLIDE_MS = 4_000;
 
 const config = getConfig();
 const t = translator(config);
-let template = null; // resolved from config.templateId
+let template: Template | null = null; // resolved from config.templateId
 
-let printer = null; // null = running without printer
-let stream = null;
-let cameras = [];
+let printer: PrinterBase | null = null; // null = running without printer
+let stream: MediaStream | null = null;
+let cameras: MediaDeviceInfo[] = [];
 let cameraIndex = 0;
 let mirrored = true;
 let delay = 3;
@@ -48,12 +50,23 @@ let busy = false;
 // Current session, reset on every capture.
 // shots: canvases captured; rasters: sticker cache keyed by "style|twist";
 // prints: Print taps that succeeded; jpeg: Promise<Blob> of the colour copy.
-let session = null;
-let reviewTimer = null;
+interface Session {
+  shots: HTMLCanvasElement[];
+  rasters: Record<string, Raster>;
+  raster: Raster | null;
+  look: Look | null;
+  shareUrl: string | null;
+  shareTwist: string | null;
+  prints: number;
+  jpegs: Record<string, Promise<Blob>>;
+}
+
+let session: Session | null = null;
+let reviewTimer: ReturnType<typeof setTimeout> | undefined;
 
 // ---------- helpers ----------
 
-function show(name) {
+function show(name: keyof typeof screens) {
   for (const [key, el] of Object.entries(screens)) el.hidden = key !== name;
   if (name === 'booth') {
     armIdle();
@@ -63,17 +76,18 @@ function show(name) {
   }
 }
 
-function storage(key, value) {
+function storage(key: string, value?: string): string | null {
   try {
     if (value === undefined) return localStorage.getItem(key);
     localStorage.setItem(key, value);
+    return value;
   } catch {
     return null;
   }
 }
 
-let toastTimer = null;
-function toast(msg, ms = 2500) {
+let toastTimer: ReturnType<typeof setTimeout> | undefined;
+function toast(msg: string, ms = 2500) {
   const el = $('review-status');
   el.textContent = msg;
   el.hidden = false;
@@ -81,13 +95,13 @@ function toast(msg, ms = 2500) {
   if (ms) toastTimer = setTimeout(() => (el.hidden = true), ms);
 }
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function withTimeout(promise, ms) {
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([promise, sleep(ms).then(() => Promise.reject(new Error('timed out')))]);
 }
 
-for (const el of document.querySelectorAll('[data-t]')) el.textContent = t(el.dataset.t);
+for (const el of document.querySelectorAll<HTMLElement>('[data-t]')) el.textContent = t(el.dataset.t ?? '');
 document.documentElement.lang = config.language || 'en';
 
 // Fullscreen consumes the tap's user activation, which requestDevice also
@@ -100,7 +114,7 @@ document.addEventListener('click', () => {
 });
 
 // Keep the screen on while the booth is running.
-let wakeLock = null;
+let wakeLock: WakeLockSentinel | null | undefined = null;
 async function keepAwake() {
   try {
     wakeLock = await navigator.wakeLock?.request('screen');
@@ -114,8 +128,8 @@ document.addEventListener('visibilitychange', () => {
 
 // ---------- sound ----------
 
-let audio = null;
-function tone(freq, ms, { type = 'sine', gain = 0.2 } = {}) {
+let audio: AudioContext | null = null;
+function tone(freq: number, ms: number, { type = 'sine' as OscillatorType, gain = 0.2 } = {}) {
   if (!config.sound) return;
   try {
     audio ??= new AudioContext();
@@ -156,9 +170,9 @@ function shutterSound() {
 
 // Hidden entries: long-press the Photoboot title (setup screen) or the
 // top-left corner of the camera view to open settings. Also /?admin=1.
-function longPress(el, ms, action) {
+function longPress(el: Element | null, ms: number, action: () => void) {
   if (!el) return;
-  let timer = null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const cancel = () => clearTimeout(timer);
   el.addEventListener('pointerdown', () => {
     cancel();
@@ -174,7 +188,7 @@ if (new URLSearchParams(location.search).get('admin') === '1') openSettings();
 // ---------- printer ----------
 
 function setPill() {
-  const pill = $('printer-pill');
+  const pill = $<HTMLButtonElement>('printer-pill');
   if (!printer) {
     pill.hidden = true;
     return;
@@ -183,7 +197,7 @@ function setPill() {
   const ok = printer.connected;
   const paper = paperLeft(config);
   pill.textContent =
-    (ok ? `🖨 ${printer.device.name || 'Printer'}` : '🖨 Reconnecting…') + (paper?.low ? ' · 📄 low' : '');
+    (ok ? `🖨 ${printer.device?.name || 'Printer'}` : '🖨 Reconnecting…') + (paper?.low ? ' · 📄 low' : '');
   pill.classList.toggle('bad', !ok);
   pill.classList.toggle('low', !!paper?.low);
   setStatus({ printer: printer.device?.name || 'Printer', printerConnected: ok });
@@ -208,7 +222,7 @@ async function reconnectLoop() {
   setPill();
 }
 
-$('connect').addEventListener('click', async () => {
+$<HTMLButtonElement>('connect').addEventListener('click', async () => {
   const status = $('setup-status');
   try {
     const p = await connectPrinter(config.printerType, {
@@ -219,18 +233,18 @@ $('connect').addEventListener('click', async () => {
     await startBooth();
   } catch (err) {
     status.textContent =
-      err.name === 'NotFoundError' ? 'No printer selected.' : `Couldn't connect: ${err.message}`;
+      (err as Error).name === 'NotFoundError' ? 'No printer selected.' : `Couldn't connect: ${errorMessage(err)}`;
   }
 });
 
-$('skip-printer').addEventListener('click', () => {
+$<HTMLButtonElement>('skip-printer').addEventListener('click', () => {
   setStatus({ printer: null, printerConnected: false });
   startBooth();
 });
 
 if (!navigator.bluetooth) {
   $('no-bluetooth').hidden = false;
-  $('connect').disabled = true;
+  $<HTMLButtonElement>('connect').disabled = true;
 }
 
 // ---------- camera ----------
@@ -253,7 +267,7 @@ async function startCamera() {
       video: { ...camera, frameRate: { ideal: 30, min: 15 } },
     });
   } catch (err) {
-    if (err.name !== 'OverconstrainedError') throw err;
+    if ((err as Error).name !== 'OverconstrainedError') throw err;
     stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { ...camera, frameRate: { ideal: 30 } } });
   }
   video.srcObject = stream;
@@ -276,10 +290,10 @@ async function startCamera() {
     const current = track?.getSettings().deviceId;
     cameraIndex = Math.max(0, cameras.findIndex((c) => c.deviceId === current));
   }
-  $('switch-camera').hidden = cameras.length < 2;
+  $<HTMLButtonElement>('switch-camera').hidden = cameras.length < 2;
 }
 
-let cameraRetryTimer = null;
+let cameraRetryTimer: ReturnType<typeof setTimeout> | undefined;
 async function tryCamera() {
   clearTimeout(cameraRetryTimer);
   try {
@@ -287,25 +301,25 @@ async function tryCamera() {
     $('camera-error').hidden = true;
     setStatus({ camera: 'ok' });
   } catch (err) {
-    cameraFailed(err);
+    cameraFailed(err instanceof Error ? err : new Error(String(err)));
   }
 }
 
-function cameraFailed(err) {
+function cameraFailed(err: Error) {
   console.error(err);
   $('camera-error').hidden = false;
-  setStatus({ camera: 'error', lastError: `Camera: ${err.message}` });
+  setStatus({ camera: 'error', lastError: `Camera: ${errorMessage(err)}` });
   clearTimeout(cameraRetryTimer);
   // Permission denials won't fix themselves; anything else might.
   if (err.name !== 'NotAllowedError') cameraRetryTimer = setTimeout(tryCamera, CAMERA_RETRY_MS);
 }
 
-$('camera-retry').addEventListener('click', (e) => {
+$<HTMLButtonElement>('camera-retry').addEventListener('click', (e) => {
   e.stopPropagation();
   tryCamera();
 });
 
-$('switch-camera').addEventListener('click', async (e) => {
+$<HTMLButtonElement>('switch-camera').addEventListener('click', async (e) => {
   e.stopPropagation();
   if (busy) return;
   cameraIndex = (cameraIndex + 1) % cameras.length;
@@ -324,41 +338,41 @@ async function startBooth() {
 
 // ---------- capture options ----------
 
-function setChips(selector, attr, value) {
-  for (const btn of document.querySelectorAll(selector)) {
+function setChips(selector: string, attr: string, value: number) {
+  for (const btn of document.querySelectorAll<HTMLElement>(selector)) {
     btn.setAttribute('aria-checked', String(Number(btn.dataset[attr]) === value));
   }
 }
 
-function setDelay(value) {
+function setDelay(value: number) {
   delay = value;
   storage('delay', String(value));
   setChips('.delay', 'delay', value);
 }
-for (const btn of document.querySelectorAll('.delay')) {
+for (const btn of document.querySelectorAll<HTMLElement>('.delay')) {
   btn.addEventListener('click', () => setDelay(Number(btn.dataset.delay)));
 }
 setDelay(Number(storage('delay')) || config.defaultDelay || 3);
 
-function setShotCount(value) {
+function setShotCount(value: number) {
   shotCount = value;
   setChips('.shots', 'shots', value);
 }
 $('shot-choice').hidden = !config.guestShotChoice;
-for (const btn of document.querySelectorAll('.shots')) {
+for (const btn of document.querySelectorAll<HTMLElement>('.shots')) {
   btn.addEventListener('click', () => setShotCount(Number(btn.dataset.shots)));
 }
 setShotCount(shotCount);
 
-function setCaptureEnabled(enabled) {
-  for (const btn of document.querySelectorAll('#capture-bar button, #switch-camera')) btn.disabled = !enabled;
+function setCaptureEnabled(enabled: boolean) {
+  for (const btn of document.querySelectorAll<HTMLButtonElement>('#capture-bar button, #switch-camera')) btn.disabled = !enabled;
 }
 
 // ---------- idle attract screen ----------
 
-let idleTimer = null;
-let slideTimer = null;
-let slideUrl = null;
+let idleTimer: ReturnType<typeof setTimeout> | undefined;
+let slideTimer: ReturnType<typeof setInterval> | undefined;
+let slideUrl: string | null = null;
 
 function armIdle() {
   clearTimeout(idleTimer);
@@ -383,8 +397,8 @@ async function showAttract() {
   const next = () => {
     if (slideUrl) URL.revokeObjectURL(slideUrl);
     slideUrl = URL.createObjectURL(photos[i++ % photos.length]);
-    $('attract-photo').src = slideUrl;
-    $('attract-photo').hidden = false;
+    $<HTMLImageElement>('attract-photo').src = slideUrl;
+    $<HTMLImageElement>('attract-photo').hidden = false;
   };
   next();
   slideTimer = setInterval(next, ATTRACT_SLIDE_MS);
@@ -393,7 +407,7 @@ async function showAttract() {
 function hideAttract() {
   $('attract').hidden = true;
   clearInterval(slideTimer);
-  $('attract-photo').hidden = true;
+  $<HTMLImageElement>('attract-photo').hidden = true;
   if (slideUrl) URL.revokeObjectURL(slideUrl);
   slideUrl = null;
 }
@@ -418,9 +432,9 @@ for (const type of ['pointerdown', 'keydown']) {
 // print (config.livePreview). 'camera' = the plain feed. The pick carries
 // over to the review.
 const LIVE_FRAME_MS = 66; // ~15 fps at most; slower machines just skip frames
-let live = { style: 'camera', twist: 'none' };
+let live: Look = { style: 'camera', twist: 'none' };
 let liveRunning = false;
-const liveCanvas = $('live');
+const liveCanvas = $<HTMLCanvasElement>('live');
 const frameCanvas = document.createElement('canvas');
 
 function setupLiveLooks() {
@@ -432,7 +446,7 @@ function setupLiveLooks() {
     ...(styles.length ? styles : [{ id: PLAIN_LOOK.style, label: t('printLook') }]),
   ];
   live = { style: mode === 'always' ? look.style : 'camera', twist: look.twist };
-  const row = (id, key, options) => {
+  const row = (id: string, key: keyof Look, options: { id: string; label: string }[]) => {
     $(id).hidden = options.length < 2;
     $(id).replaceChildren(
       ...options.map((o) => {
@@ -459,8 +473,8 @@ function setupLiveLooks() {
 }
 
 function markLive() {
-  for (const btn of document.querySelectorAll('#live-looks .filter')) {
-    btn.setAttribute('aria-checked', String(live[btn.dataset.key] === btn.dataset.value));
+  for (const btn of document.querySelectorAll<HTMLElement>('#live-looks .filter')) {
+    btn.setAttribute('aria-checked', String(live[btn.dataset.key as keyof Look] === btn.dataset.value));
   }
 }
 
@@ -501,7 +515,7 @@ function renderLiveFrame() {
     frameCanvas.width = width;
     frameCanvas.height = height;
   }
-  const ctx = frameCanvas.getContext('2d', { willReadFrequently: true });
+  const ctx = ctx2d(frameCanvas, { willReadFrequently: true });
   ctx.save();
   if (mirrored) {
     ctx.translate(width, 0);
@@ -521,7 +535,7 @@ function renderLiveFrame() {
     liveCanvas.width = out.width;
     liveCanvas.height = out.height;
   }
-  liveCanvas.getContext('2d').drawImage(out, 0, 0);
+  ctx2d(liveCanvas).drawImage(out, 0, 0);
   liveCanvas.classList.toggle('dots', live.style !== 'camera');
   liveCanvas.hidden = false;
 }
@@ -532,7 +546,7 @@ let cancelled = false;
 const CANCEL = Symbol('cancel');
 
 // Sleep that ends early (by throwing) when the guest taps Cancel.
-async function wait(ms) {
+async function wait(ms: number) {
   const end = Date.now() + ms;
   while (Date.now() < end) {
     if (cancelled) throw CANCEL;
@@ -541,11 +555,11 @@ async function wait(ms) {
   if (cancelled) throw CANCEL;
 }
 
-async function countdown(seconds) {
+async function countdown(seconds: number) {
   const el = $('countdown');
   el.hidden = false;
   for (let s = seconds; s > 0; s--) {
-    $('countdown-number').textContent = s;
+    $('countdown-number').textContent = String(s);
     $('countdown-caption').textContent = s === 1 ? t('smile') : t('getReady');
     tone(s === 1 ? 880 : 660, 150);
     await wait(1000);
@@ -553,7 +567,7 @@ async function countdown(seconds) {
   el.hidden = true;
 }
 
-async function betweenShots(next, total) {
+async function betweenShots(next: number, total: number) {
   const el = $('countdown');
   el.hidden = false;
   $('countdown-number').textContent = '';
@@ -562,7 +576,7 @@ async function betweenShots(next, total) {
   await wait(1200);
 }
 
-function updateShotCounter(current, total = shotCount) {
+function updateShotCounter(current: number, total = shotCount) {
   const el = $('shot-counter');
   if (total <= 1 || !current) {
     el.hidden = true;
@@ -578,7 +592,7 @@ function grabFrame() {
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
-  const ctx = canvas.getContext('2d');
+  const ctx = ctx2d(canvas);
   // Save the photo exactly as the preview showed it.
   if (mirrored) {
     ctx.translate(w, 0);
@@ -595,7 +609,7 @@ function flash() {
   el.classList.add('on');
 }
 
-$('cancel-countdown').addEventListener('click', (e) => {
+$<HTMLButtonElement>('cancel-countdown').addEventListener('click', (e) => {
   e.stopPropagation();
   cancelled = true;
 });
@@ -633,7 +647,7 @@ async function capture() {
   else armIdle();
 }
 
-$('shutter').addEventListener('click', (e) => {
+$<HTMLButtonElement>('shutter').addEventListener('click', (e) => {
   e.stopPropagation();
   capture();
 });
@@ -646,7 +660,7 @@ $('stage').addEventListener('click', (e) => {
 
 // ---------- session ----------
 
-function startSession(shots) {
+function startSession(shots: HTMLCanvasElement[]) {
   session = { shots, rasters: {}, raster: null, look: null, shareUrl: null, shareTwist: null, prints: 0, jpegs: {} };
   record('session');
   syncStats();
@@ -655,20 +669,23 @@ function startSession(shots) {
 
 // The colour keepsake (shared + archived) for the session's current twist:
 // the sticker layout in colour. Cached per twist.
-function colourJpeg(s = session) {
+function colourJpeg(s: Session | null = session): Promise<Blob> {
+  if (!s || !template) return Promise.reject(new Error('No session.'));
   const twist = s.look?.twist ?? 'none';
-  return (s.jpegs[twist] ??= jpegOf(renderColour(s.shots, template, { stickerWidth: config.paperWidthDots, look: s.look })));
+  return (s.jpegs[twist] ??= jpegOf(
+    renderColour(s.shots, template, { stickerWidth: config.paperWidthDots, look: s.look ?? undefined })
+  ));
 }
 
 // Archive when the guest leaves the review, so the copy has their final twist.
-function archiveSession(s) {
+function archiveSession(s: Session | null) {
   if (!config.keepLocalCopies || !s) return;
   colourJpeg(s)
     .then((blob) => savePhoto(blob))
     .catch((err) => console.error('Local copy failed', err));
 }
 
-function jpegOf(canvas) {
+function jpegOf(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) =>
     canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('JPEG encode failed'))), 'image/jpeg', 0.9)
   );
@@ -676,7 +693,7 @@ function jpegOf(canvas) {
 
 // Server stats are pushed a few seconds after activity, so a burst of
 // prints becomes one request.
-let syncTimer = null;
+let syncTimer: ReturnType<typeof setTimeout> | undefined;
 function syncStats() {
   const ev = config.serverEvent;
   if (!ev?.id) return;
@@ -699,7 +716,7 @@ function armReviewTimeout(seconds = config.reviewTimeoutSec || 90) {
 // Styles / twists guests may pick, and the preselected look.
 function looks() {
   if (!config.filterEnabled) return { styles: [], twists: [], look: PLAIN_LOOK };
-  const pick = (all, allowed) => {
+  const pick = <T extends { id: string }>(all: T[], allowed: string[] | null): T[] => {
     const list = all.filter((o) => !Array.isArray(allowed) || allowed.includes(o.id));
     return list.length ? list : all.slice(0, 1);
   };
@@ -713,7 +730,7 @@ function looks() {
 }
 
 // One radio row per look option (style, twist).
-function renderOptions(listId, key, options) {
+function renderOptions(listId: string, key: keyof Look, options: { id: string; label: string }[]) {
   $(listId).hidden = options.length < 2;
   $(listId).replaceChildren(
     ...options.map(({ id, label }) => {
@@ -725,7 +742,7 @@ function renderOptions(listId, key, options) {
       btn.textContent = label;
       btn.addEventListener('click', () => {
         if (busy || !session) return;
-        selectLook({ ...session.look, [key]: id });
+        selectLook({ ...(session.look ?? looks().look), [key]: id } as Look);
         armReviewTimeout();
       });
       return btn;
@@ -734,21 +751,22 @@ function renderOptions(listId, key, options) {
 }
 
 // Stickers are cached per look, so flipping back and forth is instant.
-function selectLook(look) {
+function selectLook(look: Look) {
+  if (!session || !template) return;
   session.look = look;
   const cacheKey = `${look.style}|${look.twist}`;
   session.raster = session.rasters[cacheKey] ??= renderSticker(session.shots, template, {
     stickerWidth: config.paperWidthDots,
     look,
   });
-  for (const btn of document.querySelectorAll('#review .filter')) {
-    btn.setAttribute('aria-checked', String(look[btn.dataset.key] === btn.dataset.value));
+  for (const btn of document.querySelectorAll<HTMLElement>('#review .filter')) {
+    btn.setAttribute('aria-checked', String(look[btn.dataset.key as keyof Look] === btn.dataset.value));
   }
   const preview = rasterToCanvas(session.raster);
-  const sticker = $('sticker');
+  const sticker = $<HTMLCanvasElement>('sticker');
   sticker.width = preview.width;
   sticker.height = preview.height;
-  sticker.getContext('2d').drawImage(preview, 0, 0);
+  ctx2d(sticker).drawImage(preview, 0, 0);
   layoutSticker();
 }
 
@@ -766,7 +784,7 @@ function layoutSticker() {
   const dpr = window.devicePixelRatio || 1;
   const fit = Math.min((availW * dpr) / (widthDots + 2 * STICKER_MARGIN_DOTS), (availH * dpr) / heightDots);
   const scale = fit >= 1 ? Math.floor(fit * 2) / 2 : fit;
-  const sticker = $('sticker');
+  const sticker = $<HTMLCanvasElement>('sticker');
   sticker.style.width = `${(widthDots * scale) / dpr}px`;
   sticker.style.height = `${(heightDots * scale) / dpr}px`;
   sticker.style.padding = `0 ${(STICKER_MARGIN_DOTS * scale) / dpr}px`;
@@ -777,7 +795,7 @@ const printLimitReached = () =>
   config.maxPrintsPerSession > 0 && (session?.prints ?? 0) >= config.maxPrintsPerSession;
 
 function updatePrintButton() {
-  const btn = $('print');
+  const btn = $<HTMLButtonElement>('print');
   const note = $('print-note');
   if (!printer || !session) return;
   btn.textContent = session.prints > 0 ? t('printAgain') : t('print');
@@ -794,7 +812,7 @@ function updatePrintButton() {
 }
 
 function showReview() {
-  $('print').hidden = !printer;
+  $<HTMLButtonElement>('print').hidden = !printer;
   $('review-status').hidden = true;
   $('print-note').hidden = true;
   const { styles, twists, look } = looks();
@@ -817,19 +835,19 @@ function backToBooth() {
   setPill();
 }
 
-$('retry').addEventListener('click', () => {
+$<HTMLButtonElement>('retry').addEventListener('click', () => {
   if (!busy) backToBooth();
 });
-$('done').addEventListener('click', () => {
+$<HTMLButtonElement>('done').addEventListener('click', () => {
   if (!busy) backToBooth();
 });
 
-function setActionsEnabled(enabled) {
-  for (const btn of document.querySelectorAll('.actions button')) btn.disabled = !enabled;
+function setActionsEnabled(enabled: boolean) {
+  for (const btn of document.querySelectorAll<HTMLButtonElement>('.actions button')) btn.disabled = !enabled;
   if (enabled) updatePrintButton();
 }
 
-function printOverlay(title, sub = '', spinning = true) {
+function printOverlay(title: string, sub = '', spinning = true) {
   $('print-title').textContent = title;
   $('print-sub').textContent = sub;
   $('print-spinner').hidden = !spinning;
@@ -837,11 +855,12 @@ function printOverlay(title, sub = '', spinning = true) {
 }
 
 async function doPrint() {
-  if (busy || !printer || !session || printLimitReached()) return;
+  if (busy || !printer || !session?.raster || printLimitReached()) return;
+  const current = session;
+  const raster = session.raster;
   busy = true;
   setActionsEnabled(false);
   clearTimeout(reviewTimer);
-  const raster = session.raster;
   const copies = Math.max(1, config.copies | 0);
   try {
     printOverlay(t('printing'), t('grabSticker'));
@@ -850,7 +869,7 @@ async function doPrint() {
       setPill();
     }
     await printPhoto(printer, raster, { copies });
-    session.prints++;
+    current.prints++;
     record('print', { heightDots: raster.heightDots + PRINT_EXTRA_DOTS, copies });
     syncStats();
     printOverlay(t('printed'), t('grabSticker'), false);
@@ -860,7 +879,7 @@ async function doPrint() {
   } catch (err) {
     console.error(err);
     record('printFail');
-    setStatus({ lastError: `Print: ${err.message}` });
+    setStatus({ lastError: `Print: ${errorMessage(err)}` });
     $('print-overlay').hidden = true;
     toast(printer.connected ? t('printFailed') : t('printerOffline'), 6000);
     armReviewTimeout();
@@ -872,39 +891,43 @@ async function doPrint() {
   }
 }
 
-$('print').addEventListener('click', () => doPrint());
+$<HTMLButtonElement>('print').addEventListener('click', () => doPrint());
 
 // Share uploads the colour copy and shows a QR to the photo's page.
-async function uploadPhoto() {
-  const headers = { 'Content-Type': 'image/jpeg' };
+async function uploadPhoto(): Promise<string> {
+  const headers: Record<string, string> = { 'Content-Type': 'image/jpeg' };
   if (config.serverEvent?.id) {
     headers['X-Event-Id'] = config.serverEvent.id;
     headers['X-Event-Key'] = config.serverEvent.key;
   }
   if (config.uploadToken) headers['X-Upload-Token'] = config.uploadToken;
   const res = await fetch('/api/share', { method: 'POST', headers, body: await colourJpeg() });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+  const body: { url?: string; error?: string } = await res.json().catch(() => ({}));
+  if (!res.ok || !body.url) throw new Error(body.error || `HTTP ${res.status}`);
   return body.url;
 }
 
-$('share').addEventListener('click', async () => {
+$<HTMLButtonElement>('share').addEventListener('click', async () => {
   if (busy || !session) return;
   busy = true;
   setActionsEnabled(false);
   clearTimeout(reviewTimer);
   try {
     // A new twist since the last share is a different photo: upload again.
-    if (!session.shareUrl || session.shareTwist !== session.look.twist) {
+    const current = session;
+    const twist = current.look?.twist ?? 'none';
+    let url = current.shareUrl;
+    if (!url || current.shareTwist !== twist) {
       toast(t('preparing'), 0);
-      const first = !session.shareUrl;
-      session.shareUrl = await uploadPhoto();
-      session.shareTwist = session.look.twist;
+      const first = !url;
+      url = await uploadPhoto();
+      current.shareUrl = url;
+      current.shareTwist = twist;
       if (first) record('share');
       syncStats();
     }
     const qr = qrcode(0, 'M');
-    qr.addData(session.shareUrl);
+    qr.addData(url);
     qr.make();
     $('qr').innerHTML = qr.createSvgTag({ cellSize: 8, margin: 2, scalable: true });
     $('review-status').hidden = true;
@@ -913,7 +936,7 @@ $('share').addEventListener('click', async () => {
     armReviewTimeout(Math.max(config.doneTimeoutSec || 20, 45));
   } catch (err) {
     console.error(err);
-    setStatus({ lastError: `Share: ${err.message}` });
+    setStatus({ lastError: `Share: ${errorMessage(err)}` });
     toast(t('shareFailed'), 5000);
     armReviewTimeout();
   } finally {
@@ -922,7 +945,7 @@ $('share').addEventListener('click', async () => {
   }
 });
 
-$('qr-close').addEventListener('click', () => {
+$<HTMLButtonElement>('qr-close').addEventListener('click', () => {
   $('qr-dialog').hidden = true;
   armReviewTimeout(config.doneTimeoutSec || 20);
 });
@@ -937,7 +960,7 @@ if (demo) {
     const canvas = document.createElement('canvas');
     canvas.width = img.naturalWidth;
     canvas.height = img.naturalHeight;
-    canvas.getContext('2d').drawImage(img, 0, 0);
+    ctx2d(canvas).drawImage(img, 0, 0);
     startSession(Array.from({ length: shotCount }, () => canvas));
   };
   img.src = demo;

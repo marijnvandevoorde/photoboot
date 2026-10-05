@@ -15,4 +15,4 @@ RUN mkdir -p /data/shares /data/events && chown node:node /data/shares /data/eve
 USER node
 VOLUME /data/shares /data/events
 EXPOSE 8080
-CMD ["node", "server/index.js"]
+CMD ["node", "server/index.ts"]

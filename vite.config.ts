@@ -1,10 +1,10 @@
-import { defineConfig } from 'vite';
+import { type Plugin, defineConfig } from 'vite';
 import basicSsl from '@vitejs/plugin-basic-ssl';
-import { shareMiddleware } from './server/share.js';
+import { shareMiddleware } from './server/share.ts';
 
 // Mount the share routes (/api/share, /share/{uuid}.jpg) on the dev and
 // preview servers so the QR flow works locally, not just in production.
-const shareRoutes = {
+const shareRoutes: Plugin = {
   name: 'photoboot-share',
   configureServer(server) {
     server.middlewares.use(shareMiddleware);
@@ -20,8 +20,8 @@ const local = process.env.PHOTOBOOT_LOCAL === '1';
 
 export default defineConfig({
   plugins: local ? [shareRoutes] : [basicSsl(), shareRoutes],
+  // HTTPS comes from basicSsl() unless PHOTOBOOT_LOCAL is set.
   server: {
-    https: !local,
     host: local ? 'localhost' : true,
     port: 5173,
   },

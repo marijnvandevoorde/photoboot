@@ -1,4 +1,4 @@
-import { PhomemoPrinter, DEFAULT_PRINT_WIDTH_DOTS } from './printer.js';
+import { PhomemoPrinter, DEFAULT_PRINT_WIDTH_DOTS } from './printer.ts';
 import {
   canvasToRaster,
   fitToPrintWidth,
@@ -6,17 +6,17 @@ import {
   testPatternCanvas,
   textToCanvas,
   widthCalibrationCanvas,
-} from './raster.js';
+} from './raster.ts';
+import { $, ctx2d, errorMessage } from './dom.ts';
 
-const $ = (id) => document.getElementById(id);
 const logEl = $('log');
 const previewWrap = $('preview-wrap');
-const previewCanvas = $('preview');
+const previewCanvas = $<HTMLCanvasElement>('preview');
 
 // User-adjustable target print width. Updated in the UI as we calibrate.
 let targetWidth = DEFAULT_PRINT_WIDTH_DOTS;
 
-function log(msg) {
+function log(msg: string) {
   const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
   logEl.textContent += line + '\n';
   logEl.scrollTop = logEl.scrollHeight;
@@ -25,31 +25,34 @@ function log(msg) {
 
 if (!navigator.bluetooth) {
   $('unsupported').hidden = false;
-  $('connect').disabled = true;
+  $<HTMLButtonElement>('connect').disabled = true;
 }
 
 const printer = new PhomemoPrinter({ onLog: log });
 
-function setConnectedUI(connected) {
-  $('connect').disabled = connected;
-  $('print-text').disabled = !connected;
-  $('print-pattern').disabled = !connected;
-  $('print-image').disabled = !connected;
-  $('print-calibration').disabled = !connected;
-  $('print-cal-narrow').disabled = !connected;
-  $('print-dither').disabled = !connected;
-  $('disconnect').disabled = !connected;
+function setConnectedUI(connected: boolean) {
+  $<HTMLButtonElement>('connect').disabled = connected;
+  $<HTMLButtonElement>('print-text').disabled = !connected;
+  $<HTMLButtonElement>('print-pattern').disabled = !connected;
+  $<HTMLButtonElement>('print-image').disabled = !connected;
+  $<HTMLButtonElement>('print-calibration').disabled = !connected;
+  $<HTMLButtonElement>('print-cal-narrow').disabled = !connected;
+  $<HTMLButtonElement>('print-dither').disabled = !connected;
+  $<HTMLButtonElement>('disconnect').disabled = !connected;
 }
 
-function showPreview(canvas) {
+function showPreview(canvas: HTMLCanvasElement) {
   previewCanvas.width = canvas.width;
   previewCanvas.height = canvas.height;
-  previewCanvas.getContext('2d').drawImage(canvas, 0, 0);
+  ctx2d(previewCanvas).drawImage(canvas, 0, 0);
   previewWrap.hidden = false;
 }
 
-async function printCanvas(canvas, { fit = true } = {}) {
-  const sized = fit && canvas.width !== targetWidth ? fitToPrintWidth(canvas, targetWidth) : canvas;
+async function printCanvas(source: HTMLCanvasElement | HTMLImageElement, { fit = true } = {}) {
+  // Images always go through a canvas (an <img> already at the target width
+  // used to reach canvasToRaster as-is and fail).
+  const keep = source instanceof HTMLCanvasElement && !(fit && source.width !== targetWidth);
+  const sized = keep ? source : fitToPrintWidth(source, targetWidth);
   showPreview(sized);
   const { bitmap, widthDots, heightDots } = canvasToRaster(sized);
   log(`Rasterised: ${widthDots}×${heightDots} (${bitmap.length} bytes)`);
@@ -59,21 +62,21 @@ async function printCanvas(canvas, { fit = true } = {}) {
   log('Print job sent.');
 }
 
-$('connect').addEventListener('click', async () => {
+$<HTMLButtonElement>('connect').addEventListener('click', async () => {
   try {
     await printer.connect();
     setConnectedUI(true);
   } catch (err) {
-    log(`ERROR: ${err.message}`);
+    log(`ERROR: ${errorMessage(err)}`);
   }
 });
 
-$('disconnect').addEventListener('click', async () => {
+$<HTMLButtonElement>('disconnect').addEventListener('click', async () => {
   await printer.disconnect();
   setConnectedUI(false);
 });
 
-$('print-text').addEventListener('click', async () => {
+$<HTMLButtonElement>('print-text').addEventListener('click', async () => {
   try {
     const canvas = textToCanvas(
       `Hello from the photoboot!\n\n${new Date().toLocaleString()}`,
@@ -81,52 +84,52 @@ $('print-text').addEventListener('click', async () => {
     );
     await printCanvas(canvas, { fit: false });
   } catch (err) {
-    log(`ERROR: ${err.message}`);
+    log(`ERROR: ${errorMessage(err)}`);
   }
 });
 
-$('print-pattern').addEventListener('click', async () => {
+$<HTMLButtonElement>('print-pattern').addEventListener('click', async () => {
   try {
     await printCanvas(testPatternCanvas(260, targetWidth), { fit: false });
   } catch (err) {
-    log(`ERROR: ${err.message}`);
+    log(`ERROR: ${errorMessage(err)}`);
   }
 });
 
-$('print-calibration').addEventListener('click', async () => {
+$<HTMLButtonElement>('print-calibration').addEventListener('click', async () => {
   try {
     const canvas = widthCalibrationCanvas({ maxDots: 640, step: 32 });
     log(`Calibration: 0–640 dots, ticks every 32. Report highest tick fully on sticker.`);
     await printCanvas(canvas, { fit: false });
   } catch (err) {
-    log(`ERROR: ${err.message}`);
+    log(`ERROR: ${errorMessage(err)}`);
   }
 });
 
-$('print-cal-narrow').addEventListener('click', async () => {
+$<HTMLButtonElement>('print-cal-narrow').addEventListener('click', async () => {
   try {
     const canvas = widthCalibrationCanvas({ maxDots: 576, step: 16 });
     log(`Fine calibration: 0–576 dots, ticks every 16.`);
     await printCanvas(canvas, { fit: false });
   } catch (err) {
-    log(`ERROR: ${err.message}`);
+    log(`ERROR: ${errorMessage(err)}`);
   }
 });
 
-$('width').addEventListener('change', (e) => {
-  const w = parseInt(e.target.value, 10);
+$<HTMLInputElement>('width').addEventListener('change', (e) => {
+  const w = parseInt((e.target as HTMLInputElement).value, 10);
   if (!Number.isFinite(w) || w <= 0 || w % 8 !== 0) {
     log(`ERROR: width must be a positive multiple of 8.`);
-    e.target.value = targetWidth;
+    (e.target as HTMLInputElement).value = String(targetWidth);
     return;
   }
   targetWidth = w;
   log(`Target width set to ${targetWidth} dots.`);
 });
 
-$('print-image').addEventListener('click', () => $('file').click());
-$('file').addEventListener('change', async (e) => {
-  const file = e.target.files?.[0];
+$<HTMLButtonElement>('print-image').addEventListener('click', () => $<HTMLInputElement>('file').click());
+$<HTMLInputElement>('file').addEventListener('change', async (e) => {
+  const file = (e.target as HTMLInputElement).files?.[0];
   if (!file) return;
   const img = new Image();
   img.src = URL.createObjectURL(file);
@@ -134,10 +137,10 @@ $('file').addEventListener('change', async (e) => {
   try {
     await printCanvas(img);
   } catch (err) {
-    log(`ERROR: ${err.message}`);
+    log(`ERROR: ${errorMessage(err)}`);
   } finally {
     URL.revokeObjectURL(img.src);
-    e.target.value = '';
+    (e.target as HTMLInputElement).value = '';
   }
 });
 
@@ -151,20 +154,20 @@ const DITHER_VARIANTS = [
 ];
 const STRIP_ROWS = 240; // ~20 mm per strip
 
-function photoStrip(img) {
+function photoStrip(img: HTMLImageElement) {
   const fitted = fitToPrintWidth(img, targetWidth);
   const rows = Math.min(STRIP_ROWS, fitted.height);
   const top = Math.round((fitted.height - rows) / 2);
   const canvas = document.createElement('canvas');
   canvas.width = targetWidth;
   canvas.height = rows;
-  canvas.getContext('2d').drawImage(fitted, 0, top, targetWidth, rows, 0, 0, targetWidth, rows);
+  ctx2d(canvas).drawImage(fitted, 0, top, targetWidth, rows, 0, 0, targetWidth, rows);
   return canvas;
 }
 
-$('print-dither').addEventListener('click', () => $('dither-file').click());
-$('dither-file').addEventListener('change', async (e) => {
-  const file = e.target.files?.[0];
+$<HTMLButtonElement>('print-dither').addEventListener('click', () => $<HTMLInputElement>('dither-file').click());
+$<HTMLInputElement>('dither-file').addEventListener('change', async (e) => {
+  const file = (e.target as HTMLInputElement).files?.[0];
   if (!file) return;
   const img = new Image();
   img.src = URL.createObjectURL(file);
@@ -185,10 +188,10 @@ $('dither-file').addEventListener('change', async (e) => {
     await printer.feed(80);
     log('Dither comparison sent.');
   } catch (err) {
-    log(`ERROR: ${err.message}`);
+    log(`ERROR: ${errorMessage(err)}`);
   } finally {
     URL.revokeObjectURL(img.src);
-    e.target.value = '';
+    (e.target as HTMLInputElement).value = '';
   }
 });
 
@@ -203,9 +206,9 @@ const SCREEN_VARIANTS = [
   { dither: 'floyd', noise: 0, label: 'Floyd–Steinberg' },
 ];
 
-$('compare-dither').addEventListener('click', () => $('compare-file').click());
-$('compare-file').addEventListener('change', async (e) => {
-  const file = e.target.files?.[0];
+$<HTMLButtonElement>('compare-dither').addEventListener('click', () => $<HTMLInputElement>('compare-file').click());
+$<HTMLInputElement>('compare-file').addEventListener('change', async (e) => {
+  const file = (e.target as HTMLInputElement).files?.[0];
   if (!file) return;
   const img = new Image();
   img.src = URL.createObjectURL(file);
@@ -229,13 +232,13 @@ $('compare-file').addEventListener('change', async (e) => {
     $('compare-wrap').scrollIntoView({ behavior: 'smooth' });
     log(`Rendered ${SCREEN_VARIANTS.length} dithering variants at ${targetWidth} dots wide.`);
   } catch (err) {
-    log(`ERROR: ${err.message}`);
+    log(`ERROR: ${errorMessage(err)}`);
   } finally {
     URL.revokeObjectURL(img.src);
-    e.target.value = '';
+    (e.target as HTMLInputElement).value = '';
   }
 });
 
-$('width').value = targetWidth;
+$<HTMLInputElement>('width').value = String(targetWidth);
 log('Ready. Click "Connect printer" to begin.');
 if (!navigator.bluetooth) log('Web Bluetooth is NOT available in this browser.');

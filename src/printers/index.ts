@@ -6,9 +6,21 @@
 // filtered to every known family at once, and picks the backend whose
 // name/UUID matches the selected device.
 
-import { PhomemoPrinter, PHOMEMO_NAME_PREFIXES, PHOMEMO_UUIDS } from './phomemo.js';
+import type { PrinterBase, PrinterOptions } from './base.ts';
+import { PHOMEMO_NAME_PREFIXES, PHOMEMO_UUIDS, PhomemoPrinter } from './phomemo.ts';
+import { type BleDevice, transport } from './transport.ts';
 
-export const PRINTERS = {
+export interface PrinterSpec {
+  label: string;
+  hint: string;
+  defaultWidthDots: number;
+  headWidthDots: number;
+  namePrefixes: string[];
+  uuids: { service: string; write: string }[];
+  create: (opts: PrinterOptions) => PrinterBase;
+}
+
+export const PRINTERS: Record<string, PrinterSpec> = {
   phomemo: {
     label: 'Phomemo (P2 / M02 / M03 / M04 / T02)',
     hint: 'ESC/POS over BLE. 203 dpi (M02 Pro: 384 dots) or 300 dpi (P2S: 576 dots).',
@@ -20,7 +32,7 @@ export const PRINTERS = {
   },
 };
 
-export function printerSpec(type) {
+export function printerSpec(type: string): PrinterSpec | null {
   return PRINTERS[type] ?? null;
 }
 
@@ -30,7 +42,7 @@ export function listPrinters() {
 
 // Match a BLE device to a backend. Checks name prefixes first, falling back
 // to its advertised service UUIDs if the name is empty.
-function detectType(device) {
+function detectType(device: BleDevice): string | null {
   const name = device.name || '';
   for (const [id, spec] of Object.entries(PRINTERS)) {
     if (spec.namePrefixes.some((p) => name.startsWith(p))) return id;
@@ -38,20 +50,19 @@ function detectType(device) {
   return null;
 }
 
-async function pickAnyDevice() {
-  if (!navigator.bluetooth) throw new Error('Web Bluetooth not available in this browser.');
-  const filters = [];
-  const optionalServices = new Set();
-  for (const spec of Object.values(PRINTERS)) {
-    for (const prefix of spec.namePrefixes) filters.push({ namePrefix: prefix });
-    for (const u of spec.uuids) optionalServices.add(u.service);
-  }
-  return navigator.bluetooth.requestDevice({ filters, optionalServices: [...optionalServices] });
+async function pickAnyDevice(): Promise<BleDevice> {
+  const ble = transport();
+  if (!ble.available) throw new Error('Bluetooth is not available here.');
+  const specs = Object.values(PRINTERS);
+  return ble.requestDevice({
+    namePrefixes: specs.flatMap((s) => s.namePrefixes),
+    services: [...new Set(specs.flatMap((s) => s.uuids.map((u) => u.service)))],
+  });
 }
 
 // Open a printer by type id, or 'auto' for name-based detection. Returns a
 // connected PrinterBase subclass.
-export async function connectPrinter(type, opts = {}) {
+export async function connectPrinter(type: string, opts: PrinterOptions = {}): Promise<PrinterBase> {
   if (type && type !== 'auto') {
     const spec = PRINTERS[type];
     if (!spec) throw new Error(`Unknown printer type: ${type}`);
@@ -70,7 +81,6 @@ export async function connectPrinter(type, opts = {}) {
   const spec = PRINTERS[detected];
   const printer = spec.create(opts);
   // Bypass the picker: we already have the device, go straight to attach.
-  printer.bindDisconnect?.(device);
   printer.log(`Auto-detected: ${spec.label}`);
   await printer.attach(device);
   return printer;

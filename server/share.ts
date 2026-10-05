@@ -16,18 +16,18 @@
 import { randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
-import { eventRoutes, verifyEventKey } from './events.js';
-import { baseUrl, clientIp, escapeHtml, page, readBody, sendHtml, sendJson } from './http.js';
-import { ID, TTL_DAYS, deletePhoto, expiresAt, hasRoomFor, jpgPath, photoMeta, savePhoto } from './photos.js';
+import { eventRoutes, verifyEventKey } from './events.ts';
+import { HttpError, type Next, type Req, type Res, baseUrl, clientIp, escapeHtml, page, readBody, sendHtml, sendJson } from './http.ts';
+import { ID, TTL_DAYS, deletePhoto, expiresAt, hasRoomFor, jpgPath, photoMeta, savePhoto } from './photos.ts';
 
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const UPLOAD_TOKEN = process.env.UPLOAD_TOKEN || '';
 const RATE_WINDOW_MS = 60 * 60 * 1000;
 const RATE_MAX = 120; // uploads per IP per hour without an event key
 
-const recent = new Map(); // ip → [timestamps]
+const recent = new Map<string, number[]>(); // ip → timestamps
 
-function rateLimited(ip) {
+function rateLimited(ip: string): boolean {
   const now = Date.now();
   const hits = (recent.get(ip) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
   hits.push(now);
@@ -36,7 +36,7 @@ function rateLimited(ip) {
   return hits.length > RATE_MAX;
 }
 
-async function upload(req, res) {
+async function upload(req: Req, res: Res): Promise<void> {
   const event = req.headers['x-event-id'] ? await verifyEventKey(req.headers['x-event-id'], req.headers['x-event-key']) : null;
   if (req.headers['x-event-id'] && !event) return sendJson(res, 401, { error: 'Unknown event or wrong event key.' });
   if (!event && UPLOAD_TOKEN && req.headers['x-upload-token'] !== UPLOAD_TOKEN) {
@@ -55,7 +55,7 @@ async function upload(req, res) {
   sendJson(res, 201, { id, url: `${baseUrl(req)}/s/${id}` });
 }
 
-async function serveJpg(id, res) {
+async function serveJpg(id: string, res: Res): Promise<void> {
   try {
     const { size } = await stat(jpgPath(id));
     res.writeHead(200, {
@@ -72,7 +72,7 @@ async function serveJpg(id, res) {
   }
 }
 
-async function sharePage(id, res) {
+async function sharePage(id: string, res: Res): Promise<void> {
   const meta = await photoMeta(id);
   if (!meta) {
     return sendHtml(res, 404, page('Photo not found', '<h1>This photo is gone</h1><p class="muted">It was deleted, or it expired.</p>'));
@@ -110,12 +110,12 @@ const SHARE_JPG = /^\/share\/([0-9a-f-]{36})\.jpg$/;
 const SHARE_PAGE = /^\/s\/([0-9a-f-]{36})$/;
 const SHARE_API = /^\/api\/share\/([0-9a-f-]{36})$/;
 
-async function route(req, res, next) {
-  const url = new URL(req.url, 'http://x');
+async function route(req: Req, res: Res, next: Next): Promise<void> {
+  const url = new URL(req.url ?? '/', 'http://x');
   const { pathname } = url;
   if (pathname === '/api/share' && req.method === 'POST') return upload(req, res);
 
-  let m;
+  let m: RegExpMatchArray | null;
   if (req.method === 'GET' && (m = pathname.match(SHARE_JPG)) && ID.test(m[1])) return serveJpg(m[1], res);
   if (req.method === 'GET' && (m = pathname.match(SHARE_PAGE)) && ID.test(m[1])) return sharePage(m[1], res);
   if (req.method === 'DELETE' && (m = pathname.match(SHARE_API)) && ID.test(m[1])) {
@@ -126,10 +126,11 @@ async function route(req, res, next) {
   next();
 }
 
-export function shareMiddleware(req, res, next) {
-  route(req, res, next).catch((err) => {
-    if (!res.headersSent) sendJson(res, err.status || 500, { error: err.status ? err.message : 'Server error.' });
+export function shareMiddleware(req: Req, res: Res, next: Next): void {
+  route(req, res, next).catch((err: unknown) => {
+    const known = err instanceof HttpError;
+    if (!res.headersSent) sendJson(res, known ? err.status : 500, { error: known ? err.message : 'Server error.' });
     else res.end();
-    if (!err.status) console.error(err);
+    if (!known) console.error(err);
   });
 }

@@ -9,7 +9,7 @@ export const LANGUAGES = [
   { id: 'fr', label: 'Français' },
 ];
 
-export const STRINGS = {
+export const STRINGS: Record<string, Record<string, string>> = {
   en: {
     takePhoto: 'Take photo',
     timer: 'Timer',
@@ -108,11 +108,13 @@ export const STRINGS = {
 // Keys shown in the settings "Wording" editor, in a sensible order.
 export const STRING_KEYS = Object.keys(STRINGS.en);
 
-export function translator(config) {
-  const lang = STRINGS[config.language] ?? STRINGS.en;
+export type Translate = (key: string, vars?: Record<string, string | number>) => string;
+
+export function translator(config: { language?: string; texts?: Record<string, string> }): Translate {
+  const lang = STRINGS[config.language ?? 'en'] ?? STRINGS.en;
   const overrides = config.texts ?? {};
   return (key, vars = {}) => {
     const text = overrides[key]?.trim() || lang[key] || STRINGS.en[key] || key;
-    return text.replace(/\{(\w+)\}/g, (_, name) => String(vars[name] ?? ''));
+    return text.replace(/\{(\w+)\}/g, (_: string, name: string) => String(vars[name] ?? ''));
   };
 }

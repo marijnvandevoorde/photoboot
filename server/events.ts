@@ -12,30 +12,50 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { escapeHtml, page, readJson, sendHtml, sendJson } from './http.js';
-import { SHARE_DIR, TTL_DAYS, deletePhoto, jpgPath, listPhotos } from './photos.js';
-import { crc32 } from './zip.js';
+import { HttpError, type Req, type Res, escapeHtml, page, readJson, sendHtml, sendJson } from './http.ts';
+import { SHARE_DIR, TTL_DAYS, deletePhoto, jpgPath, listPhotos } from './photos.ts';
+import { crc32 } from './zip.ts';
 
 const EVENTS_DIR = path.resolve(process.env.EVENTS_DIR || path.join(SHARE_DIR, '..', 'events'));
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const MAX_EVENT_BYTES = 10 * 1024 * 1024; // config + template images as data URLs
 const EVENT_ID = /^[\w-]{6,32}$/;
 
-const newKey = (bytes) => randomBytes(bytes).toString('base64url');
-const eventFile = (id) => path.join(EVENTS_DIR, `${id}.json`);
+const newKey = (bytes: number) => randomBytes(bytes).toString('base64url');
+const eventFile = (id: string) => path.join(EVENTS_DIR, `${id}.json`);
 
-function safeEqual(a, b) {
+// Stats as a booth reports them (see src/stats.ts); only numbers are summed.
+type DeviceStats = Partial<Record<(typeof STAT_FIELDS)[number], number>> & { byHour?: Record<string, number> };
+
+export interface EventImages {
+  header: string | null;
+  footer: string | null;
+}
+
+export interface StoredEvent {
+  id: string;
+  name: string;
+  config: Record<string, unknown>;
+  images: EventImages;
+  created: string;
+  updated: string;
+  setupKey: string;
+  galleryKey: string;
+  stats: Record<string, DeviceStats>;
+}
+
+function safeEqual(a: unknown, b: unknown): boolean {
   const x = Buffer.from(String(a));
   const y = Buffer.from(String(b));
   return x.length === y.length && x.length > 0 && timingSafeEqual(x, y);
 }
 
-function isAdmin(req) {
+function isAdmin(req: Req): boolean {
   const m = String(req.headers.authorization || '').match(/^Bearer (.+)$/);
   return !!ADMIN_TOKEN && !!m && safeEqual(m[1], ADMIN_TOKEN);
 }
 
-async function readEvent(id) {
+async function readEvent(id: string): Promise<StoredEvent | null> {
   if (!EVENT_ID.test(id)) return null;
   try {
     return JSON.parse(await readFile(eventFile(id), 'utf8'));
@@ -44,22 +64,23 @@ async function readEvent(id) {
   }
 }
 
-async function writeEvent(ev) {
+async function writeEvent(ev: StoredEvent): Promise<void> {
   await mkdir(EVENTS_DIR, { recursive: true });
   await writeFile(eventFile(ev.id), JSON.stringify(ev));
 }
 
 // Used by the upload route: is this a real event with this setup key?
-export async function verifyEventKey(id, key) {
+export async function verifyEventKey(id: unknown, key: unknown): Promise<StoredEvent | null> {
   const ev = await readEvent(String(id || ''));
   return ev && safeEqual(key, ev.setupKey) ? ev : null;
 }
 
-const STAT_FIELDS = ['sessions', 'prints', 'stickers', 'shares', 'failedPrints', 'printedMm'];
+const STAT_FIELDS = ['sessions', 'prints', 'stickers', 'shares', 'failedPrints', 'printedMm'] as const;
 
-function sumStats(byDevice = {}) {
-  const total = Object.fromEntries(STAT_FIELDS.map((f) => [f, 0]));
-  total.byHour = {};
+type Totals = Record<(typeof STAT_FIELDS)[number], number> & { byHour: Record<string, number>; booths: number };
+
+function sumStats(byDevice: Record<string, DeviceStats> = {}): Totals {
+  const total: Totals = { sessions: 0, prints: 0, stickers: 0, shares: 0, failedPrints: 0, printedMm: 0, byHour: {}, booths: 0 };
   for (const s of Object.values(byDevice)) {
     for (const f of STAT_FIELDS) total[f] += Number(s?.[f]) || 0;
     for (const [h, n] of Object.entries(s?.byHour ?? {})) total.byHour[h] = (total.byHour[h] ?? 0) + (Number(n) || 0);
@@ -68,13 +89,19 @@ function sumStats(byDevice = {}) {
   return total;
 }
 
-function setupOf(body) {
-  if (!body || typeof body.config !== 'object') {
-    throw Object.assign(new Error('Expected { name, config, images }.'), { status: 400 });
+interface SetupBody {
+  name?: unknown;
+  config?: unknown;
+  images?: { header?: string | null; footer?: string | null };
+}
+
+function setupOf(body: SetupBody | null): Pick<StoredEvent, 'name' | 'config' | 'images'> {
+  if (!body || typeof body.config !== 'object' || body.config === null) {
+    throw new HttpError(400, 'Expected { name, config, images }.');
   }
   return {
     name: String(body.name || 'Untitled event').slice(0, 120),
-    config: body.config,
+    config: body.config as Record<string, unknown>,
     images: { header: body.images?.header ?? null, footer: body.images?.footer ?? null },
   };
 }
@@ -85,7 +112,7 @@ const API = /^\/api\/events(?:\/([\w-]+))?(\/stats)?$/;
 const GALLERY = /^\/g\/([\w-]+)\/([\w-]+)(\/photos\.zip)?$/;
 
 // Returns true when it handled the request.
-export async function eventRoutes(req, res, url) {
+export async function eventRoutes(req: Req, res: Res, url: URL): Promise<boolean> {
   const api = url.pathname.match(API);
   if (api) {
     await apiRoute(req, res, api[1], !!api[2]);
@@ -106,7 +133,7 @@ export async function eventRoutes(req, res, url) {
   return false;
 }
 
-async function apiRoute(req, res, id, isStats) {
+async function apiRoute(req: Req, res: Res, id: string | undefined, isStats: boolean): Promise<void> {
   const { method } = req;
 
   if (!id) {
@@ -114,7 +141,7 @@ async function apiRoute(req, res, id, isStats) {
     if (!isAdmin(req)) return sendJson(res, 401, { error: 'Wrong admin token.' });
     if (method === 'GET') return sendJson(res, 200, { events: await listEvents() });
     if (method === 'POST') {
-      const setup = setupOf(await readJson(req, MAX_EVENT_BYTES));
+      const setup = setupOf(await readJson<SetupBody>(req, MAX_EVENT_BYTES));
       const now = new Date().toISOString();
       const ev = { id: newKey(9), ...setup, created: now, updated: now, setupKey: newKey(16), galleryKey: newKey(16), stats: {} };
       await writeEvent(ev);
@@ -130,9 +157,9 @@ async function apiRoute(req, res, id, isStats) {
   if (isStats) {
     if (method !== 'POST') return sendJson(res, 405, { error: 'Method not allowed.' });
     if (!booth) return sendJson(res, 401, { error: 'Wrong event key.' });
-    const { device, stats } = await readJson(req, 64 * 1024);
+    const { device, stats } = await readJson<{ device?: unknown; stats?: DeviceStats }>(req, 64 * 1024);
     if (typeof device !== 'string' || !/^[\w-]{1,64}$/.test(device)) return sendJson(res, 400, { error: 'Bad device id.' });
-    ev.stats = { ...ev.stats, [device]: stats };
+    ev.stats = { ...ev.stats, [device]: stats ?? {} };
     await writeEvent(ev);
     return sendJson(res, 200, { ok: true });
   }
@@ -143,7 +170,7 @@ async function apiRoute(req, res, id, isStats) {
   }
   if (!isAdmin(req)) return sendJson(res, 401, { error: 'Wrong admin token.' });
   if (method === 'PUT') {
-    Object.assign(ev, setupOf(await readJson(req, MAX_EVENT_BYTES)), { updated: new Date().toISOString() });
+    Object.assign(ev, setupOf(await readJson<SetupBody>(req, MAX_EVENT_BYTES)), { updated: new Date().toISOString() });
     await writeEvent(ev);
     return sendJson(res, 200, { ok: true });
   }
@@ -178,7 +205,7 @@ async function listEvents() {
 
 // ---------- gallery ----------
 
-async function sendGallery(res, ev, base) {
+async function sendGallery(res: Res, ev: StoredEvent, base: string): Promise<void> {
   const photos = await listPhotos({ event: ev.id });
   const s = sumStats(ev.stats);
   const busiest = Object.entries(s.byHour).sort((a, b) => b[1] - a[1])[0];
@@ -209,7 +236,7 @@ ${photos.length ? `<div class="actions"><a class="btn" href="${escapeHtml(base)}
 }
 
 // Streams a stored (uncompressed) ZIP, one photo in memory at a time.
-async function sendZip(res, ev) {
+async function sendZip(res: Res, ev: StoredEvent): Promise<void> {
   const photos = await listPhotos({ event: ev.id });
   const slug = ev.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || ev.id;
   res.writeHead(200, {
@@ -217,8 +244,9 @@ async function sendZip(res, ev) {
     'Content-Disposition': `attachment; filename="${slug}.zip"`,
     'Cache-Control': 'no-store',
   });
-  const write = (buf) => new Promise((resolve) => (res.write(buf) ? resolve() : res.once('drain', resolve)));
-  const central = [];
+  const write = (buf: Buffer) =>
+    new Promise<void>((resolve) => (res.write(buf) ? resolve() : res.once('drain', () => resolve())));
+  const central: Buffer[] = [];
   let offset = 0;
   for (const [i, p] of photos.entries()) {
     const data = await readFile(jpgPath(p.id)).catch(() => null);

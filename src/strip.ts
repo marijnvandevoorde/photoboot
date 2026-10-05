@@ -13,10 +13,12 @@
 // guest picked. This step is pure composition: no dithering happens here
 // except on the (vector) header/footer canvases, which get a 50% threshold.
 
-import { whiteCanvas } from './effects.js';
-import { canvasToRaster, rasterToCanvas } from './raster.js';
+import { whiteCanvas } from './effects.ts';
+import { canvasToRaster, rasterToCanvas } from './raster.ts';
+import { ctx2d } from './dom.ts';
+import type { Raster, Template } from './types.ts';
 
-export function composeStrip(shotRasters, template, stickerWidth) {
+export function composeStrip(shotRasters: Raster[], template: Template, stickerWidth: number): Raster {
   if (!shotRasters?.length) throw new Error('composeStrip needs at least one shot');
   if (stickerWidth % 8 !== 0) throw new Error('stickerWidth must be a multiple of 8');
 
@@ -33,7 +35,7 @@ export function composeStrip(shotRasters, template, stickerWidth) {
   const totalHeight = headerH + topPad + shotHeight + gaps + botPad + footerH;
 
   const canvas = whiteCanvas(stickerWidth, totalHeight);
-  const ctx = canvas.getContext('2d');
+  const ctx = ctx2d(canvas);
 
   let y = 0;
   if (header) {
@@ -60,7 +62,12 @@ export function composeStrip(shotRasters, template, stickerWidth) {
 // The colour keepsake: the same layout as the sticker (header, shots, gaps,
 // footer, and the unprintable side margins as white paper) but in colour, at
 // roughly camera resolution. `twist` is the guest's twist function, if any.
-export function composeColour(shots, template, stickerWidth, { marginDots = 24, twist = null } = {}) {
+export function composeColour(
+  shots: HTMLCanvasElement[],
+  template: Template,
+  stickerWidth: number,
+  { marginDots = 24, twist = null }: { marginDots?: number; twist?: ((c: HTMLCanvasElement) => HTMLCanvasElement) | null } = {}
+): HTMLCanvasElement {
   const scale = Math.max(1, Math.min(3, shots[0].width / stickerWidth));
   const W = Math.round((stickerWidth * scale) / 8) * 8;
   const k = W / stickerWidth;
@@ -71,7 +78,7 @@ export function composeColour(shots, template, stickerWidth, { marginDots = 24, 
     const c = document.createElement('canvas');
     c.width = photoW;
     c.height = Math.round((shot.height * photoW) / shot.width);
-    c.getContext('2d').drawImage(shot, 0, 0, c.width, c.height);
+    ctx2d(c).drawImage(shot, 0, 0, c.width, c.height);
     return twist ? twist(c) : c;
   });
   const header = template.buildHeader?.(W) ?? null;
@@ -83,7 +90,7 @@ export function composeColour(shots, template, stickerWidth, { marginDots = 24, 
     (header?.height ?? 0) + topPad + photos.reduce((s, p) => s + p.height, 0) + gap * (photos.length - 1) + botPad + (footer?.height ?? 0);
 
   const canvas = whiteCanvas(W + 2 * margin, height);
-  const ctx = canvas.getContext('2d');
+  const ctx = ctx2d(canvas);
   let y = 0;
   if (header) {
     ctx.drawImage(header, margin, y);

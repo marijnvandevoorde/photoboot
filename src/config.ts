@@ -3,7 +3,58 @@
 
 const STORAGE_KEY = 'photoboot:config';
 
-export const DEFAULTS = {
+export interface ServerEvent {
+  id: string;
+  key: string;
+  name?: string;
+}
+
+export interface TextTemplateConfig {
+  title: string;
+  line1: string;
+  line2: string;
+  font: string;
+}
+
+export type LivePreview = 'off' | 'choice' | 'always';
+
+export interface Config {
+  printerType: string;
+  paperWidthDots: number;
+  printDensity: number;
+  autoPrint: boolean;
+  copies: number;
+  maxPrintsPerSession: number;
+  rollLengthMm: number;
+  paperWarnMm: number;
+  filterEnabled: boolean;
+  allowedStyles: string[] | null;
+  allowedTwists: string[] | null;
+  defaultStyle: string;
+  defaultTwist: string;
+  livePreview: LivePreview;
+  shotCount: number;
+  guestShotChoice: boolean;
+  defaultDelay: number;
+  tapAnywhere: boolean;
+  sound: boolean;
+  reviewTimeoutSec: number;
+  doneTimeoutSec: number;
+  attractAfterSec: number;
+  attractShowPhotos: boolean;
+  eventName: string;
+  language: string;
+  texts: Record<string, string>;
+  keepLocalCopies: boolean;
+  uploadToken: string;
+  serverEvent: ServerEvent | null;
+  templateId: string;
+  templateConfig: { text?: Partial<TextTemplateConfig>; [id: string]: unknown };
+  adminPasswordHash: string;
+  adminPassword: string;
+}
+
+export const DEFAULTS: Config = {
   // Printer: 'auto' tries to recognise the device, else a known type id.
   printerType: 'auto',
   // Print width in dots. Must be a multiple of 8. 552 = Phomemo P2S booth default
@@ -65,28 +116,30 @@ export const DEFAULTS = {
   adminPassword: '',
 };
 
-let cache = null;
+let cache: Config | null = null;
 
-function read() {
+function read(): Config {
   if (cache) return cache;
+  let config: Config;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    cache = raw ? { ...DEFAULTS, ...JSON.parse(raw) } : { ...DEFAULTS };
+    config = raw ? { ...DEFAULTS, ...JSON.parse(raw) } : { ...DEFAULTS };
   } catch {
-    cache = { ...DEFAULTS };
+    config = { ...DEFAULTS };
   }
-  return cache;
+  cache = config;
+  return config;
 }
 
-export function getConfig() {
+export function getConfig(): Config {
   return { ...read() };
 }
 
-export function get(key) {
+export function get<K extends keyof Config>(key: K): Config[K] {
   return read()[key];
 }
 
-export function setConfig(updates) {
+export function setConfig(updates: Partial<Config>): Config {
   const next = { ...read(), ...updates };
   cache = next;
   try {
@@ -97,7 +150,7 @@ export function setConfig(updates) {
   return next;
 }
 
-export function resetConfig() {
+export function resetConfig(): Config {
   cache = { ...DEFAULTS };
   try {
     localStorage.removeItem(STORAGE_KEY);
@@ -109,17 +162,18 @@ export function resetConfig() {
 
 // Keys that belong to this device, not to an event: left out of profiles,
 // exports and server events.
-export const DEVICE_KEYS = ['serverEvent', 'printerType'];
+export const DEVICE_KEYS = ['serverEvent', 'printerType'] as const;
+export type PortableConfig = Omit<Config, (typeof DEVICE_KEYS)[number]>;
 
-export function portableConfig(config = read()) {
-  const out = { ...config };
+export function portableConfig(config: Partial<Config> = read()): Partial<PortableConfig> {
+  const out: Partial<Config> = { ...config };
   for (const key of DEVICE_KEYS) delete out[key];
   return out;
 }
 
 // Stats and local photos are grouped per event: the server event if this
 // booth was set up from one, else the event name, else 'default'.
-export function eventKey(config = read()) {
+export function eventKey(config: Pick<Config, 'serverEvent' | 'eventName'> = read()): string {
   if (config.serverEvent?.id) return config.serverEvent.id;
   const slug = (config.eventName || '')
     .toLowerCase()

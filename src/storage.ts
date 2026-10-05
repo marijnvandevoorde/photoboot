@@ -1,14 +1,14 @@
 // Tiny IndexedDB key/value store, used for binary blobs that are too big for
-// localStorage (template header/footer images). Keys are strings; values can
-// be any structured-cloneable object, including Blobs.
+// localStorage (template images, saved setups, local photos). Keys are
+// strings; values can be any structured-cloneable object, including Blobs.
 
 const DB_NAME = 'photoboot';
 const DB_VERSION = 1;
 const STORE = 'blobs';
 
-let dbPromise = null;
+let dbPromise: Promise<IDBDatabase> | null = null;
 
-function openDb() {
+function openDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
@@ -36,15 +36,14 @@ function closeDb() {
 // A page kept in the back/forward cache with an open connection can stall
 // the next page's open (seen when leaving settings right after first load),
 // so close on the way out; the next call reopens.
-addEventListener('pagehide', closeDb);
+if (typeof addEventListener === 'function') addEventListener('pagehide', closeDb);
 
-async function tx(mode, run) {
+async function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORE, mode);
-    const store = transaction.objectStore(STORE);
     // run() returns an IDBRequest; a missing key resolves to undefined.
-    const request = run(store);
+    const request = run(transaction.objectStore(STORE));
     transaction.oncomplete = () => resolve(request.result);
     transaction.onerror = () => reject(transaction.error);
     transaction.onabort = () => reject(transaction.error);
@@ -52,16 +51,17 @@ async function tx(mode, run) {
 }
 
 export const kv = {
-  async get(key) {
+  get<T = unknown>(key: string): Promise<T | undefined> {
     return tx('readonly', (store) => store.get(key));
   },
-  async set(key, value) {
-    return tx('readwrite', (store) => store.put(value, key));
+  async set(key: string, value: unknown): Promise<void> {
+    await tx('readwrite', (store) => store.put(value, key));
   },
-  async delete(key) {
-    return tx('readwrite', (store) => store.delete(key));
+  async delete(key: string): Promise<void> {
+    await tx('readwrite', (store) => store.delete(key));
   },
-  async keys() {
-    return tx('readonly', (store) => store.getAllKeys());
+  async keys(): Promise<string[]> {
+    const keys = await tx('readonly', (store) => store.getAllKeys());
+    return keys.filter((k): k is string => typeof k === 'string');
   },
 };

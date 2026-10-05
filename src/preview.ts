@@ -3,16 +3,16 @@
 // 1 printer dot per device pixel. Also offers a filter × twist grid for
 // A/B'ing looks without burning paper.
 
-import { getConfig } from './config.js';
-import { DEFAULT_LOOK, PHOTO_STYLES, PHOTO_TWISTS, renderSticker } from './photo.js';
-import { rasterToCanvas } from './raster.js';
-import { loadTemplate, BUILT_IN_TEMPLATES } from './templates.js';
-
-const $ = (id) => document.getElementById(id);
+import { getConfig } from './config.ts';
+import { DEFAULT_LOOK, PHOTO_STYLES, PHOTO_TWISTS, renderSticker } from './photo.ts';
+import { rasterToCanvas } from './raster.ts';
+import { loadTemplate, BUILT_IN_TEMPLATES } from './templates.ts';
+import { $, ctx2d } from './dom.ts';
+import type { ImageSource, Template } from './types.ts';
 
 const config = getConfig();
-let sample = null; // HTMLImageElement or HTMLCanvasElement
-let template = null;
+let sample: HTMLImageElement | HTMLCanvasElement | null = null;
+let template: Template | null = null;
 
 async function init() {
   template = await loadTemplate(config.templateId, config.templateConfig?.[config.templateId]);
@@ -33,57 +33,60 @@ function renderSummary() {
   $('config-summary').innerHTML = items.map((text) => `<li>${text}</li>`).join('');
 }
 
-$('pick-file').addEventListener('click', () => $('file').click());
-$('file').addEventListener('change', async (e) => {
-  const file = e.target.files?.[0];
+$<HTMLButtonElement>('pick-file').addEventListener('click', () => $<HTMLInputElement>('file').click());
+$<HTMLInputElement>('file').addEventListener('change', async (e) => {
+  const file = (e.target as HTMLInputElement).files?.[0];
   if (!file) return;
   const img = new Image();
   img.src = URL.createObjectURL(file);
   await img.decode();
   sample = img;
-  e.target.value = '';
+  (e.target as HTMLInputElement).value = '';
   await render();
 });
 
-$('use-sample').addEventListener('click', async () => {
+$<HTMLButtonElement>('use-sample').addEventListener('click', async () => {
   sample = await buildSyntheticSample();
   await render();
 });
 
-$('opt-filter').addEventListener('change', () => render());
+$<HTMLInputElement>('opt-filter').addEventListener('change', () => render());
 
 async function render() {
-  if (!sample) return;
-  const shots = Array.from({ length: Math.max(1, config.shotCount | 0) }, () => sample);
+  if (!sample || !template) return;
+  const shot = sample;
+  const shots: ImageSource[] = Array.from({ length: Math.max(1, config.shotCount | 0) }, () => shot);
   const look = config.filterEnabled ? DEFAULT_LOOK : { style: 'classic', twist: 'none' };
   const raster = renderSticker(shots, template, { stickerWidth: config.paperWidthDots, look });
 
   const canvas = rasterToCanvas(raster);
-  const preview = $('preview');
+  const preview = $<HTMLCanvasElement>('preview');
   preview.width = canvas.width;
   preview.height = canvas.height;
   const dpr = window.devicePixelRatio || 1;
   preview.style.width = `${canvas.width / dpr}px`;
   preview.style.height = `${canvas.height / dpr}px`;
-  preview.getContext('2d').drawImage(canvas, 0, 0);
+  ctx2d(preview).drawImage(canvas, 0, 0);
 
-  const mm = (dots) => (dots / 11.8).toFixed(1);
+  const mm = (dots: number) => (dots / 11.8).toFixed(1);
   $('preview-meta').textContent =
     `${raster.widthDots} × ${raster.heightDots} dots (~${mm(raster.widthDots)} × ${mm(raster.heightDots)} mm). ` +
     `1 screen pixel = 1 printer dot.`;
   $('status').textContent = `Rendered with ${config.shotCount} shot(s).`;
 
-  if ($('opt-filter').checked) await renderFilterGrid(shots);
+  if ($<HTMLInputElement>('opt-filter').checked) await renderFilterGrid(shots);
   else $('filter-grid-card').hidden = true;
 }
 
-async function renderFilterGrid(shots) {
+async function renderFilterGrid(shots: ImageSource[]) {
+  if (!template) return;
+  const tpl = template;
   const card = $('filter-grid-card');
   const grid = $('filter-grid');
   grid.replaceChildren();
   for (const style of PHOTO_STYLES) {
     for (const twist of PHOTO_TWISTS) {
-      const r = renderSticker(shots, template, {
+      const r = renderSticker(shots, tpl, {
         stickerWidth: config.paperWidthDots,
         look: { style: style.id, twist: twist.id },
       });
@@ -110,7 +113,7 @@ async function buildSyntheticSample() {
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
-  const ctx = canvas.getContext('2d');
+  const ctx = ctx2d(canvas);
 
   const bg = ctx.createLinearGradient(0, 0, w, h);
   bg.addColorStop(0, '#4a6fa5');

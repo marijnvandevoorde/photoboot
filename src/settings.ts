@@ -7,14 +7,14 @@
 // this URL isn't linked from anywhere public.
 
 import qrcode from 'qrcode-generator';
-import { deletePhotos, exportZip, photoEvents } from './archive.js';
-import { DEFAULTS, PAPER_PRESETS, eventKey, getConfig, portableConfig, resetConfig, setConfig } from './config.js';
-import { LANGUAGES, STRINGS, STRING_KEYS } from './i18n.js';
-import { PHOTO_STYLES, PHOTO_TWISTS } from './photo.js';
-import { listPrinters } from './printers/index.js';
-import { galleryUrl, getAdminToken, remote, setAdminToken, setupUrl } from './remote.js';
-import { getPaper, getStats, getStatus, newRoll, paperLeft, resetStats } from './stats.js';
-import { kv } from './storage.js';
+import { deletePhotos, exportZip, photoEvents } from './archive.ts';
+import { DEFAULTS, PAPER_PRESETS, eventKey, getConfig, portableConfig, resetConfig, setConfig } from './config.ts';
+import { LANGUAGES, STRINGS, STRING_KEYS } from './i18n.ts';
+import { PHOTO_STYLES, PHOTO_TWISTS } from './photo.ts';
+import { listPrinters } from './printers/index.ts';
+import { galleryUrl, getAdminToken, remote, setAdminToken, setupUrl } from './remote.ts';
+import { getPaper, getStats, getStatus, newRoll, paperLeft, resetStats } from './stats.ts';
+import { kv } from './storage.ts';
 import {
   BUILT_IN_TEMPLATES,
   TEXT_DEFAULTS,
@@ -25,40 +25,37 @@ import {
   importTemplateImages,
   saveTemplateImage,
   templateImageUrl,
-} from './templates.js';
+} from './templates.ts';
+import { $, errorMessage, option } from './dom.ts';
+import type { Config, TextTemplateConfig } from './config.ts';
+import type { EventSummary, Setup } from './remote.ts';
+import type { Slot } from './templates.ts';
 
-const $ = (id) => document.getElementById(id);
 
 let config = getConfig();
 
-function option(value, label) {
-  const opt = document.createElement('option');
-  opt.value = String(value);
-  opt.textContent = label;
-  return opt;
-}
 
 // ---------- auth ----------
 
 const AUTH_KEY = 'photoboot:admin-ok';
 
-async function sha256(text) {
+async function sha256(text: string): Promise<string> {
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
-const pinHash = (pin) => sha256(`photoboot:${pin}`);
+const pinHash = (pin: string) => sha256(`photoboot:${pin}`);
 
 function locked() {
   return (config.adminPasswordHash || config.adminPassword) && sessionStorage.getItem(AUTH_KEY) !== '1';
 }
 
-async function checkPin(pin) {
+async function checkPin(pin: string): Promise<boolean> {
   if (config.adminPasswordHash) return (await pinHash(pin)) === config.adminPasswordHash;
   return pin === config.adminPassword; // pre-hash configs
 }
 
-$('auth-submit').addEventListener('click', async () => {
-  if (await checkPin($('auth-password').value)) {
+$<HTMLButtonElement>('auth-submit').addEventListener('click', async () => {
+  if (await checkPin($<HTMLInputElement>('auth-password').value)) {
     sessionStorage.setItem(AUTH_KEY, '1');
     $('auth-error').hidden = true;
     start();
@@ -66,19 +63,19 @@ $('auth-submit').addEventListener('click', async () => {
     $('auth-error').hidden = false;
   }
 });
-$('auth-password').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') $('auth-submit').click();
+$<HTMLInputElement>('auth-password').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') $<HTMLButtonElement>('auth-submit').click();
 });
 
 // ---------- save ----------
 
-function save(updates) {
+function save(updates: Partial<Config>) {
   config = setConfig(updates);
   flashStatus('Saved ✓');
 }
 
-let statusTimer = null;
-function flashStatus(message, isError = false) {
+let statusTimer: ReturnType<typeof setTimeout> | undefined;
+function flashStatus(message: string, isError = false) {
   const box = $('save-status');
   box.textContent = message;
   box.classList.toggle('error', isError);
@@ -89,9 +86,16 @@ function flashStatus(message, isError = false) {
 
 // Two-way binding for simple inputs. `to`/`from` convert between the
 // config value and the input's value.
-function bind(id, key, { to = String, from = (v) => v, event = 'change' } = {}) {
-  const input = $(id);
-  const isCheck = input.type === 'checkbox';
+// `from` returns undefined for an invalid value, which restores the input.
+interface BindOptions {
+  to?: (value: unknown) => string;
+  from?: (value: string) => unknown;
+  event?: string;
+}
+
+function bind(id: string, key: keyof Config, { to = String, from = (v) => v, event = 'change' }: BindOptions = {}) {
+  const input = $<HTMLInputElement | HTMLSelectElement>(id);
+  const isCheck = input instanceof HTMLInputElement && input.type === 'checkbox';
   const fill = () => {
     if (isCheck) input.checked = !!config[key];
     else input.value = to(config[key]);
@@ -99,20 +103,20 @@ function bind(id, key, { to = String, from = (v) => v, event = 'change' } = {}) 
   input.addEventListener(event, () => {
     const value = isCheck ? input.checked : from(input.value);
     if (value === undefined) return fill();
-    save({ [key]: value });
+    save({ [key]: value } as Partial<Config>);
   });
   fillers.push(fill);
 }
-const fillers = [];
+const fillers: (() => void)[] = [];
 
-const num = (min, max = Infinity) => (v) => {
+const num = (min: number, max = Infinity) => (v: string) => {
   const n = Number(v);
   return Number.isFinite(n) && n >= min && n <= max ? n : undefined;
 };
 
 // ---------- tonight: status + counters ----------
 
-function fmtTime(iso) {
+function fmtTime(iso: string | null | undefined): string {
   return iso ? new Date(iso).toLocaleString() : '—';
 }
 
@@ -152,16 +156,18 @@ function renderStatus() {
   $('status-list').innerHTML = items.map((html) => `<li>${html}</li>`).join('');
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const ENTITIES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+
+function escapeHtml(s: unknown): string {
+  return String(s).replace(/[&<>"']/g, (c) => ENTITIES[c] ?? c);
 }
 
-$('new-roll').addEventListener('click', () => {
+$<HTMLButtonElement>('new-roll').addEventListener('click', () => {
   newRoll();
   renderStatus();
   flashStatus('Paper meter reset ✓');
 });
-$('reset-stats').addEventListener('click', () => {
+$<HTMLButtonElement>('reset-stats').addEventListener('click', () => {
   if (!confirm(`Reset the counters for “${eventKey(config)}”?`)) return;
   resetStats();
   renderStatus();
@@ -172,20 +178,20 @@ window.addEventListener('storage', (e) => {
 
 // ---------- event + profiles ----------
 
-$('language').replaceChildren(...LANGUAGES.map((l) => option(l.id, l.label)));
+$<HTMLSelectElement>('language').replaceChildren(...LANGUAGES.map((l) => option(l.id, l.label)));
 bind('event-name', 'eventName', { from: (v) => v.trim() });
 bind('language', 'language');
-$('event-name').addEventListener('change', () => {
+$<HTMLInputElement>('event-name').addEventListener('change', () => {
   renderStatus();
   renderLocalPhotos();
 });
-$('language').addEventListener('change', () => renderWording());
+$<HTMLSelectElement>('language').addEventListener('change', () => renderWording());
 
-async function currentSetup() {
+async function currentSetup(): Promise<Setup> {
   return { version: 1, name: config.eventName, config: portableConfig(config), images: await exportTemplateImages() };
 }
 
-async function applySetup(setup, extra = {}) {
+async function applySetup(setup: Setup | undefined, extra: Partial<Config> = {}) {
   if (!setup?.config) throw new Error('Not a Photoboot setup file.');
   const keep = { printerType: config.printerType, serverEvent: config.serverEvent };
   resetConfig();
@@ -196,33 +202,33 @@ async function applySetup(setup, extra = {}) {
 
 async function renderProfiles() {
   const keys = (await kv.keys()).filter((k) => typeof k === 'string' && k.startsWith('profile:'));
-  const list = $('profile-list');
+  const list = $<HTMLSelectElement>('profile-list');
   list.replaceChildren(...(keys.length ? keys.map((k) => option(k, k.slice(8))) : [option('', 'No saved setups')]));
-  $('profile-load').disabled = $('profile-delete').disabled = !keys.length;
+  $<HTMLButtonElement>('profile-load').disabled = $<HTMLButtonElement>('profile-delete').disabled = !keys.length;
 }
 
-$('profile-save').addEventListener('click', async () => {
+$<HTMLButtonElement>('profile-save').addEventListener('click', async () => {
   const name = prompt('Name for this setup:', config.eventName || '');
   if (!name?.trim()) return;
   await kv.set(`profile:${name.trim()}`, await currentSetup());
   await renderProfiles();
-  $('profile-list').value = `profile:${name.trim()}`;
+  $<HTMLSelectElement>('profile-list').value = `profile:${name.trim()}`;
   flashStatus('Setup saved ✓');
 });
-$('profile-load').addEventListener('click', async () => {
-  const key = $('profile-list').value;
+$<HTMLButtonElement>('profile-load').addEventListener('click', async () => {
+  const key = $<HTMLSelectElement>('profile-list').value;
   if (!key || !confirm(`Replace the current settings with “${key.slice(8)}”?`)) return;
   await applySetup(await kv.get(key));
   flashStatus('Setup loaded ✓');
 });
-$('profile-delete').addEventListener('click', async () => {
-  const key = $('profile-list').value;
+$<HTMLButtonElement>('profile-delete').addEventListener('click', async () => {
+  const key = $<HTMLSelectElement>('profile-list').value;
   if (!key || !confirm(`Delete the saved setup “${key.slice(8)}”?`)) return;
   await kv.delete(key);
   await renderProfiles();
 });
 
-function download(blob, filename) {
+function download(blob: Blob, filename: string) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = filename;
@@ -230,14 +236,14 @@ function download(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
 }
 
-$('export-file').addEventListener('click', async () => {
+$<HTMLButtonElement>('export-file').addEventListener('click', async () => {
   const setup = await currentSetup();
   download(new Blob([JSON.stringify(setup, null, 2)], { type: 'application/json' }), `photoboot-${eventKey(config)}.json`);
 });
-$('import-file').addEventListener('click', () => $('import-picker').click());
-$('import-picker').addEventListener('change', async (e) => {
-  const file = e.target.files?.[0];
-  e.target.value = '';
+$<HTMLButtonElement>('import-file').addEventListener('click', () => $<HTMLInputElement>('import-picker').click());
+$<HTMLInputElement>('import-picker').addEventListener('change', async (e) => {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  (e.target as HTMLInputElement).value = '';
   if (!file) return;
   try {
     const setup = JSON.parse(await file.text());
@@ -245,7 +251,7 @@ $('import-picker').addEventListener('change', async (e) => {
     await applySetup(setup);
     flashStatus('Setup imported ✓');
   } catch (err) {
-    flashStatus(`Import failed: ${err.message}`, true);
+    flashStatus(`Import failed: ${errorMessage(err)}`, true);
   }
 });
 
@@ -255,42 +261,45 @@ const printerItems = [
   { id: 'auto', label: 'Auto-detect', hint: 'Picks the right driver from the device name after you tap Connect.' },
   ...listPrinters().map((p) => ({ id: p.id, label: p.label, hint: p.hint })),
 ];
-$('printer-type').replaceChildren(...printerItems.map(({ id, label }) => option(id, label)));
+$<HTMLSelectElement>('printer-type').replaceChildren(...printerItems.map(({ id, label }) => option(id, label)));
 bind('printer-type', 'printerType');
 const printerHint = () =>
-  ($('printer-hint').textContent = printerItems.find((i) => i.id === $('printer-type').value)?.hint ?? '');
-$('printer-type').addEventListener('change', printerHint);
+  ($('printer-hint').textContent = printerItems.find((i) => i.id === $<HTMLSelectElement>('printer-type').value)?.hint ?? '');
+$<HTMLSelectElement>('printer-type').addEventListener('change', printerHint);
 fillers.push(printerHint);
 
 // ---------- paper ----------
 
 const presetOptions = [...PAPER_PRESETS, { dots: -1, label: 'Custom…' }];
-$('paper-preset').replaceChildren(...presetOptions.map(({ dots, label }) => option(dots, label)));
+$<HTMLSelectElement>('paper-preset').replaceChildren(...presetOptions.map(({ dots, label }) => option(dots, label)));
 fillers.push(() => {
   const current = presetOptions.find((o) => o.dots === config.paperWidthDots);
-  $('paper-preset').value = String(current ? current.dots : -1);
-  $('paper-width').value = String(config.paperWidthDots);
+  $<HTMLSelectElement>('paper-preset').value = String(current ? current.dots : -1);
+  $<HTMLInputElement>('paper-width').value = String(config.paperWidthDots);
 });
-$('paper-preset').addEventListener('change', () => {
-  const v = Number($('paper-preset').value);
+$<HTMLSelectElement>('paper-preset').addEventListener('change', () => {
+  const v = Number($<HTMLSelectElement>('paper-preset').value);
   if (v > 0) {
-    $('paper-width').value = String(v);
+    $<HTMLInputElement>('paper-width').value = String(v);
     save({ paperWidthDots: v });
   }
 });
-$('paper-width').addEventListener('change', (e) => {
-  const v = parseInt(e.target.value, 10);
+$<HTMLInputElement>('paper-width').addEventListener('change', (e) => {
+  const v = parseInt((e.target as HTMLInputElement).value, 10);
   if (!Number.isFinite(v) || v <= 0 || v % 8 !== 0) {
-    e.target.value = String(config.paperWidthDots);
+    (e.target as HTMLInputElement).value = String(config.paperWidthDots);
     flashStatus('Width must be a positive multiple of 8.', true);
     return;
   }
   const match = PAPER_PRESETS.find((p) => p.dots === v);
-  $('paper-preset').value = String(match ? match.dots : -1);
+  $<HTMLSelectElement>('paper-preset').value = String(match ? match.dots : -1);
   save({ paperWidthDots: v });
 });
 bind('density', 'printDensity', { from: Number });
-const metres = { to: (mm) => String((mm || 0) / 1000), from: (v) => (num(0)(v) === undefined ? undefined : Math.round(Number(v) * 1000)) };
+const metres: BindOptions = {
+  to: (mm) => String((Number(mm) || 0) / 1000),
+  from: (v) => (num(0)(v) === undefined ? undefined : Math.round(Number(v) * 1000)),
+};
 bind('roll-length', 'rollLengthMm', metres);
 bind('paper-warn', 'paperWarnMm', metres);
 for (const id of ['roll-length', 'paper-warn']) $(id).addEventListener('change', renderStatus);
@@ -310,13 +319,21 @@ bind('sound', 'sound');
 
 bind('filter-enabled', 'filterEnabled');
 bind('live-preview', 'livePreview');
+const LOOK_SETTINGS: {
+  boxId: string;
+  key: 'allowedStyles' | 'allowedTwists';
+  list: { id: string; label: string }[];
+  defaultId: string;
+  defaultKey: 'defaultStyle' | 'defaultTwist';
+}[] = [
+  { boxId: 'allowed-styles', key: 'allowedStyles', list: PHOTO_STYLES, defaultId: 'default-style', defaultKey: 'defaultStyle' },
+  { boxId: 'allowed-twists', key: 'allowedTwists', list: PHOTO_TWISTS, defaultId: 'default-twist', defaultKey: 'defaultTwist' },
+];
+
 function renderLooks() {
   $('looks-config').hidden = !config.filterEnabled;
-  for (const [boxId, key, list, defaultId, defaultKey] of [
-    ['allowed-styles', 'allowedStyles', PHOTO_STYLES, 'default-style', 'defaultStyle'],
-    ['allowed-twists', 'allowedTwists', PHOTO_TWISTS, 'default-twist', 'defaultTwist'],
-  ]) {
-    const allowed = Array.isArray(config[key]) ? config[key] : list.map((o) => o.id);
+  for (const { boxId, key, list, defaultId, defaultKey } of LOOK_SETTINGS) {
+    const allowed = config[key] ?? list.map((o) => o.id);
     $(boxId).replaceChildren(
       ...list.map((o) => {
         const label = document.createElement('label');
@@ -338,21 +355,21 @@ function renderLooks() {
         return label;
       })
     );
-    const select = $(defaultId);
+    const select = $<HTMLSelectElement>(defaultId);
     select.replaceChildren(...list.filter((o) => allowed.includes(o.id)).map((o) => option(o.id, o.label)));
     select.value = allowed.includes(config[defaultKey]) ? config[defaultKey] : allowed[0];
   }
 }
-$('filter-enabled').addEventListener('change', renderLooks);
-$('default-style').addEventListener('change', (e) => save({ defaultStyle: e.target.value }));
-$('default-twist').addEventListener('change', (e) => save({ defaultTwist: e.target.value }));
+$<HTMLInputElement>('filter-enabled').addEventListener('change', renderLooks);
+$<HTMLSelectElement>('default-style').addEventListener('change', (e) => save({ defaultStyle: (e.target as HTMLInputElement).value }));
+$<HTMLSelectElement>('default-twist').addEventListener('change', (e) => save({ defaultTwist: (e.target as HTMLInputElement).value }));
 fillers.push(renderLooks);
 
 // ---------- template ----------
 
-$('template-id').replaceChildren(...BUILT_IN_TEMPLATES.map(({ id, label }) => option(id, label)));
+$<HTMLSelectElement>('template-id').replaceChildren(...BUILT_IN_TEMPLATES.map(({ id, label }) => option(id, label)));
 bind('template-id', 'templateId');
-$('template-id').addEventListener('change', () => renderTemplateConfig());
+$<HTMLSelectElement>('template-id').addEventListener('change', () => renderTemplateConfig());
 fillers.push(() => renderTemplateConfig());
 
 function renderTemplateConfig() {
@@ -362,11 +379,11 @@ function renderTemplateConfig() {
   if (config.templateId === 'text') renderTextConfig(box);
 }
 
-function renderTextConfig(box) {
+function renderTextConfig(box: HTMLElement) {
   const current = { ...TEXT_DEFAULTS, ...config.templateConfig?.text };
-  const update = (key, value) =>
+  const update = (key: keyof TextTemplateConfig, value: string) =>
     save({ templateConfig: { ...config.templateConfig, text: { ...TEXT_DEFAULTS, ...config.templateConfig?.text, [key]: value } } });
-  const field = (key, label, placeholder) => {
+  const field = (key: keyof TextTemplateConfig, label: string, placeholder: string) => {
     const wrap = document.createElement('label');
     wrap.textContent = label;
     const input = document.createElement('input');
@@ -396,7 +413,7 @@ function renderTextConfig(box) {
   );
 }
 
-function renderCustomConfig(box) {
+function renderCustomConfig(box: HTMLElement) {
   const wrap = document.createElement('div');
   wrap.className = 'template-slots';
   wrap.append(templateSlot('header', 'Header image'), templateSlot('footer', 'Footer image'));
@@ -410,7 +427,7 @@ function renderCustomConfig(box) {
   box.append(hint);
 }
 
-function templateSlot(slot, title) {
+function templateSlot(slot: Slot, title: string) {
   const box = document.createElement('div');
   box.className = 'template-slot';
   const h = document.createElement('h3');
@@ -436,10 +453,10 @@ function templateSlot(slot, title) {
   box.append(h, img, row);
 
   picker.addEventListener('change', async (e) => {
-    const file = e.target.files?.[0];
+    const file = (e.target as HTMLInputElement).files?.[0];
     if (!file) return;
     await saveTemplateImage(slot, file);
-    e.target.value = '';
+    (e.target as HTMLInputElement).value = '';
     await refreshPreview();
     flashStatus('Image saved ✓');
   });
@@ -448,7 +465,7 @@ function templateSlot(slot, title) {
     const has = await hasTemplateImage(slot);
     img.hidden = !has;
     clearBtn.disabled = !has;
-    if (has) img.src = await templateImageUrl(slot);
+    if (has) img.src = (await templateImageUrl(slot)) ?? '';
     else img.removeAttribute('src');
   }
   refreshPreview();
@@ -489,28 +506,28 @@ fillers.push(renderWording);
 bind('keep-local', 'keepLocalCopies');
 
 async function renderLocalPhotos() {
-  const counts = await photoEvents().catch(() => ({}));
+  const counts = await photoEvents().catch((): Record<string, number> => ({}));
   const current = eventKey(config);
   const items = [`This event (“${escapeHtml(current)}”): <strong>${counts[current] ?? 0}</strong> photos`];
   for (const [ev, n] of Object.entries(counts)) if (ev !== current) items.push(`${escapeHtml(ev)}: ${n} photos`);
   $('local-photos').innerHTML = items.map((html) => `<li>${html}</li>`).join('');
-  $('download-zip').disabled = $('delete-local').disabled = !counts[current];
+  $<HTMLButtonElement>('download-zip').disabled = $<HTMLButtonElement>('delete-local').disabled = !counts[current];
 }
 
-$('download-zip').addEventListener('click', async () => {
-  $('download-zip').disabled = true;
+$<HTMLButtonElement>('download-zip').addEventListener('click', async () => {
+  $<HTMLButtonElement>('download-zip').disabled = true;
   flashStatus('Building ZIP…');
   try {
     const { count, blob } = await exportZip();
     download(blob, `photoboot-${eventKey(config)}.zip`);
     flashStatus(`ZIP with ${count} photos ✓`);
   } catch (err) {
-    flashStatus(`ZIP failed: ${err.message}`, true);
+    flashStatus(`ZIP failed: ${errorMessage(err)}`, true);
   } finally {
-    $('download-zip').disabled = false;
+    $<HTMLButtonElement>('download-zip').disabled = false;
   }
 });
-$('delete-local').addEventListener('click', async () => {
+$<HTMLButtonElement>('delete-local').addEventListener('click', async () => {
   if (!confirm(`Delete all photos of “${eventKey(config)}” from this device? Download the ZIP first.`)) return;
   await deletePhotos();
   renderLocalPhotos();
@@ -519,9 +536,9 @@ $('delete-local').addEventListener('click', async () => {
 // ---------- server events ----------
 
 bind('upload-token', 'uploadToken', { from: (v) => v.trim() });
-$('admin-token').value = getAdminToken();
-$('admin-token').addEventListener('change', (e) => {
-  setAdminToken(e.target.value.trim());
+$<HTMLInputElement>('admin-token').value = getAdminToken();
+$<HTMLInputElement>('admin-token').addEventListener('change', (e) => {
+  setAdminToken((e.target as HTMLInputElement).value.trim());
   refreshEvents();
 });
 
@@ -530,11 +547,11 @@ function renderServerEvent() {
   $('server-event').innerHTML = ev?.id
     ? `This booth is part of server event <strong>${escapeHtml(ev.name || ev.id)}</strong>.`
     : 'This booth is not linked to a server event.';
-  $('leave-event').hidden = !ev?.id;
+  $<HTMLButtonElement>('leave-event').hidden = !ev?.id;
 }
 fillers.push(renderServerEvent);
 
-function showQr(title, url) {
+function showQr(title: string, url: string) {
   const qr = qrcode(0, 'M');
   qr.addData(url);
   qr.make();
@@ -559,7 +576,7 @@ async function refreshEvents() {
         `<span class="muted small">${ev.photos} shared photos · ${ev.stats.sessions} sessions · ${ev.stats.prints} prints · created ${fmtTime(ev.created)}</span></div>`;
       const row = document.createElement('div');
       row.className = 'row';
-      const btn = (label, fn, cls = '') => {
+      const btn = (label: string, fn: () => unknown, cls = '') => {
         const b = document.createElement('button');
         b.textContent = label;
         if (cls) b.className = cls;
@@ -590,18 +607,18 @@ async function refreshEvents() {
       list.append(li);
     }
   } catch (err) {
-    list.innerHTML = `<li class="warn">Couldn't list events: ${escapeHtml(err.message)}</li>`;
+    list.innerHTML = `<li class="warn">Couldn't list events: ${escapeHtml(errorMessage(err))}</li>`;
   }
 }
 
-async function useEvent(ev) {
+async function useEvent(ev: EventSummary) {
   const setup = await remote.loadEvent(ev.id, ev.setupKey);
   await applySetup(setup, { serverEvent: { id: ev.id, key: ev.setupKey, name: setup.name } });
   flashStatus(`This booth now runs “${setup.name}” ✓`);
   refreshEvents();
 }
 
-$('publish-event').addEventListener('click', async () => {
+$<HTMLButtonElement>('publish-event').addEventListener('click', async () => {
   if (!getAdminToken()) return flashStatus('Enter the server admin token first.', true);
   const name = prompt('Event name on the server:', config.eventName || '');
   if (!name?.trim()) return;
@@ -615,11 +632,11 @@ $('publish-event').addEventListener('click', async () => {
     showQr(`Scan on a booth device to set it up as “${ev.name}”`, setupUrl(ev.id, ev.setupKey));
     refreshEvents();
   } catch (err) {
-    flashStatus(`Publish failed: ${err.message}`, true);
+    flashStatus(`Publish failed: ${errorMessage(err)}`, true);
   }
 });
-$('refresh-events').addEventListener('click', refreshEvents);
-$('leave-event').addEventListener('click', () => {
+$<HTMLButtonElement>('refresh-events').addEventListener('click', refreshEvents);
+$<HTMLButtonElement>('leave-event').addEventListener('click', () => {
   if (!confirm('Unlink this booth from its server event? Settings stay as they are.')) return;
   save({ serverEvent: null });
   renderServerEvent();
@@ -640,22 +657,22 @@ async function importFromHash() {
     await applySetup(setup, { serverEvent: { id: m[1], key: m[2], name: setup.name } });
     notice.textContent = `This booth is now set up for “${setup.name}”. Go back to the booth to start.`;
   } catch (err) {
-    notice.textContent = `Couldn't load the event: ${err.message}`;
+    notice.textContent = `Couldn't load the event: ${errorMessage(err)}`;
     notice.classList.add('warn');
   }
 }
 
 // ---------- admin ----------
 
-$('set-pin').addEventListener('click', async () => {
-  const pin = $('admin-password').value;
+$<HTMLButtonElement>('set-pin').addEventListener('click', async () => {
+  const pin = $<HTMLInputElement>('admin-password').value;
   save({ adminPasswordHash: pin ? await pinHash(pin) : '', adminPassword: '' });
-  $('admin-password').value = '';
+  $<HTMLInputElement>('admin-password').value = '';
   if (pin) sessionStorage.setItem(AUTH_KEY, '1');
   flashStatus(pin ? 'PIN set ✓' : 'PIN removed ✓');
 });
 
-$('reset').addEventListener('click', async () => {
+$<HTMLButtonElement>('reset').addEventListener('click', async () => {
   if (!confirm('Reset all settings and remove uploaded template images?')) return;
   await clearTemplateImage('header').catch(() => {});
   await clearTemplateImage('footer').catch(() => {});
@@ -690,7 +707,8 @@ function start() {
 
 // Fills in keys added since the stored config was written.
 for (const key of Object.keys(DEFAULTS)) {
-  if (config[key] === undefined) config = setConfig({ [key]: DEFAULTS[key] });
+  const k = key as keyof Config;
+  if (config[k] === undefined) config = setConfig({ [k]: DEFAULTS[k] } as Partial<Config>);
 }
 
 start();

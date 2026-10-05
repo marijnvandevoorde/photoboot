@@ -2,19 +2,20 @@
 // Plain HTTP; put it behind a TLS-terminating reverse proxy (camera and
 // Web Bluetooth both require HTTPS).
 //
-//   PORT=8080 BASE_URL=https://booth.example.com SHARE_DIR=/data/shares node server/index.js
+//   PORT=8080 BASE_URL=https://booth.example.com SHARE_DIR=/data/shares node server/index.ts
 
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { shareMiddleware } from './share.js';
+import type { Req, Res } from './http.ts';
+import { shareMiddleware } from './share.ts';
 
 const PORT = Number(process.env.PORT || 8080);
 const DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist');
 
-const TYPES = {
+const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript',
   '.css': 'text/css',
@@ -24,8 +25,15 @@ const TYPES = {
   '.webmanifest': 'application/manifest+json',
 };
 
-async function serveStatic(req, res) {
-  let pathname = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+async function serveStatic(req: Req, res: Res): Promise<void> {
+  let pathname: string;
+  try {
+    pathname = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname);
+  } catch {
+    // Malformed escapes (e.g. /%E0) used to throw here and, unhandled, kill the process.
+    res.writeHead(400, { 'Content-Type': 'text/plain' }).end('Bad request');
+    return;
+  }
   if (pathname.endsWith('/')) pathname += 'index.html';
   const file = path.join(DIST, path.normalize(pathname));
   if (!file.startsWith(DIST + path.sep)) {
@@ -46,6 +54,13 @@ async function serveStatic(req, res) {
   }
 }
 
-createServer((req, res) => shareMiddleware(req, res, () => serveStatic(req, res))).listen(PORT, () => {
+createServer((req, res) =>
+  shareMiddleware(req, res, () => {
+    serveStatic(req, res).catch((err: unknown) => {
+      console.error(err);
+      if (!res.headersSent) res.writeHead(500).end();
+    });
+  })
+).listen(PORT, () => {
   console.log(`photoboot listening on :${PORT}`);
 });

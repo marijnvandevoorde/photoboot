@@ -15,9 +15,16 @@
 // loadTemplate(), and (if it needs text/choices) surface those keys in the
 // settings page.
 
-import { whiteCanvas } from './effects.js';
-import { fitToPrintWidth } from './raster.js';
-import { kv } from './storage.js';
+import { whiteCanvas } from './effects.ts';
+import { fitToPrintWidth } from './raster.ts';
+import { kv } from './storage.ts';
+import type { TextTemplateConfig } from './config.ts';
+import { ctx2d } from './dom.ts';
+import type { Template } from './types.ts';
+
+export type Slot = 'header' | 'footer';
+export type TemplateImages = Partial<Record<Slot, string | null>>;
+const SLOTS: Slot[] = ['header', 'footer'];
 
 export const BUILT_IN_TEMPLATES = [
   { id: 'plain', label: 'Plain' },
@@ -34,11 +41,13 @@ export const TEXT_FONTS = [
   { id: 'mono', label: 'Typewriter', stack: '700 {px}px "American Typewriter", "Courier New", monospace' },
 ];
 
-export const TEXT_DEFAULTS = { title: '', line1: '', line2: '', font: 'sans' };
+export const TEXT_DEFAULTS: TextTemplateConfig = { title: '', line1: '', line2: '', font: 'sans' };
 
-const PLAIN = {
+const fullWidth = (sticker: number) => sticker;
+
+const PLAIN: Template = {
   label: 'Plain',
-  photoWidth: (sticker) => sticker,
+  photoWidth: fullWidth,
   topPadding: 0,
   bottomPadding: 0,
   gap: 8,
@@ -47,8 +56,8 @@ const PLAIN = {
 };
 
 // Resolve a template id into a layout spec. Awaits any assets it needs.
-export async function loadTemplate(id, config = {}) {
-  if (id === 'text') return textTemplate({ ...TEXT_DEFAULTS, ...config });
+export async function loadTemplate(id: string, config: Partial<TextTemplateConfig> | unknown = {}): Promise<Template> {
+  if (id === 'text') return textTemplate({ ...TEXT_DEFAULTS, ...(config as Partial<TextTemplateConfig>) });
   if (id === 'custom') {
     const [header, footer] = await Promise.all([
       loadStoredImage('template:header'),
@@ -56,53 +65,51 @@ export async function loadTemplate(id, config = {}) {
     ]);
     return {
       label: 'Custom',
-      photoWidth: (sticker) => sticker,
+      photoWidth: fullWidth,
       topPadding: header ? 0 : 8,
       bottomPadding: footer ? 0 : 8,
       gap: 8,
-      buildHeader: header ? (sticker) => fitToPrintWidth(header, sticker) : null,
-      buildFooter: footer ? (sticker) => fitToPrintWidth(footer, sticker) : null,
+      buildHeader: header ? (sticker: number) => fitToPrintWidth(header, sticker) : null,
+      buildFooter: footer ? (sticker: number) => fitToPrintWidth(footer, sticker) : null,
     };
   }
   return PLAIN;
 }
 
-function textTemplate({ title, line1, line2, font }) {
+function textTemplate({ title, line1, line2, font }: TextTemplateConfig): Template {
   const stack = (TEXT_FONTS.find((f) => f.id === font) ?? TEXT_FONTS[0]).stack;
-  const has = (s) => !!s?.trim();
+  const has = (s: string | undefined) => !!s?.trim();
+  const footerLines: TextLine[] = [];
+  if (has(line1)) footerLines.push({ text: line1, size: 54 });
+  if (has(line2)) footerLines.push({ text: line2, size: 28 });
   return {
     label: 'Text',
-    photoWidth: (sticker) => sticker,
+    photoWidth: fullWidth,
     topPadding: has(title) ? 0 : 8,
     bottomPadding: has(line1) || has(line2) ? 0 : 8,
     gap: 8,
-    buildHeader: has(title) ? (w) => textBlock(w, stack, [{ text: title, size: 46 }], 14, 10) : null,
-    buildFooter:
-      has(line1) || has(line2)
-        ? (w) =>
-            textBlock(
-              w,
-              stack,
-              [has(line1) && { text: line1, size: 54 }, has(line2) && { text: line2, size: 28 }].filter(Boolean),
-              18,
-              24
-            )
-        : null,
+    buildHeader: has(title) ? (w: number) => textBlock(w, stack, [{ text: title, size: 46 }], 14, 10) : null,
+    buildFooter: footerLines.length ? (w: number) => textBlock(w, stack, footerLines, 18, 24) : null,
   };
 }
 
 // Centred lines of text at the sticker width. Sizes are for a 552-dot
 // sticker and scale with the width; long lines shrink to fit.
-function textBlock(width, stack, lines, padTop, padBottom) {
+interface TextLine {
+  text: string;
+  size: number;
+}
+
+function textBlock(width: number, stack: string, lines: TextLine[], padTop: number, padBottom: number): HTMLCanvasElement {
   const k = width / 552;
   const margin = Math.round(16 * k);
-  const measure = document.createElement('canvas').getContext('2d');
+  const measure = ctx2d(document.createElement('canvas'));
   const laid = lines.map(({ text, size }) => {
     let px = Math.round(size * k);
-    measure.font = stack.replace('{px}', px);
+    measure.font = stack.replace('{px}', String(px));
     const w = measure.measureText(text.trim()).width;
     if (w > width - 2 * margin) px = Math.floor((px * (width - 2 * margin)) / w);
-    return { text: text.trim(), px, font: stack.replace('{px}', px) };
+    return { text: text.trim(), px, font: stack.replace('{px}', String(px)) };
   });
   const lineGap = Math.round(10 * k);
   const height =
@@ -111,7 +118,7 @@ function textBlock(width, stack, lines, padTop, padBottom) {
     lineGap * (laid.length - 1) +
     Math.round(padBottom * k);
   const canvas = whiteCanvas(width, height);
-  const ctx = canvas.getContext('2d');
+  const ctx = ctx2d(canvas);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
   let y = Math.round(padTop * k);
@@ -124,8 +131,8 @@ function textBlock(width, stack, lines, padTop, padBottom) {
   return canvas;
 }
 
-async function loadStoredImage(key) {
-  const blob = await kv.get(key).catch(() => null);
+async function loadStoredImage(key: string): Promise<ImageBitmap | HTMLImageElement | null> {
+  const blob = await kv.get<Blob>(key).catch(() => undefined);
   if (!blob) return null;
   if (typeof createImageBitmap === 'function') {
     try {
@@ -134,7 +141,7 @@ async function loadStoredImage(key) {
       /* fall through to <img> */
     }
   }
-  return new Promise((resolve, reject) => {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
     const url = URL.createObjectURL(blob);
     const img = new Image();
     img.onload = () => {
@@ -149,46 +156,47 @@ async function loadStoredImage(key) {
   });
 }
 
-export async function saveTemplateImage(slot, blob) {
-  if (!['header', 'footer'].includes(slot)) throw new Error(`Bad slot: ${slot}`);
+export async function saveTemplateImage(slot: Slot, blob: Blob): Promise<void> {
+  if (!SLOTS.includes(slot)) throw new Error(`Bad slot: ${slot}`);
   await kv.set(`template:${slot}`, blob);
 }
 
-export async function clearTemplateImage(slot) {
+export async function clearTemplateImage(slot: Slot): Promise<void> {
   await kv.delete(`template:${slot}`);
 }
 
-export async function hasTemplateImage(slot) {
-  const blob = await kv.get(`template:${slot}`).catch(() => null);
+export async function hasTemplateImage(slot: Slot): Promise<boolean> {
+  const blob = await kv.get<Blob>(`template:${slot}`).catch(() => undefined);
   return !!blob;
 }
 
-export async function templateImageUrl(slot) {
-  const blob = await kv.get(`template:${slot}`).catch(() => null);
+export async function templateImageUrl(slot: Slot): Promise<string | null> {
+  const blob = await kv.get<Blob>(`template:${slot}`).catch(() => undefined);
   return blob ? URL.createObjectURL(blob) : null;
 }
 
 // Template images as data URLs, for profiles / exports / server events.
-export async function exportTemplateImages() {
-  const out = {};
-  for (const slot of ['header', 'footer']) {
-    const blob = await kv.get(`template:${slot}`).catch(() => null);
+export async function exportTemplateImages(): Promise<TemplateImages> {
+  const out: TemplateImages = {};
+  for (const slot of SLOTS) {
+    const blob = await kv.get<Blob>(`template:${slot}`).catch(() => undefined);
     out[slot] = blob ? await blobToDataUrl(blob) : null;
   }
   return out;
 }
 
-export async function importTemplateImages(images = {}) {
-  for (const slot of ['header', 'footer']) {
-    if (images[slot]) await kv.set(`template:${slot}`, await (await fetch(images[slot])).blob());
+export async function importTemplateImages(images: TemplateImages = {}): Promise<void> {
+  for (const slot of SLOTS) {
+    const url = images[slot];
+    if (url) await kv.set(`template:${slot}`, await (await fetch(url)).blob());
     else await kv.delete(`template:${slot}`);
   }
 }
 
-function blobToDataUrl(blob) {
+function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
+    reader.onload = () => resolve(String(reader.result));
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(blob);
   });

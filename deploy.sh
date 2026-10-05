@@ -12,7 +12,7 @@ TARGET="${1:?usage: ./deploy.sh ubuntu@<server>}"
 # ~/photoboot except a server-side .env.
 COPYFILE_DISABLE=1 tar -cz \
   --exclude node_modules --exclude .node --exclude dist --exclude shares \
-  --exclude .git --exclude .env --exclude .DS_Store --exclude .vite \
+  --exclude .git --exclude .env --exclude .DS_Store --exclude .vite --exclude template-assets \
   . | ssh "$TARGET" '
   mkdir -p ~/photoboot
   find ~/photoboot -mindepth 1 -maxdepth 1 ! -name .env -exec rm -rf {} +

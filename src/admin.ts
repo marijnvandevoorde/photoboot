@@ -134,7 +134,7 @@ async function loadEvents() {
     const { events } = await api<{ events: AdminEvent[] }>('GET', `events?q=${q}`);
     const paid = events.filter((e) => e.paid).length;
     $('summary').textContent =
-      `${events.length} event(s) · ${paid} paid · ${events.reduce((n, e) => n + e.photos, 0)} shared photos`;
+      `${events.length} event(s) · ${paid} paid · ${events.reduce((n, e) => n + e.photos, 0)} photos`;
     list.replaceChildren(...events.map(eventItem));
     if (!events.length) list.innerHTML = '<li class="muted">No events.</li>';
   } catch (err) {

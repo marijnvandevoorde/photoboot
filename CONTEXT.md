@@ -114,7 +114,8 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
      Printing shows a full-screen overlay; copies, a per-photo limit, and
      auto-print are settings. Back to the camera `doneTimeoutSec` after a
      print/share, `reviewTimeoutSec` when idle. Leaving the review archives
-     the colour keepsake locally.
+     the colour keepsake locally and, in a server event, uploads it to the
+     event (unless it was already shared with that twist).
   - Shared/archived photo = `renderColour`: the sticker layout in colour
     (header, shots, gaps, footer, 24-dot side margins), with the twist.
   - Writes a health heartbeat (`photoboot:status`) and counters (stats.ts).

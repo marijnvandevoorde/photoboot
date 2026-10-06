@@ -567,7 +567,7 @@ bind('upload-token', 'uploadToken', { from: (v) => v.trim() });
 function renderServerEvent() {
   const ev = config.serverEvent;
   $('server-event').innerHTML = ev?.id
-    ? `This booth is part of <strong>${escapeHtml(ev.name || ev.id)}</strong>: shared photos go to its online gallery.`
+    ? `This booth is part of <strong>${escapeHtml(ev.name || ev.id)}</strong>: every photo goes to its online gallery.`
     : '';
   $('event-joined').hidden = !ev?.id;
   $('event-join').hidden = !!ev?.id;

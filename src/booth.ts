@@ -827,11 +827,21 @@ function colourJpeg(s: Session | null = session): Promise<Blob> {
 }
 
 // Archive when the guest leaves the review, so the copy has their final twist.
+// A booth in a server event also stores every photo in the event, unless
+// it was already shared with that twist.
 function archiveSession(s: Session | null) {
-  if (!config.keepLocalCopies || !s) return;
-  colourJpeg(s)
-    .then((blob) => savePhoto(blob))
-    .catch((err) => console.error('Local copy failed', err));
+  if (!s) return;
+  if (config.keepLocalCopies) {
+    colourJpeg(s)
+      .then((blob) => savePhoto(blob))
+      .catch((err) => console.error('Local copy failed', err));
+  }
+  if (config.serverEvent?.id && !(s.shareUrl && s.shareTwist === (s.look?.twist ?? 'none'))) {
+    uploadPhoto(s).catch((err) => {
+      console.error('Event upload failed', err);
+      setStatus({ lastError: `Event upload: ${errorMessage(err)}` });
+    });
+  }
 }
 
 function jpegOf(canvas: HTMLCanvasElement): Promise<Blob> {
@@ -1042,14 +1052,14 @@ async function doPrint() {
 $<HTMLButtonElement>('print').addEventListener('click', () => doPrint());
 
 // Share uploads the colour copy and shows a QR to the photo's page.
-async function uploadPhoto(): Promise<string> {
+async function uploadPhoto(s: Session | null = session): Promise<string> {
   const headers: Record<string, string> = { 'Content-Type': 'image/jpeg' };
   if (config.serverEvent?.id) {
     headers['X-Event-Id'] = config.serverEvent.id;
     headers['X-Event-Key'] = config.serverEvent.key;
   }
   if (config.uploadToken) headers['X-Upload-Token'] = config.uploadToken;
-  const res = await fetch(`${apiBase}/api/share`, { method: 'POST', headers, body: await colourJpeg() });
+  const res = await fetch(`${apiBase}/api/share`, { method: 'POST', headers, body: await colourJpeg(s) });
   const body: { url?: string; error?: string } = await res.json().catch(() => ({}));
   if (!res.ok || !body.url) throw new Error(body.error || `HTTP ${res.status}`);
   return body.url;

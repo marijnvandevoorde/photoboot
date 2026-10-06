@@ -63,7 +63,7 @@ iPad / iPhone. “Start without printer” works on anything with a camera.
 - **Event galleries** (paid): a host signs up on `/event.html` and pays once
   with Stripe — or, in the iOS app, with an in-app purchase right in
   settings — and gets a setup link for every booth and a private gallery
-  with a ZIP of all shared photos, kept for a year. The owner manages
+  with a ZIP of all the event's photos, kept for a year. The owner manages
   events in `/admin` (admin token + authenticator code).
 
 - **Guest-proof kiosk**: once started, the booth stays on the camera — a
@@ -215,8 +215,9 @@ up right away. To set it up:
 
 ## Privacy
 
-Only photos a guest chooses to share leave the booth. Each shared photo gets
-an unguessable link and a page where the guest can save it or delete it, and
+Without a server event, only photos a guest chooses to share leave the
+booth; a booth in an event uploads every photo to that event's gallery. Each
+uploaded photo gets an unguessable link and a page where the guest can save it or delete it, and
 it's deleted automatically after `SHARE_TTL_DAYS`. Images are served with
 `Cache-Control: private`, so a CDN doesn't keep copies after a delete.
 Uploads are rate-limited per IP unless they come from a booth with a valid

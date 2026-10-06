@@ -214,11 +214,8 @@ details summary {
   margin-top: 0.6rem;
 }
 .wording label {
-  font-family: ui-monospace, monospace;
-  font-size: 0.8rem;
-}
-.wording input {
-  font-family: -apple-system, system-ui, sans-serif;
+  font-size: 0.85rem;
+  color: var(--muted);
 }
 .notice {
   background: var(--card);
@@ -292,4 +289,114 @@ details summary {
 .row .grow {
   flex: 1;
   min-width: 14rem;
+}
+
+/* Sections: a heading per group of cards, Advanced collapsed. */
+.jump {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.jump a {
+  color: var(--fg);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.3rem 0.8rem;
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  margin-top: 1.6rem;
+  scroll-margin-top: 1rem;
+}
+.group-title {
+  margin: 0;
+  font-size: 1.25rem;
+  letter-spacing: -0.01em;
+}
+.card h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+h4 {
+  margin: 0.5rem 0 0;
+  font-size: 0.95rem;
+}
+/* One plain-language line under each setting. */
+.help {
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  margin: -0.3rem 0 0.2rem;
+}
+.help.indent {
+  padding-left: 1.9rem;
+}
+ul.help {
+  margin: 0.4rem 0 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.4rem;
+}
+details > .help:first-of-type {
+  margin-top: 0.5rem;
+}
+.advanced > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.advanced > summary::-webkit-details-marker {
+  display: none;
+}
+.advanced > summary::before {
+  content: "▸";
+  color: var(--muted);
+  font-size: 1.2rem;
+}
+.advanced[open] > summary::before {
+  content: "▾";
+}
+.advanced:not([open]) {
+  display: block;
+}
+.secrets {
+  margin: 0;
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+}
+.secrets dt {
+  font-weight: 600;
+  margin-top: 0.3rem;
+}
+.secrets dd {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.server-admin {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+code {
+  font-size: 0.85em;
+  background: #000;
+  border-radius: 4px;
+  padding: 0 0.3rem;
+}
+.card a {
+  color: var(--fg);
+}
+input[type="checkbox"] {
+  width: 1.2rem;
+  height: 1.2rem;
+  flex: none;
 }

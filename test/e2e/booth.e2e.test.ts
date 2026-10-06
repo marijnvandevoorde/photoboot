@@ -16,10 +16,13 @@ const CHROME = [
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// Runs in the page before any script: a Phomemo that counts the bytes it gets.
+// Runs in the page before any script: a Phomemo that counts the bytes it gets
+// and how often the picker opened. getDevices() hands back the same printer
+// on a later load, like Chrome does for a device the site picked before.
 function fakeBluetooth() {
-  const w = window as unknown as { __written: number };
+  const w = window as unknown as { __written: number; __picked: number };
   w.__written = 0;
+  w.__picked = 0;
   const char = {
     properties: { write: true, writeWithoutResponse: true },
     writeValueWithResponse: async (c: ArrayBufferView) => {
@@ -41,7 +44,15 @@ function fakeBluetooth() {
     },
   };
   const device = { id: 'fake', name: 'P2S-fake', gatt, addEventListener() {} };
-  Object.defineProperty(navigator, 'bluetooth', { value: { requestDevice: async () => device } });
+  Object.defineProperty(navigator, 'bluetooth', {
+    value: {
+      requestDevice: async () => {
+        w.__picked++;
+        return device;
+      },
+      getDevices: async () => [device],
+    },
+  });
 }
 
 describe.skipIf(!CHROME)('booth in a real browser', () => {
@@ -186,10 +197,21 @@ describe.skipIf(!CHROME)('booth in a real browser', () => {
     expect(await visible('#countdown')).toBe(false);
   });
 
+  it('comes back to the camera after a reload, with the same printer', async () => {
+    await page.reload();
+    await page.waitForSelector('#booth:not([hidden])');
+    expect(await visible('#setup')).toBe(false);
+    await page.waitForFunction(() => document.getElementById('printer-pill')?.textContent?.includes('P2S-fake'));
+    expect(await page.evaluate(() => (window as unknown as { __picked: number }).__picked)).toBe(0);
+    expect(await page.$eval('#printer-pill', (p) => p.classList.contains('bad'))).toBe(false);
+  });
+
   it('publishes the setup and sets up a second device from its link', async () => {
     await page.goto(`${base}/settings.html`);
     await page.waitForSelector('#panels:not([hidden])');
     await page.waitForFunction(() => document.getElementById('local-photos')?.textContent?.includes('1 photos'));
+    expect(await visible('#server-admin')).toBe(false); // no admin token yet: explanation only
+    await page.click('#advanced > summary');
     await page.type('#admin-token', 'e2e-admin');
     await page.$eval('#admin-token', (e) => e.dispatchEvent(new Event('change')));
     await page.click('#publish-event');
@@ -204,6 +226,51 @@ describe.skipIf(!CHROME)('booth in a real browser', () => {
     const cfg = await page2.evaluate(() => JSON.parse(localStorage.getItem('photoboot:config') ?? '{}'));
     expect(cfg).toMatchObject({ templateId: 'text', copies: 2, serverEvent: { name: 'E2E party' } });
     await other.close();
+  });
+
+  it('asks for the PIN before a guest can leave the booth', async () => {
+    await page.type('#admin-password', '2468');
+    await page.click('#set-pin');
+    await page.goto(`${base}/`);
+    await page.waitForSelector('#booth:not([hidden])');
+
+    const longPressHatch = async () => {
+      await page.mouse.move(20, 20);
+      await page.mouse.down();
+      await sleep(2300);
+      await page.mouse.up();
+    };
+    await longPressHatch();
+    expect(await visible('#host-dialog')).toBe(true);
+    expect(await visible('#host-menu')).toBe(false);
+    await page.type('#host-pin-input', '1111');
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('#host-pin-error:not([hidden])');
+    expect(await visible('#host-menu')).toBe(false);
+    await page.click('[data-host-close]');
+    expect(await visible('#host-dialog')).toBe(false);
+
+    await longPressHatch();
+    await page.type('#host-pin-input', '2468');
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('#host-menu:not([hidden])');
+    await Promise.all([page.waitForNavigation(), page.click('#host-settings')]);
+    await page.waitForSelector('#panels:not([hidden])'); // no second PIN prompt
+    expect(await visible('#auth')).toBe(false);
+  });
+
+  it('stops the booth from settings, so the next start shows the setup screen', async () => {
+    expect(await text('#kiosk-status')).toContain('running');
+    await page.click('#stop-booth');
+    await page.waitForFunction(() => document.getElementById('kiosk-status')?.textContent?.includes('not running'));
+    await page.goto(`${base}/`);
+    await page.waitForSelector('#setup:not([hidden])');
+    expect(await visible('#booth')).toBe(false);
+    expect(await visible('#pin-nudge')).toBe(false); // a PIN is set
+
+    // Settings are locked again once the host walked away.
+    await page.goto(`${base}/settings.html`);
+    await page.waitForSelector('#auth:not([hidden])');
   });
 
   it('had no uncaught page errors', () => {

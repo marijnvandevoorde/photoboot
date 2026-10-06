@@ -2,9 +2,14 @@
 // template images, saved setups (profiles), server events, local photos and
 // shows the booth's health and counters.
 //
-// Access control is intentionally light: an optional PIN gate (hashed). The
-// hidden long-presses in the booth (and /?admin=1) are the only entry points —
-// this URL isn't linked from anywhere public.
+// Laid out for a non-technical host: sections Tonight, Event, What guests
+// see, Printer & paper, Photos, Security, and a collapsed Advanced (printer
+// type, server events, upload token, reset). Each setting has a one-line
+// explanation in settings.html.
+//
+// Access control is intentionally light: an optional PIN gate (hashed, see
+// kiosk.ts). The hidden long-presses in the booth (and /?admin=1) are the
+// only entry points — this URL isn't linked from anywhere public.
 
 import './platform.ts';
 import qrcode from 'qrcode-generator';
@@ -13,6 +18,7 @@ import type { Config, TextTemplateConfig } from './config.ts';
 import { DEFAULTS, eventKey, getConfig, PAPER_PRESETS, portableConfig, resetConfig, setConfig } from './config.ts';
 import { $, errorMessage, option } from './dom.ts';
 import { LANGUAGES, STRING_KEYS, STRINGS } from './i18n.ts';
+import { adminUnlocked, checkPin, hasPin, kioskState, pinHash, setAdminUnlocked, unlockKiosk } from './kiosk.ts';
 import { PHOTO_STYLES, PHOTO_TWISTS } from './photo.ts';
 import { listPrinters } from './printers/index.ts';
 import type { EventSummary, Setup } from './remote.ts';
@@ -36,26 +42,13 @@ let config = getConfig();
 
 // ---------- auth ----------
 
-const AUTH_KEY = 'photoboot:admin-ok';
-
-async function sha256(text: string): Promise<string> {
-  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-const pinHash = (pin: string) => sha256(`photoboot:${pin}`);
-
-function locked() {
-  return (config.adminPasswordHash || config.adminPassword) && sessionStorage.getItem(AUTH_KEY) !== '1';
-}
-
-async function checkPin(pin: string): Promise<boolean> {
-  if (config.adminPasswordHash) return (await pinHash(pin)) === config.adminPasswordHash;
-  return pin === config.adminPassword; // pre-hash configs
-}
+// The booth's host menu sets the same flag after its own PIN prompt, so
+// coming from there doesn't ask twice.
+const locked = () => hasPin(config) && !adminUnlocked();
 
 $<HTMLButtonElement>('auth-submit').addEventListener('click', async () => {
-  if (await checkPin($<HTMLInputElement>('auth-password').value)) {
-    sessionStorage.setItem(AUTH_KEY, '1');
+  if (await checkPin(config, $<HTMLInputElement>('auth-password').value)) {
+    setAdminUnlocked(true);
     $('auth-error').hidden = true;
     start();
   } else {
@@ -279,13 +272,17 @@ fillers.push(printerHint);
 
 const presetOptions = [...PAPER_PRESETS, { dots: -1, label: 'Custom…' }];
 $<HTMLSelectElement>('paper-preset').replaceChildren(...presetOptions.map(({ dots, label }) => option(dots, label)));
+// The raw width only shows for Custom…: most hosts just pick their roll.
+const showWidth = () => ($('paper-width-field').hidden = $<HTMLSelectElement>('paper-preset').value !== '-1');
 fillers.push(() => {
   const current = presetOptions.find((o) => o.dots === config.paperWidthDots);
   $<HTMLSelectElement>('paper-preset').value = String(current ? current.dots : -1);
   $<HTMLInputElement>('paper-width').value = String(config.paperWidthDots);
+  showWidth();
 });
 $<HTMLSelectElement>('paper-preset').addEventListener('change', () => {
   const v = Number($<HTMLSelectElement>('paper-preset').value);
+  showWidth();
   if (v > 0) {
     $<HTMLInputElement>('paper-width').value = String(v);
     save({ paperWidthDots: v });
@@ -512,7 +509,7 @@ function renderWording() {
   $('wording').replaceChildren(
     ...STRING_KEYS.map((key) => {
       const label = document.createElement('label');
-      label.textContent = key;
+      label.textContent = `“${STRINGS.en[key]}”`;
       const input = document.createElement('input');
       input.type = 'text';
       input.placeholder = lang[key];
@@ -573,8 +570,8 @@ $<HTMLInputElement>('admin-token').addEventListener('change', (e) => {
 function renderServerEvent() {
   const ev = config.serverEvent;
   $('server-event').innerHTML = ev?.id
-    ? `This booth is part of server event <strong>${escapeHtml(ev.name || ev.id)}</strong>.`
-    : 'This booth is not linked to a server event.';
+    ? `This device runs the server event <strong>${escapeHtml(ev.name || ev.id)}</strong>: shared photos go to its gallery.`
+    : 'This device is not part of a server event.';
   $<HTMLButtonElement>('leave-event').hidden = !ev?.id;
 }
 fillers.push(renderServerEvent);
@@ -589,9 +586,12 @@ function showQr(title: string, url: string) {
   box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
+// Without the admin token there's nothing to manage: only the explanation
+// and the token field show.
 async function refreshEvents() {
   const list = $('event-list');
   list.replaceChildren();
+  $('server-admin').hidden = !getAdminToken();
   if (!getAdminToken()) return;
   try {
     const { events } = await remote.listEvents();
@@ -712,21 +712,50 @@ async function importSetupLink(link: string) {
   }
 }
 
-// ---------- admin ----------
+// ---------- security: PIN + kiosk lock ----------
+
+function renderSecurity() {
+  $('pin-status').innerHTML = hasPin(config)
+    ? 'A PIN is set. ✓'
+    : '<strong class="bad">No PIN yet</strong>: any guest can open these settings or stop the booth.';
+  const kiosk = kioskState();
+  $('kiosk-status').innerHTML = kiosk
+    ? `The booth is <strong>running</strong> on this device since ${fmtTime(kiosk.since)}, ` +
+      (kiosk.printer ? `with printer ${escapeHtml(kiosk.printer.name || kiosk.printer.id)}.` : 'without printer.')
+    : 'The booth is not running on this device: it opens on the “Connect printer” screen.';
+  $<HTMLButtonElement>('stop-booth').disabled = !kiosk;
+}
+fillers.push(renderSecurity);
 
 $<HTMLButtonElement>('set-pin').addEventListener('click', async () => {
   const pin = $<HTMLInputElement>('admin-password').value;
   save({ adminPasswordHash: pin ? await pinHash(pin) : '', adminPassword: '' });
   $<HTMLInputElement>('admin-password').value = '';
-  if (pin) sessionStorage.setItem(AUTH_KEY, '1');
+  if (pin) setAdminUnlocked(true);
+  renderSecurity();
   flashStatus(pin ? 'PIN set ✓' : 'PIN removed ✓');
+});
+
+$<HTMLButtonElement>('stop-booth').addEventListener('click', () => {
+  if (!confirm('Stop the booth? The next time it opens, it shows the “Connect printer” screen.')) return;
+  unlockKiosk();
+  renderSecurity();
+  flashStatus('Booth stopped ✓');
+});
+window.addEventListener('storage', (e) => {
+  if (e.key === 'photoboot:kiosk') renderSecurity();
+});
+
+// The jump link opens the collapsed Advanced section.
+document.querySelector('.jump a[href="#advanced"]')?.addEventListener('click', () => {
+  $<HTMLDetailsElement>('advanced').open = true;
 });
 
 $<HTMLButtonElement>('reset').addEventListener('click', async () => {
   if (!confirm('Reset all settings and remove uploaded template images?')) return;
   await clearTemplateImage('header').catch(() => {});
   await clearTemplateImage('footer').catch(() => {});
-  sessionStorage.removeItem(AUTH_KEY);
+  setAdminUnlocked(false);
   config = resetConfig();
   fillAll();
   flashStatus('Reset ✓');

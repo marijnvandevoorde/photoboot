@@ -16,13 +16,12 @@
         <nav>
           <a href="/">Back to booth</a>
           <a href="/preview.html">Print preview</a>
-          <a href="/test.html">Printer calibration</a>
         </nav>
       </header>
 
       <section id="auth" class="card" hidden>
-        <h2>Admin access</h2>
-        <p class="muted">An admin PIN has been set for this booth.</p>
+        <h2>Host PIN</h2>
+        <p class="muted">This booth is protected with a PIN.</p>
         <label>PIN <input id="auth-password" type="password" autocomplete="current-password" /></label>
         <button type="button" id="auth-submit" class="primary">Unlock</button>
         <p id="auth-error" class="warn" hidden>Wrong PIN.</p>
@@ -31,282 +30,423 @@
       <p id="import-status" class="notice" hidden></p>
 
       <div id="panels" hidden>
-        <section class="card">
-          <h2>Tonight</h2>
-          <ul id="status-list" class="summary"></ul>
-          <div class="row">
-            <button type="button" id="new-roll">New paper roll</button>
-            <button type="button" id="reset-stats">Reset counters</button>
-          </div>
-          <p class="muted small">
-            Counters are per event (the event name below) and live on this device. The booth reports
-            its printer and camera here; reload to refresh.
-          </p>
-        </section>
+        <nav class="jump" aria-label="Sections">
+          <a href="#tonight">Tonight</a>
+          <a href="#event-info">Event</a>
+          <a href="#guests">What guests see</a>
+          <a href="#printer">Printer &amp; paper</a>
+          <a href="#photos">Photos</a>
+          <a href="#security">Security</a>
+          <a href="#advanced">Advanced</a>
+        </nav>
 
-        <section class="card">
-          <h2>Event</h2>
-          <label>
-            Event name
-            <input id="event-name" type="text" placeholder="Anna &amp; Tom's wedding" />
-          </label>
-          <p class="muted small">Shown on the idle screen. Also groups counters and local photos.</p>
-          <label>
-            Guest language
-            <select id="language"></select>
-          </label>
-          <h3>Saved setups</h3>
-          <div class="row">
-            <select id="profile-list" aria-label="Saved setups"></select>
-            <button type="button" id="profile-load">Load</button>
-            <button type="button" id="profile-delete">Delete</button>
-          </div>
-          <div class="row">
-            <button type="button" id="profile-save" class="primary">Save current setup as…</button>
-            <button type="button" id="export-file">Export file</button>
-            <button type="button" id="import-file">Import file</button>
-            <input id="import-picker" type="file" accept="application/json,.json" hidden />
-          </div>
-          <p class="muted small">
-            A setup is every setting below (except the printer type) plus the template images.
-            Export it to move it to another device.
-          </p>
-        </section>
-
-        <section class="card">
-          <h2>Printer</h2>
-          <label>
-            Type
-            <select id="printer-type"></select>
-          </label>
-          <p id="printer-hint" class="muted small"></p>
-          <p class="muted small">
-            Auto tries to recognise the printer by its Bluetooth name when you tap <em>Connect</em>.
-            Pick an explicit type here if auto-detect doesn't find your printer.
-          </p>
-        </section>
-
-        <section class="card">
-          <h2>Paper</h2>
-          <label>
-            Preset
-            <select id="paper-preset"></select>
-          </label>
-          <label>
-            Width (dots, multiple of 8)
-            <input id="paper-width" type="number" min="8" step="8" />
-          </label>
-          <p class="muted small">
-            Phomemo-class printers run at ~11.8 dots/mm. 552 dots = classic 53/50 mm sticker roll.
-            Narrower rolls: 384 dots (32 mm), 288 dots (25 mm). Confirm the real width with
-            <a href="/test.html">calibration</a> before you commit.
-          </p>
-          <label>
-            Print density
-            <select id="density">
-              <option value="1">1 — thin</option>
-              <option value="3">3 — normal</option>
-              <option value="4">4 — thick</option>
-            </select>
-          </label>
-          <label>
-            Roll length (metres, 0 = don't track)
-            <input id="roll-length" type="number" min="0" step="0.5" />
-          </label>
-          <label>
-            Warn when less than (metres) is left
-            <input id="paper-warn" type="number" min="0" step="0.1" />
-          </label>
-          <p class="muted small">
-            The booth counts the paper each sticker uses and shows “📄 low” on its printer badge — guests
-            don't see a warning. Tap <em>New paper roll</em> above after changing the roll.
-          </p>
-        </section>
-
-        <section class="card">
-          <h2>Printing</h2>
-          <label class="checkbox">
-            <input id="auto-print" type="checkbox" />
-            Print automatically as soon as the photo is taken
-          </label>
-          <label>
-            Stickers per Print tap
-            <select id="copies">
-              <option value="1">1</option>
-              <option value="2">2</option>
-              <option value="3">3</option>
-              <option value="4">4</option>
-            </select>
-          </label>
-          <label>
-            Print taps per photo
-            <select id="max-prints">
-              <option value="1">1</option>
-              <option value="2">2</option>
-              <option value="3">3</option>
-              <option value="5">5</option>
-              <option value="0">Unlimited</option>
-            </select>
-          </label>
-        </section>
-
-        <section class="card">
-          <h2>Capture</h2>
-          <label>
-            Shots per session
-            <select id="shot-count">
-              <option value="1">1 — single sticker</option>
-              <option value="2">2 — pair</option>
-              <option value="3">3 — classic strip</option>
-              <option value="4">4 — tall strip</option>
-            </select>
-          </label>
-          <label class="checkbox">
-            <input id="guest-shot-choice" type="checkbox" />
-            Let guests choose 1–4 photos (the setting above is the default)
-          </label>
-          <label>
-            Default countdown
-            <select id="default-delay">
-              <option value="3">3 s</option>
-              <option value="5">5 s</option>
-              <option value="10">10 s</option>
-            </select>
-          </label>
-          <label class="checkbox">
-            <input id="tap-anywhere" type="checkbox" />
-            Tapping anywhere on the camera view starts the countdown
-          </label>
-          <label class="checkbox">
-            <input id="sound" type="checkbox" />
-            Countdown beeps and shutter sound
-          </label>
-        </section>
-
-        <section class="card">
-          <h2>Looks</h2>
-          <label class="checkbox">
-            <input id="filter-enabled" type="checkbox" />
-            Let guests pick a style and twist
-          </label>
-          <p class="muted small">Off = a plain Atkinson-dithered print, no choices in the review.</p>
-          <label>
-            Live print look on the camera screen
-            <select id="live-preview">
-              <option value="choice">Guests can switch between camera and a look</option>
-              <option value="always">Always show the print look</option>
-              <option value="off">Off — plain camera feed</option>
-            </select>
-          </label>
-          <p class="muted small">
-            Renders the camera ~15× a second in the chosen style. Fine on a recent laptop or Mac mini;
-            switch it off on slow tablets.
-          </p>
-          <div id="looks-config">
-            <h3>Styles guests can pick</h3>
-            <div id="allowed-styles" class="checks"></div>
-            <h3>Twists guests can pick</h3>
-            <div id="allowed-twists" class="checks"></div>
+        <!-- ================= Tonight ================= -->
+        <section id="tonight" class="group">
+          <h2 class="group-title">Tonight</h2>
+          <div class="card">
+            <ul id="status-list" class="summary"></ul>
             <div class="row">
-              <label>Preselected style <select id="default-style"></select></label>
-              <label>Preselected twist <select id="default-twist"></select></label>
+              <button type="button" id="new-roll">New paper roll</button>
+              <button type="button" id="reset-stats">Reset counters</button>
+            </div>
+            <p class="help">
+              How the booth on this device is doing: printer, camera, paper left and how many photos guests
+              took. Tap <em>New paper roll</em> each time you put in a fresh roll. Reload the page to refresh.
+            </p>
+          </div>
+        </section>
+
+        <!-- ================= Event ================= -->
+        <section id="event-info" class="group">
+          <h2 class="group-title">Event</h2>
+          <div class="card">
+            <label>
+              Event name
+              <input id="event-name" type="text" placeholder="Anna &amp; Tom's wedding" />
+            </label>
+            <p class="help">Shown on the “tap to start” screen. Counters and photos are kept per event name.</p>
+            <label>
+              Language for guests
+              <select id="language"></select>
+            </label>
+            <p class="help">Every button and message guests see. You can change single sentences under <em>Wording</em>.</p>
+          </div>
+          <div class="card">
+            <h3>Saved setups</h3>
+            <p class="help">
+              A setup is all of these settings plus your sticker images. Save one per event and load it again
+              next time, or export it as a file to copy it to another device.
+            </p>
+            <div class="row">
+              <select id="profile-list" aria-label="Saved setups"></select>
+              <button type="button" id="profile-load">Load</button>
+              <button type="button" id="profile-delete">Delete</button>
+            </div>
+            <div class="row">
+              <button type="button" id="profile-save" class="primary">Save current setup as…</button>
+              <button type="button" id="export-file">Export file</button>
+              <button type="button" id="import-file">Import file</button>
+              <input id="import-picker" type="file" accept="application/json,.json" hidden />
             </div>
           </div>
         </section>
 
-        <section class="card">
-          <h2>Template</h2>
-          <label>
-            Active template
-            <select id="template-id"></select>
-          </label>
-          <div id="template-config"></div>
-        </section>
+        <!-- ================= What guests see ================= -->
+        <section id="guests" class="group">
+          <h2 class="group-title">What guests see</h2>
 
-        <section class="card">
-          <h2>Guest screens</h2>
-          <label>
-            Back to the camera after an idle review (seconds)
-            <input id="review-timeout" type="number" min="10" step="5" />
-          </label>
-          <label>
-            Back to the camera after a print or share (seconds)
-            <input id="done-timeout" type="number" min="5" step="5" />
-          </label>
-          <label>
-            Show the “tap to start” screen after (seconds idle, 0 = never)
-            <input id="attract-after" type="number" min="0" step="5" />
-          </label>
-          <label class="checkbox">
-            <input id="attract-photos" type="checkbox" />
-            Cycle recent photos on that screen (needs local copies on)
-          </label>
-          <details>
-            <summary>Wording</summary>
-            <p class="muted small">Leave a field empty to use the language default shown in grey.</p>
-            <div id="wording" class="wording"></div>
-          </details>
-        </section>
-
-        <section class="card">
-          <h2>Photos on this device</h2>
-          <label class="checkbox">
-            <input id="keep-local" type="checkbox" />
-            Keep a colour copy of every photo on this device
-          </label>
-          <ul id="local-photos" class="summary"></ul>
-          <div class="row">
-            <button type="button" id="download-zip" class="primary">Download this event as ZIP</button>
-            <button type="button" id="delete-local" class="danger">Delete this event's photos</button>
-          </div>
-        </section>
-
-        <section class="card">
-          <h2>Server events &amp; sharing</h2>
-          <p class="muted small">
-            Publish a setup to the server, then scan its setup QR on any other device to get the same
-            booth. Shared photos are tagged with the event and show up in its gallery.
-          </p>
-          <p id="server-event" class="small"></p>
-          <div class="row">
-            <label class="grow">
-              Setup link from another device
-              <input id="setup-link" type="url" placeholder="https://…/settings.html#event=…" />
+          <div class="card">
+            <h3>Taking the photo</h3>
+            <label>
+              Photos per sticker
+              <select id="shot-count">
+                <option value="1">1 — one big photo</option>
+                <option value="2">2 — a pair</option>
+                <option value="3">3 — classic photo strip</option>
+                <option value="4">4 — tall photo strip</option>
+              </select>
             </label>
-            <button type="button" id="use-setup-link">Set up this booth</button>
+            <p class="help">How many photos are taken in a row and printed together on one sticker.</p>
+            <label class="checkbox">
+              <input id="guest-shot-choice" type="checkbox" />
+              Let guests choose 1 to 4 photos
+            </label>
+            <p class="help indent">Shows 1–2–3–4 buttons on the camera screen. The choice above is the starting point.</p>
+            <label>
+              Countdown
+              <select id="default-delay">
+                <option value="3">3 seconds</option>
+                <option value="5">5 seconds</option>
+                <option value="10">10 seconds</option>
+              </select>
+            </label>
+            <p class="help">Time to strike a pose. Guests can still pick another timer on screen.</p>
+            <label class="checkbox">
+              <input id="tap-anywhere" type="checkbox" />
+              Tap anywhere on the camera picture to start
+            </label>
+            <p class="help indent">Off: guests have to press the round button.</p>
+            <label class="checkbox">
+              <input id="sound" type="checkbox" />
+              Countdown beeps and camera click
+            </label>
           </div>
-          <label>
-            Server admin token
-            <input id="admin-token" type="password" autocomplete="off" placeholder="ADMIN_TOKEN from the server's .env" />
-          </label>
-          <div class="row">
-            <button type="button" id="publish-event" class="primary">Publish current setup</button>
-            <button type="button" id="refresh-events">Refresh list</button>
-            <button type="button" id="leave-event">Disconnect this booth</button>
+
+          <div class="card">
+            <h3>Looks</h3>
+            <label class="checkbox">
+              <input id="filter-enabled" type="checkbox" />
+              Let guests pick a look for their sticker
+            </label>
+            <p class="help indent">
+              Looks are print styles (Classic, Pop art, Woodcut, Stipple) and fun twists (Mirror, Big head).
+              Off: every sticker uses the plain classic look.
+            </p>
+            <label>
+              Show the look live on the camera
+              <select id="live-preview">
+                <option value="choice">Yes, guests can switch between normal camera and a look</option>
+                <option value="always">Always show the camera in the print look</option>
+                <option value="off">No, just the normal camera</option>
+              </select>
+            </label>
+            <p class="help">
+              Guests see what the sticker will look like before the photo is taken. Smooth on a recent laptop;
+              switch it off if an older tablet gets slow.
+            </p>
+            <div id="looks-config">
+              <h4>Styles guests can pick</h4>
+              <div id="allowed-styles" class="checks"></div>
+              <h4>Twists guests can pick</h4>
+              <div id="allowed-twists" class="checks"></div>
+              <div class="row">
+                <label>Starts on style <select id="default-style"></select></label>
+                <label>Starts on twist <select id="default-twist"></select></label>
+              </div>
+              <p class="help">What's selected before a guest picks anything.</p>
+            </div>
           </div>
-          <ul id="event-list" class="event-list"></ul>
-          <div id="event-qr" class="event-qr" hidden></div>
-          <label>
-            Upload token (only if the server sets UPLOAD_TOKEN)
-            <input id="upload-token" type="password" autocomplete="off" />
-          </label>
+
+          <div class="card">
+            <h3>Sticker design</h3>
+            <label>
+              Design
+              <select id="template-id"></select>
+            </label>
+            <p class="help">
+              Plain is just the photos. Text adds a title, names and a date. Custom uses your own artwork above
+              and below the photos. Check the result in <a href="/preview.html">Print preview</a>.
+            </p>
+            <div id="template-config"></div>
+          </div>
+
+          <div class="card">
+            <h3>Screens and timing</h3>
+            <label>
+              Back to the camera when nobody touches the photo for (seconds)
+              <input id="review-timeout" type="number" min="10" step="5" />
+            </label>
+            <p class="help">So the booth is ready for the next guest when someone walks away.</p>
+            <label>
+              Back to the camera after printing or getting the photo (seconds)
+              <input id="done-timeout" type="number" min="5" step="5" />
+            </label>
+            <label>
+              Show the “tap to start” screen after (seconds without anyone, 0 = never)
+              <input id="attract-after" type="number" min="0" step="5" />
+            </label>
+            <p class="help">A big “Tap to take your photo!” with the event name, to draw people in.</p>
+            <label class="checkbox">
+              <input id="attract-photos" type="checkbox" />
+              Show tonight's photos on that screen
+            </label>
+            <p class="help indent">Only works when <em>Keep a copy of every photo</em> (under Photos) is on.</p>
+            <details>
+              <summary>Wording</summary>
+              <p class="help">Change any sentence guests see. Leave a field empty to keep the text shown in grey.</p>
+              <div id="wording" class="wording"></div>
+            </details>
+          </div>
         </section>
 
-        <section class="card">
-          <h2>Admin PIN</h2>
-          <label>
-            New PIN (empty = no gate)
-            <input id="admin-password" type="password" autocomplete="new-password" />
-          </label>
-          <button type="button" id="set-pin">Set PIN</button>
-          <p class="muted small">Guards this page only. Stops curious guests; not real security.</p>
+        <!-- ================= Printer & paper ================= -->
+        <section id="printer" class="group">
+          <h2 class="group-title">Printer &amp; paper</h2>
+
+          <div class="card">
+            <h3>Paper</h3>
+            <label>
+              Paper roll
+              <select id="paper-preset"></select>
+            </label>
+            <p class="help">Pick the roll in the printer. The standard 50 mm sticker roll is the first one.</p>
+            <div id="paper-width-field">
+              <label>
+                Custom print width (dots, a multiple of 8)
+                <input id="paper-width" type="number" min="8" step="8" />
+              </label>
+              <p class="help">
+                The printer makes about 12 dots per mm: 552 = the standard 50 mm sticker, 384 = 32 mm,
+                288 = 25 mm. Test it with a <a href="/test.html">calibration print</a> first.
+              </p>
+            </div>
+            <label>
+              Darkness
+              <select id="density">
+                <option value="1">Light</option>
+                <option value="3">Normal</option>
+                <option value="4">Dark</option>
+              </select>
+            </label>
+            <p class="help">Try Dark if stickers come out pale, Light if faces turn into black blobs.</p>
+            <label>
+              Roll length (metres, 0 = don't keep track)
+              <input id="roll-length" type="number" min="0" step="0.5" />
+            </label>
+            <label>
+              Warn me when less than this is left (metres)
+              <input id="paper-warn" type="number" min="0" step="0.1" />
+            </label>
+            <p class="help">
+              The booth counts the paper each sticker uses and shows “📄 low” on the printer badge, so you know
+              when to change rolls. Guests don't see a warning.
+            </p>
+          </div>
+
+          <div class="card">
+            <h3>Printing</h3>
+            <label class="checkbox">
+              <input id="auto-print" type="checkbox" />
+              Print right away, without a Print button
+            </label>
+            <p class="help indent">The sticker prints as soon as the photo is taken. Guests can't pick a look first.</p>
+            <label>
+              Stickers per print
+              <select id="copies">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+              </select>
+            </label>
+            <p class="help">Handy for couples: 2 gives everyone in the photo their own sticker.</p>
+            <label>
+              How many times a guest may print the same photo
+              <select id="max-prints">
+                <option value="1">Once</option>
+                <option value="2">2 times</option>
+                <option value="3">3 times</option>
+                <option value="5">5 times</option>
+                <option value="0">As often as they like</option>
+              </select>
+            </label>
+            <p class="help">Saves paper. After that the Print button is greyed out; they can still get the photo by QR.</p>
+          </div>
         </section>
 
-        <section class="card danger">
-          <h2>Reset</h2>
-          <button type="button" id="reset" class="danger">Reset to defaults</button>
-          <p class="muted small">Wipes config and uploaded template images. Photos and counters stay.</p>
+        <!-- ================= Photos ================= -->
+        <section id="photos" class="group">
+          <h2 class="group-title">Photos</h2>
+          <div class="card">
+            <label class="checkbox">
+              <input id="keep-local" type="checkbox" />
+              Keep a copy of every photo on this device
+            </label>
+            <p class="help indent">
+              In colour, as the guest last saw it. Nothing leaves this device; download them all as a ZIP after
+              the party.
+            </p>
+            <ul id="local-photos" class="summary"></ul>
+            <div class="row">
+              <button type="button" id="download-zip" class="primary">Download this event as ZIP</button>
+              <button type="button" id="delete-local" class="danger">Delete this event's photos</button>
+            </div>
+          </div>
         </section>
+
+        <!-- ================= Security ================= -->
+        <section id="security" class="group">
+          <h2 class="group-title">Security</h2>
+          <div class="card">
+            <h3>Host PIN</h3>
+            <p id="pin-status" class="small"></p>
+            <label>
+              New PIN (leave empty to remove it)
+              <input id="admin-password" type="password" autocomplete="new-password" />
+            </label>
+            <button type="button" id="set-pin">Set PIN</button>
+            <p class="help">
+              Asked whenever someone tries to leave the booth: these settings, changing the printer or stopping
+              the booth. It stops curious guests; it isn't a bank vault.
+            </p>
+          </div>
+          <div class="card">
+            <h3>Booth lock</h3>
+            <p id="kiosk-status" class="small"></p>
+            <button type="button" id="stop-booth">Stop booth</button>
+            <p class="help">
+              Once you start the booth it stays on the camera, even if someone reloads the page or the app
+              restarts, and it reconnects to the same printer by itself. <em>Stop booth</em> unlocks it: the
+              next start shows the “Connect printer” screen again. You can also stop it from the booth: long-press
+              the top-left corner of the camera picture for 2 seconds.
+            </p>
+            <details>
+              <summary>Lock the whole tablet too</summary>
+              <p class="help">
+                The booth can't stop guests from leaving the app with the home button or a swipe. The tablet
+                itself can:
+              </p>
+              <ul class="help">
+                <li>
+                  <strong>iPad / iPhone:</strong> turn on <em>Guided Access</em> in Settings → Accessibility →
+                  Guided Access and set a passcode. Open the booth, then triple-click the side (or home) button
+                  to start it. Triple-click again and enter the passcode to stop.
+                </li>
+                <li>
+                  <strong>Android:</strong> turn on <em>App pinning</em> (Settings → Security → App pinning, the
+                  name varies by brand), open the booth, then pin it from the recent-apps screen. On a dedicated
+                  device, Chrome's kiosk mode does the same.
+                </li>
+              </ul>
+            </details>
+          </div>
+        </section>
+
+        <!-- ================= Advanced ================= -->
+        <details id="advanced" class="group advanced">
+          <summary><h2 class="group-title">Advanced</h2></summary>
+          <p class="help">You don't need any of this for a normal party.</p>
+
+          <div class="card">
+            <h3>Printer type</h3>
+            <label>
+              Type
+              <select id="printer-type"></select>
+            </label>
+            <p id="printer-hint" class="help"></p>
+            <p class="help">
+              Auto recognises the printer by its Bluetooth name when you tap <em>Connect printer</em>. Only pick
+              a type if it isn't found. <a href="/test.html">Printer calibration</a> prints rulers to measure
+              the paper.
+            </p>
+          </div>
+
+          <div class="card">
+            <h3>Join a server event</h3>
+            <p id="server-event" class="small"></p>
+            <p class="help">
+              Got a setup link or QR code from the owner? Scan it with this device's camera, or paste the link
+              here, and this device becomes the same booth.
+            </p>
+            <div class="row">
+              <label class="grow">
+                Setup link
+                <input id="setup-link" type="url" placeholder="https://…/settings.html#event=…" />
+              </label>
+              <button type="button" id="use-setup-link">Set up this booth</button>
+            </div>
+            <button type="button" id="leave-event">Disconnect this booth from the event</button>
+          </div>
+
+          <div class="card">
+            <h3>Server events</h3>
+            <p class="help">
+              Only needed to run <strong>several booths with the same setup</strong>, or to give the host an
+              <strong>online gallery</strong> of the photos guests shared. One booth on its own doesn't need it.
+            </p>
+            <dl class="secrets">
+              <dt>Server admin token</dt>
+              <dd>
+                The owner's key to the server (<code>ADMIN_TOKEN</code> in its settings). Enter it once, on your
+                own phone or laptop only: it stays on that device and is never put in setups or on booths.
+              </dd>
+              <dt>Setup link / QR</dt>
+              <dd>
+                Turns another device into this same booth: scan it on the tablet and it's ready. Give it only to
+                booth devices.
+              </dd>
+              <dt>Gallery link</dt>
+              <dd>
+                For the host: shows every photo guests shared at the event, with a ZIP download. It can't change
+                anything.
+              </dd>
+            </dl>
+            <label>
+              Server admin token
+              <input id="admin-token" type="password" autocomplete="off" placeholder="Only on the owner's device" />
+            </label>
+            <div id="server-admin" class="server-admin" hidden>
+              <div class="row">
+                <button type="button" id="publish-event" class="primary">Publish current setup</button>
+                <button type="button" id="refresh-events">Refresh list</button>
+              </div>
+              <p class="help">
+                Publishing puts this setup on the server as a new event and shows its setup QR. Each event below
+                has its own setup QR and gallery link.
+              </p>
+              <ul id="event-list" class="event-list"></ul>
+              <div id="event-qr" class="event-qr" hidden></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Upload token</h3>
+            <label>
+              Upload token
+              <input id="upload-token" type="password" autocomplete="off" />
+            </label>
+            <p class="help">
+              Only if the server owner set <code>UPLOAD_TOKEN</code>; then guests' “Get photo” needs it. Booths
+              set up from a server event don't.
+            </p>
+          </div>
+
+          <div class="card danger">
+            <h3>Reset</h3>
+            <button type="button" id="reset" class="danger">Reset to defaults</button>
+            <p class="help">Wipes all settings and sticker images. Photos and counters stay.</p>
+          </div>
+        </details>
       </div>
     </main>
     <p id="save-status" class="save-toast" role="status" hidden></p>

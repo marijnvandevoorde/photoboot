@@ -62,7 +62,8 @@ iPad / iPhone. “Start without printer” works on anything with a camera.
   template images) as a file.
 - **Event galleries** (paid): a host creates an event, gets a setup link
   for every booth and a private gallery with a ZIP of all shared photos,
-  kept for a year. The owner manages events in `/admin` (admin token +
+  kept for a year. In the iOS app it's an in-app purchase right in
+  settings. The owner manages events in `/admin` (admin token +
   authenticator code).
 
 - **Guest-proof kiosk**: once started, the booth stays on the camera — a
@@ -160,6 +161,33 @@ over SSH and runs Compose there.
 | `UPLOAD_TOKEN`   | —             | If set, uploads need this token (set it in settings) or an event key |
 
 Put the secrets in a `.env` next to `docker-compose.yml`.
+
+### In-app purchase (iOS)
+
+Inside the iOS app, an event gallery is sold through Apple in-app purchase
+(App Store guideline 3.1.1); the web keeps its own checkout. The app asks the
+server for a pending event, buys the consumable with that event's
+`appAccountToken`, and sends the signed StoreKit 2 transaction to
+`/api/apple/redeem`. The server verifies Apple's signature and certificate
+chain itself (pinned Apple Root CA - G3, `server/apple-root-ca-g3.pem`) and
+activates the event; the host gets the usual email and the booth sets itself
+up right away. To set it up:
+
+1. **App Store Connect → the app → In-App Purchases**: create a
+   **Consumable** with product id `co.smallvictories.photoboot.eventgallery`
+   (or set `APPLE_PRODUCT_ID` on the server and `VITE_APPLE_PRODUCT_ID` when
+   building the app), a price, a display name and description, and a review
+   screenshot of the settings card. Submit it together with the next app
+   version.
+2. **App Information → App Store Server Notifications**: Version 2, with
+   `https://<host>/api/apple/notifications` as both the Production and the
+   Sandbox URL. Refunds then end the paid perks, and a purchase whose app
+   never got back to the server still activates its event.
+3. **Agreements, Tax, and Banking**: the Paid Apps agreement must be active.
+   Join the **App Store Small Business Program** (15% commission instead of
+   30% under $1M a year).
+4. Test with TestFlight or a sandbox account: those purchases are Sandbox,
+   accepted unless `APPLE_ALLOW_SANDBOX=0`.
 
 ## Privacy
 

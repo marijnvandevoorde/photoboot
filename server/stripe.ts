@@ -163,7 +163,9 @@ async function checkout(req: Req, res: Res) {
         price_data: {
           currency: EVENT_CURRENCY,
           unit_amount: EVENT_PRICE_CENTS,
-          product_data: { name: `Photo booth gallery — ${ev.name}` },
+          // Tax code: general electronically supplied services. Required when
+          // Managed Payments is on, and what Stripe Tax uses for the VAT rate.
+          product_data: { name: `Photo booth gallery — ${ev.name}`, tax_code: 'txcd_10000000' },
         },
       },
     ],

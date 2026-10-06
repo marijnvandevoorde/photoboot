@@ -180,6 +180,7 @@ describe('checkout', () => {
       'line_items[0][price_data][currency]': 'eur',
       'line_items[0][price_data][unit_amount]': '1900',
       'line_items[0][price_data][product_data][name]': 'Photo booth gallery — Anna & Tom',
+      'line_items[0][price_data][product_data][tax_code]': 'txcd_10000000',
       customer_email: 'host@example.com',
       client_reference_id: eventId,
       'metadata[event_id]': eventId,

@@ -5,7 +5,8 @@
 //   GET    /s/{uuid}           photo page: view, download, delete
 //   GET    /share/{uuid}.jpg   the photo itself
 //   DELETE /api/share/{uuid}   delete (the unguessable id is the capability)
-//   …and /api/events, /g/… from events.js.
+//   …and /api/admin/… (admin.ts), /api/events, /g/… (events.ts),
+//   /api/checkout, /api/stripe/webhook (stripe.ts).
 //
 // Uploads are limited per IP unless they carry a valid event key
 // (X-Event-Id + X-Event-Key), refused when the disk quota is hit, and, if
@@ -27,18 +28,19 @@ import {
   page,
   type Req,
   type Res,
+  rateLimiter,
   readBody,
   sendHtml,
   sendJson,
 } from './http.ts';
 import { deletePhoto, expiresAt, hasRoomFor, ID, jpgPath, photoMeta, savePhoto } from './photos.ts';
+import { stripeRoutes } from './stripe.ts';
 
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const UPLOAD_TOKEN = process.env.UPLOAD_TOKEN || '';
 const RATE_WINDOW_MS = 60 * 60 * 1000;
 const RATE_MAX = 120; // uploads per IP per hour without an event key
-
-const recent = new Map<string, number[]>(); // ip → timestamps
+const rateLimited = rateLimiter(RATE_MAX, RATE_WINDOW_MS);
 
 // The iOS / Android app serves its pages from these origins and calls the
 // API cross-origin. Every API route still needs its own key or token.
@@ -63,15 +65,6 @@ function cors(req: Req, res: Res, pathname: string): boolean {
   });
   res.end();
   return true;
-}
-
-function rateLimited(ip: string): boolean {
-  const now = Date.now();
-  const hits = (recent.get(ip) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
-  hits.push(now);
-  recent.set(ip, hits);
-  if (recent.size > 10_000) recent.clear(); // crude bound on memory
-  return hits.length > RATE_MAX;
 }
 
 async function upload(req: Req, res: Res): Promise<void> {
@@ -176,6 +169,7 @@ async function route(req: Req, res: Res, next: Next): Promise<void> {
   }
   if (await adminRoutes(req, res, url)) return;
   if (await eventRoutes(req, res, url)) return;
+  if (await stripeRoutes(req, res, url)) return;
   next();
 }
 

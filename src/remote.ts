@@ -1,15 +1,11 @@
-// Client for the server's event API (server/events.js).
-//
-// Admin calls carry the server's ADMIN_TOKEN (entered once in settings and
-// kept in localStorage, never exported). Booth calls carry the event's setup
-// key, which the setup QR hands to each device.
+// Client for the server's booth-side event API (server/events.ts). Every
+// call carries the event's setup key, which the setup link hands to each
+// device. Managing events is the owner's /admin (src/admin.ts), not this.
 
 import type { PortableConfig } from './config.ts';
-import { apiBase, publicOrigin } from './platform.ts';
+import { apiBase } from './platform.ts';
 import type { Stats } from './stats.ts';
 import type { TemplateImages } from './templates.ts';
-
-const ADMIN_TOKEN_KEY = 'photoboot:server-admin-token';
 
 // A whole booth setup: what profiles, export files and server events hold.
 export interface Setup {
@@ -17,41 +13,6 @@ export interface Setup {
   name: string;
   config: Partial<PortableConfig>;
   images: TemplateImages;
-}
-
-export interface EventSummary {
-  id: string;
-  name: string;
-  created: string;
-  updated: string;
-  setupKey: string;
-  galleryKey: string;
-  photos: number;
-  stats: Stats & { booths: number };
-}
-
-export interface CreatedEvent {
-  id: string;
-  name: string;
-  setupKey: string;
-  galleryKey: string;
-}
-
-export function getAdminToken() {
-  try {
-    return localStorage.getItem(ADMIN_TOKEN_KEY) ?? '';
-  } catch {
-    return '';
-  }
-}
-
-export function setAdminToken(token: string) {
-  try {
-    if (token) localStorage.setItem(ADMIN_TOKEN_KEY, token);
-    else localStorage.removeItem(ADMIN_TOKEN_KEY);
-  } catch {
-    /* ignore */
-  }
 }
 
 async function call<T>(
@@ -69,17 +30,12 @@ async function call<T>(
   return data as T;
 }
 
-const admin = () => ({ Authorization: `Bearer ${getAdminToken()}` });
-
 export const remote = {
-  listEvents: () => call<{ events: EventSummary[] }>('GET', '/api/events', { headers: admin() }),
-  createEvent: (event: Setup) => call<CreatedEvent>('POST', '/api/events', { body: event, headers: admin() }),
-  updateEvent: (id: string, event: Setup) =>
-    call<{ ok: true }>('PUT', `/api/events/${id}`, { body: event, headers: admin() }),
-  deleteEvent: (id: string) => call<{ ok: true }>('DELETE', `/api/events/${id}`, { headers: admin() }),
   // Booth side: fetch a setup with its key; push this device's stats.
   loadEvent: (id: string, key: string) =>
     call<Setup & { id: string }>('GET', `/api/events/${id}`, { headers: { 'X-Event-Key': key } }),
+  saveEvent: (id: string, key: string, setup: Setup) =>
+    call<{ ok: true }>('PUT', `/api/events/${id}`, { body: setup, headers: { 'X-Event-Key': key } }),
   pushStats: (id: string, key: string, device: string, stats: Stats) =>
     call<{ ok: true }>('POST', `/api/events/${id}/stats`, { body: { device, stats }, headers: { 'X-Event-Key': key } }),
 };
@@ -98,7 +54,3 @@ export function deviceId(): string {
     return 'unknown';
   }
 }
-
-// Links the server hands out for an event.
-export const setupUrl = (id: string, setupKey: string) => `${publicOrigin}/settings.html#event=${id}.${setupKey}`;
-export const galleryUrl = (id: string, galleryKey: string) => `${publicOrigin}/g/${id}/${galleryKey}`;

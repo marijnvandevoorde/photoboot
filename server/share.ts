@@ -16,6 +16,7 @@
 import { randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
+import { adminRoutes } from './admin.ts';
 import { eventRoutes, verifyEventKey } from './events.ts';
 import {
   baseUrl,
@@ -30,7 +31,7 @@ import {
   sendHtml,
   sendJson,
 } from './http.ts';
-import { deletePhoto, expiresAt, hasRoomFor, ID, jpgPath, photoMeta, savePhoto, TTL_DAYS } from './photos.ts';
+import { deletePhoto, expiresAt, hasRoomFor, ID, jpgPath, photoMeta, savePhoto } from './photos.ts';
 
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const UPLOAD_TOKEN = process.env.UPLOAD_TOKEN || '';
@@ -49,7 +50,9 @@ const CORS_ORIGINS = (process.env.CORS_ORIGINS ?? 'capacitor://localhost,https:/
 // Adds CORS headers for the app; returns true when it answered a preflight.
 function cors(req: Req, res: Res, pathname: string): boolean {
   const origin = req.headers.origin;
-  if (!origin || !CORS_ORIGINS.includes(origin) || !pathname.startsWith('/api/')) return false;
+  // Never for /api/admin: that's the owner's browser only.
+  if (!origin || !CORS_ORIGINS.includes(origin) || !pathname.startsWith('/api/') || pathname.startsWith('/api/admin/'))
+    return false;
   res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Vary', 'Origin');
   if (req.method !== 'OPTIONS') return false;
@@ -118,9 +121,9 @@ async function sharePage(id: string, res: Res): Promise<void> {
       page('Photo not found', '<h1>This photo is gone</h1><p class="muted">It was deleted, or it expired.</p>')
     );
   }
-  const expires = expiresAt(meta.created);
+  const expires = expiresAt(meta);
   const expiryText = expires
-    ? `This photo is deleted automatically on ${expires.toISOString().slice(0, 10)} (${TTL_DAYS} days after it was taken).`
+    ? `This photo is deleted automatically on ${expires.toISOString().slice(0, 10)} (${meta.retentionDays} days after it was taken).`
     : '';
   sendHtml(
     res,
@@ -171,6 +174,7 @@ async function route(req: Req, res: Res, next: Next): Promise<void> {
     await deletePhoto(id);
     return sendJson(res, 200, { ok: true });
   }
+  if (await adminRoutes(req, res, url)) return;
   if (await eventRoutes(req, res, url)) return;
   next();
 }

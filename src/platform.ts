@@ -12,7 +12,6 @@ export const isApp = Capacitor.isNativePlatform();
 // (sharing, events) need the real server's origin. Browsers use their own.
 const SERVER = import.meta.env.VITE_SERVER_URL ?? 'https://boot.small-victories.co';
 export const apiBase = isApp ? SERVER : '';
-export const publicOrigin = isApp ? SERVER : location.origin;
 
 if (isApp) setTransport(nativeBle);
 

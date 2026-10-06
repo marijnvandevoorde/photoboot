@@ -60,9 +60,10 @@ iPad / iPhone. “Start without printer” works on anything with a camera.
   to download as a ZIP the next morning.
 - **Saved setups**: save, export and import whole setups (settings and
   template images) as a file.
-- **Server events**: publish a setup to your server, scan its QR on any other
-  device to get the same booth, and share a private gallery (with ZIP
-  download and counters) with the host afterwards.
+- **Event galleries** (paid): a host creates an event, gets a setup link
+  for every booth and a private gallery with a ZIP of all shared photos,
+  kept for a year. The owner manages events in `/admin` (admin token +
+  authenticator code).
 
 - **Guest-proof kiosk**: once started, the booth stays on the camera — a
   reload or app restart comes straight back and reconnects to the same
@@ -144,7 +145,15 @@ over SSH and runs Compose there.
 | `EVENTS_DIR`     | `./events`    | Where server events are stored                                       |
 | `SHARE_TTL_DAYS` | `30`          | Shared photos are deleted after this many days (`0` = never)          |
 | `SHARE_MAX_MB`   | `5000`        | Refuse uploads once the photo folder is this big                     |
-| `ADMIN_TOKEN`    | —             | Enables server events; enter it on the settings page to manage them  |
+| `ADMIN_TOKEN`    | —             | Enables `/admin` (log in with it + an authenticator code)            |
+| `ADMIN_TOTP_RESET` | —           | `1` forgets the enrolled authenticator (next login sets up a new one) |
+| `PUBLIC_URL`     | `BASE_URL`    | Origin used in emailed setup / gallery links                         |
+| `PAID_RETENTION_DAYS` | `365`    | How long a paid event keeps its photos                               |
+| `EVENT_PRICE_CENTS` | `1900`     | Web price of an event gallery, in cents                              |
+| `EVENT_CURRENCY` | `eur`         | Currency of that price                                               |
+| `BREVO_API_KEY`  | —             | Sends the event emails through Brevo (without it they're logged)     |
+| `MAIL_FROM`      | `booth@small-victories.co` | Sender address (a verified Brevo sender)                |
+| `DB_PATH`        | `EVENTS_DIR/photoboot.db` | SQLite database (events, photos, payments, sessions)     |
 | `UPLOAD_TOKEN`   | —             | If set, uploads need this token (set it in settings) or an event key |
 
 Put the secrets in a `.env` next to `docker-compose.yml`.

@@ -159,13 +159,27 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
   tone options), `rasterToCanvas`, calibration generators.
 - `src/storage.ts` — tiny IndexedDB key/value store (template images,
   saved setups, local photos). Closes on `pagehide`.
-- `server/share.ts` — the one middleware (Vite dev + prod): `POST
-  /api/share`, `/s/{uuid}` share page (save / delete), `/share/{uuid}.jpg`,
-  `DELETE /api/share/{uuid}`, rate limit, then event routes.
-- `server/photos.ts` — photo files + `{id}.json` sidecars (event, created),
-  expiry cleanup (hourly), disk quota.
-- `server/events.ts` — events: admin CRUD (`ADMIN_TOKEN`), setup load and
-  stats push (setup key), gallery `/g/{id}/{galleryKey}` + streamed ZIP.
+- `server/share.ts` — the one middleware (Vite dev + prod): CORS for the
+  app, `POST /api/share`, `/s/{uuid}` share page (save / delete),
+  `/share/{uuid}.jpg`, `DELETE /api/share/{uuid}`, rate limit, then the
+  admin and event routes.
+- `server/db.ts` — SQLite (`node:sqlite`): events, photos, stats, payments,
+  admin sessions, settings (TOTP secret). Imports the pre-database JSON
+  events and photo sidecars once (`PRAGMA user_version`).
+- `server/photos.ts` — photo files + rows; expiry per photo: free
+  `SHARE_TTL_DAYS`, paid events `retention_days` / `PAID_RETENTION_DAYS`;
+  disk quota.
+- `server/events.ts` — event store + the booth routes (setup key: load /
+  save setup, stats) and the host gallery + streamed ZIP (gallery key).
+  Pending (unpaid) events refuse photos and show no gallery.
+- `server/billing.ts` — the paid-event lifecycle every payment path uses:
+  `createPendingEvent`, `activateEvent` (idempotent per payment ref,
+  emails the links), `refundPayment`, `compEvent`, `sendEventEmail`.
+- `server/admin.ts` — `/api/admin/*`: ADMIN_TOKEN + TOTP login (first
+  login enrolls), cookie sessions, list / edit / comp / delete events,
+  payments. Page: `admin.html` + `src/admin.ts`.
+- `server/mail.ts` — Brevo HTTP API; logs to `outbox` without a key.
+- `server/totp.ts` — RFC 6238 codes, base32.
 - `server/http.ts` — helpers + the HTML shell of the public pages.
 - `server/zip.ts` — stored-ZIP writer + CRC32, shared with the browser.
 - `server/index.ts` — production server (node builtins only): `dist/` +

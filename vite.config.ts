@@ -33,6 +33,7 @@ export default defineConfig({
         print: 'print.html',
         settings: 'settings.html',
         preview: 'preview.html',
+        admin: 'admin.html',
       },
     },
   },

@@ -8,3 +8,4 @@ shares
 # One-off generated template assets (upload via settings → Custom template).
 template-assets
 events
+.claude/

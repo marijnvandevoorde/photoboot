@@ -1,8 +1,9 @@
 # Production: https://boot.small-victories.co behind the host's Traefik.
 # Photos live on the host in /storage/photoboot/shares, server events in
 # /storage/photoboot/events (both owned by uid 1000, the image's `node` user).
-# Secrets come from ~/photoboot/.env: ADMIN_TOKEN (server events), optional
-# UPLOAD_TOKEN (lock down /api/share).
+# Secrets come from ~/photoboot/.env: ADMIN_TOKEN (/admin), BREVO_API_KEY
+# (event emails), optional UPLOAD_TOKEN (lock down /api/share). The SQLite
+# database lives in /data/events (photoboot.db).
 #
 #   docker compose up -d --build
 #
@@ -22,8 +23,16 @@ services:
       EVENTS_DIR: /data/events
       SHARE_TTL_DAYS: ${SHARE_TTL_DAYS:-30}
       SHARE_MAX_MB: ${SHARE_MAX_MB:-5000}
+      PUBLIC_URL: https://boot.small-victories.co
+      PAID_RETENTION_DAYS: ${PAID_RETENTION_DAYS:-365}
+      EVENT_PRICE_CENTS: ${EVENT_PRICE_CENTS:-1900}
+      EVENT_CURRENCY: ${EVENT_CURRENCY:-eur}
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      ADMIN_TOTP_RESET: ${ADMIN_TOTP_RESET:-}
       UPLOAD_TOKEN: ${UPLOAD_TOKEN:-}
+      BREVO_API_KEY: ${BREVO_API_KEY:-}
+      MAIL_FROM: ${MAIL_FROM:-booth@small-victories.co}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Photoboot}
     volumes:
       - /storage/photoboot/shares:/data/shares
       - /storage/photoboot/events:/data/events

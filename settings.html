@@ -89,6 +89,35 @@
               <input id="import-picker" type="file" accept="application/json,.json" hidden />
             </div>
           </div>
+
+          <div class="card">
+            <h3>Online gallery</h3>
+            <p id="server-event" class="small"></p>
+            <div id="event-joined" hidden>
+              <p class="help">
+                Every photo guests share goes to this event's private gallery. Running several booths? Set this
+                one up, save it to the event, then open the setup link on the others.
+              </p>
+              <div class="row">
+                <button type="button" id="save-to-event" class="primary">Save this setup to the event</button>
+                <button type="button" id="leave-event">Disconnect from the event</button>
+              </div>
+            </div>
+            <div id="event-join">
+              <p class="help">
+                Want every shared photo of the evening in one private online gallery, with a download of all of
+                them? <a href="/event.html" target="_blank" rel="noopener">Get an event gallery</a>. You'll get
+                an email with a setup link: open it on this device, or paste it here.
+              </p>
+              <div class="row">
+                <label class="grow">
+                  Setup link
+                  <input id="setup-link" type="url" placeholder="https://…/settings.html#event=…" />
+                </label>
+                <button type="button" id="use-setup-link">Set up this booth</button>
+              </div>
+            </div>
+          </div>
         </section>
 
         <!-- ================= What guests see ================= -->
@@ -369,64 +398,6 @@
               a type if it isn't found. <a href="/test.html">Printer calibration</a> prints rulers to measure
               the paper.
             </p>
-          </div>
-
-          <div class="card">
-            <h3>Join a server event</h3>
-            <p id="server-event" class="small"></p>
-            <p class="help">
-              Got a setup link or QR code from the owner? Scan it with this device's camera, or paste the link
-              here, and this device becomes the same booth.
-            </p>
-            <div class="row">
-              <label class="grow">
-                Setup link
-                <input id="setup-link" type="url" placeholder="https://…/settings.html#event=…" />
-              </label>
-              <button type="button" id="use-setup-link">Set up this booth</button>
-            </div>
-            <button type="button" id="leave-event">Disconnect this booth from the event</button>
-          </div>
-
-          <div class="card">
-            <h3>Server events</h3>
-            <p class="help">
-              Only needed to run <strong>several booths with the same setup</strong>, or to give the host an
-              <strong>online gallery</strong> of the photos guests shared. One booth on its own doesn't need it.
-            </p>
-            <dl class="secrets">
-              <dt>Server admin token</dt>
-              <dd>
-                The owner's key to the server (<code>ADMIN_TOKEN</code> in its settings). Enter it once, on your
-                own phone or laptop only: it stays on that device and is never put in setups or on booths.
-              </dd>
-              <dt>Setup link / QR</dt>
-              <dd>
-                Turns another device into this same booth: scan it on the tablet and it's ready. Give it only to
-                booth devices.
-              </dd>
-              <dt>Gallery link</dt>
-              <dd>
-                For the host: shows every photo guests shared at the event, with a ZIP download. It can't change
-                anything.
-              </dd>
-            </dl>
-            <label>
-              Server admin token
-              <input id="admin-token" type="password" autocomplete="off" placeholder="Only on the owner's device" />
-            </label>
-            <div id="server-admin" class="server-admin" hidden>
-              <div class="row">
-                <button type="button" id="publish-event" class="primary">Publish current setup</button>
-                <button type="button" id="refresh-events">Refresh list</button>
-              </div>
-              <p class="help">
-                Publishing puts this setup on the server as a new event and shows its setup QR. Each event below
-                has its own setup QR and gallery link.
-              </p>
-              <ul id="event-list" class="event-list"></ul>
-              <div id="event-qr" class="event-qr" hidden></div>
-            </div>
           </div>
 
           <div class="card">

@@ -60,8 +60,9 @@ iPad / iPhone. “Start without printer” works on anything with a camera.
   to download as a ZIP the next morning.
 - **Saved setups**: save, export and import whole setups (settings and
   template images) as a file.
-- **Event galleries** (paid): a host signs up on `/event.html`, pays once
-  with Stripe, and gets a setup link for every booth and a private gallery
+- **Event galleries** (paid): a host signs up on `/event.html` and pays once
+  with Stripe — or, in the iOS app, with an in-app purchase right in
+  settings — and gets a setup link for every booth and a private gallery
   with a ZIP of all shared photos, kept for a year. The owner manages
   events in `/admin` (admin token + authenticator code).
 
@@ -151,6 +152,9 @@ over SSH and runs Compose there.
 | `PAID_RETENTION_DAYS` | `365`    | How long a paid event keeps its photos                               |
 | `EVENT_PRICE_CENTS` | `1900`     | Web price of an event gallery, in cents                              |
 | `EVENT_CURRENCY` | `eur`         | Currency of that price                                               |
+| `APPLE_BUNDLE_ID` | `co.smallvictories.photoboot` | iOS app whose in-app purchases are accepted               |
+| `APPLE_PRODUCT_ID` | `co.smallvictories.photoboot.eventgallery` | The consumable that buys an event gallery |
+| `APPLE_ALLOW_SANDBOX` | `1`      | Accept Sandbox purchases (TestFlight, sandbox testers); `0` = Production only |
 | `BREVO_API_KEY`  | —             | Sends the event emails through Brevo (without it they're logged)     |
 | `MAIL_FROM`      | `booth@small-victories.co` | Sender address (a verified Brevo sender)                |
 | `DB_PATH`        | `EVENTS_DIR/photoboot.db` | SQLite database (events, photos, payments, sessions)     |
@@ -178,6 +182,33 @@ the server talks to Stripe's API directly (no SDK).
 Test mode works the same: use the `sk_test_…` key and a test-mode webhook
 (or `stripe listen --forward-to localhost:8080/api/stripe/webhook`). A full
 refund in Stripe ends the event's paid perks; its photos stay.
+
+### In-app purchase (iOS)
+
+Inside the iOS app, an event gallery is sold through Apple in-app purchase
+(App Store guideline 3.1.1); the web keeps its own checkout. The app asks the
+server for a pending event, buys the consumable with that event's
+`appAccountToken`, and sends the signed StoreKit 2 transaction to
+`/api/apple/redeem`. The server verifies Apple's signature and certificate
+chain itself (pinned Apple Root CA - G3, `server/apple-root-ca-g3.pem`) and
+activates the event; the host gets the usual email and the booth sets itself
+up right away. To set it up:
+
+1. **App Store Connect → the app → In-App Purchases**: create a
+   **Consumable** with product id `co.smallvictories.photoboot.eventgallery`
+   (or set `APPLE_PRODUCT_ID` on the server and `VITE_APPLE_PRODUCT_ID` when
+   building the app), a price, a display name and description, and a review
+   screenshot of the settings card. Submit it together with the next app
+   version.
+2. **App Information → App Store Server Notifications**: Version 2, with
+   `https://<host>/api/apple/notifications` as both the Production and the
+   Sandbox URL. Refunds then end the paid perks, and a purchase whose app
+   never got back to the server still activates its event.
+3. **Agreements, Tax, and Banking**: the Paid Apps agreement must be active.
+   Join the **App Store Small Business Program** (15% commission instead of
+   30% under $1M a year).
+4. Test with TestFlight or a sandbox account: those purchases are Sandbox,
+   accepted unless `APPLE_ALLOW_SANDBOX=0`.
 
 ## Privacy
 

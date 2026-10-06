@@ -143,6 +143,14 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
 - `src/archive.ts` — local colour copies in IndexedDB (`photo:<event>:<iso>`)
   and ZIP export (uses `server/zip.ts`).
 - `src/remote.ts` — client for the server event API.
+- `src/purchase.ts` — iOS app only: Apple in-app purchase of an event
+  gallery (`@capgo/native-purchases`, StoreKit 2): `/api/apple/start` →
+  purchase with the event's appAccountToken → `/api/apple/redeem` → finish
+  the transaction only after the server confirmed. Unconfirmed ones are
+  kept (localStorage `photoboot:apple-unredeemed` + StoreKit's unfinished
+  list) and redeemed on settings load / "Restore unfinished purchase".
+  `platform.ts` starts `watchTransactions()` (late deliveries, Ask to Buy).
+  Settings' "Online gallery" card shows the buy form when `isIosApp`.
 - `src/photo.ts` — looks (`PHOTO_STYLES`, `PHOTO_TWISTS`), `photoToRaster`,
   `renderSticker`, `renderColour`, `printPhoto` (copies + tear margin).
 - `src/strip.ts` — `composeStrip` (1-bit sticker) and `composeColour`.
@@ -165,7 +173,8 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
   admin, event and Stripe routes.
 - `server/db.ts` — SQLite (`node:sqlite`): events, photos, stats, payments,
   admin sessions, settings (TOTP secret). Imports the pre-database JSON
-  events and photo sidecars once (`PRAGMA user_version`).
+  events and photo sidecars once (`PRAGMA user_version` 1), then runs
+  `MIGRATIONS` in order (2: `apple_tokens`, appAccountToken → event).
 - `server/photos.ts` — photo files + rows; expiry per photo: free
   `SHARE_TTL_DAYS`, paid events `retention_days` / `PAID_RETENTION_DAYS`;
   disk quota.
@@ -183,6 +192,14 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
   ref = the PaymentIntent id, so `charge.refunded` (which only carries
   `payment_intent`) maps straight to `refundPayment`; only full refunds
   un-pay. Page: `event.html` + `src/event.ts` (sign-up, success, cancel).
+- `server/apple.ts` — `/api/apple/start|redeem|notifications`. Verifies
+  StoreKit 2 JWS with node:crypto only: x5c chain (validity, issuer
+  signatures, root = `apple-root-ca-g3.pem` by fingerprint256, Apple's
+  marker OIDs), ES256 (ieee-p1363); then bundle / product / Consumable /
+  environment / not revoked / appAccountToken. Payment ref = transactionId.
+  Notifications V2: REFUND / REVOKE → refundPayment, ONE_TIME_CHARGE →
+  activate, everything else 200. `configureApple()` injects a test root
+  (fixtures + openssl script in `test/fixtures/apple`).
 - `server/admin.ts` — `/api/admin/*`: ADMIN_TOKEN + TOTP login (first
   login enrolls), cookie sessions, list / edit / comp / delete events,
   payments. Page: `admin.html` + `src/admin.ts`.
@@ -216,7 +233,8 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
 See the table in README.md: `BASE_URL`, `PORT`, `SHARE_DIR`, `EVENTS_DIR`,
 `SHARE_TTL_DAYS`, `SHARE_MAX_MB`, `ADMIN_TOKEN`, `UPLOAD_TOKEN`, the
 event price / mail / Stripe keys (`STRIPE_SECRET_KEY`,
-`STRIPE_WEBHOOK_SECRET`, `STRIPE_AUTOMATIC_TAX`). On the
+`STRIPE_WEBHOOK_SECRET`, `STRIPE_AUTOMATIC_TAX`) and the in-app purchase
+settings (`APPLE_BUNDLE_ID`, `APPLE_PRODUCT_ID`, `APPLE_ALLOW_SANDBOX`). On the
 production host the secrets are in `~/photoboot/.env`.
 
 ## Open questions / next things to do

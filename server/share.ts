@@ -6,7 +6,7 @@
 //   GET    /share/{uuid}.jpg   the photo itself
 //   DELETE /api/share/{uuid}   delete (the unguessable id is the capability)
 //   …and /api/admin/… (admin.ts), /api/events, /g/… (events.ts),
-//   /api/checkout, /api/stripe/webhook (stripe.ts).
+//   /api/checkout, /api/stripe/webhook (stripe.ts), /api/apple/… (apple.ts).
 //
 // Uploads are limited per IP unless they carry a valid event key
 // (X-Event-Id + X-Event-Key), refused when the disk quota is hit, and, if
@@ -18,6 +18,7 @@ import { randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { adminRoutes } from './admin.ts';
+import { appleRoutes } from './apple.ts';
 import { eventRoutes, verifyEventKey } from './events.ts';
 import {
   baseUrl,
@@ -168,6 +169,7 @@ async function route(req: Req, res: Res, next: Next): Promise<void> {
     return sendJson(res, 200, { ok: true });
   }
   if (await adminRoutes(req, res, url)) return;
+  if (await appleRoutes(req, res, url)) return;
   if (await eventRoutes(req, res, url)) return;
   if (await stripeRoutes(req, res, url)) return;
   next();

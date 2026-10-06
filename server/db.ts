@@ -74,12 +74,41 @@ function open(): DatabaseSync {
   const db = new DatabaseSync(DB_PATH);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 3000;');
   db.exec(SCHEMA);
-  if (Number((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version) < 1) {
+  const version = () => Number((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version);
+  if (version() < 1) {
     importLegacy(db);
     db.exec('PRAGMA user_version = 1');
   }
+  // Later schema changes, in order; each runs once, in a transaction.
+  for (const [to, sql] of MIGRATIONS) {
+    if (version() >= to) continue;
+    db.exec('BEGIN');
+    try {
+      db.exec(sql);
+      db.exec(`PRAGMA user_version = ${to}`);
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+  }
   return db;
 }
+
+const MIGRATIONS: [number, string][] = [
+  [
+    2,
+    // Apple in-app purchase (apple.ts): the appAccountToken handed to the app
+    // for a pending event. StoreKit signs it into the transaction, which ties
+    // the purchase to that event.
+    `CREATE TABLE apple_tokens (
+      token TEXT PRIMARY KEY,                   -- lowercase UUID
+      event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+      created TEXT NOT NULL
+    );
+    CREATE INDEX apple_tokens_event ON apple_tokens(event_id);`,
+  ],
+];
 
 // Events and photo metadata from before the database (JSON files). The files
 // stay where they are; importing is idempotent.

@@ -67,6 +67,20 @@ export function clientIp(req: Req): string {
   );
 }
 
+// Sliding-window limit per key (an IP): each call records a hit and says
+// whether the key went over `max` hits within `windowMs`.
+export function rateLimiter(max: number, windowMs: number): (key: string) => boolean {
+  const recent = new Map<string, number[]>(); // key → timestamps
+  return (key) => {
+    const now = Date.now();
+    const hits = (recent.get(key) ?? []).filter((t) => now - t < windowMs);
+    hits.push(now);
+    recent.set(key, hits);
+    if (recent.size > 10_000) recent.clear(); // crude bound on memory
+    return hits.length > max;
+  };
+}
+
 export function baseUrl(req: Req): string {
   const fixed = (process.env.BASE_URL || '').replace(/\/+$/, '');
   if (fixed) return fixed;

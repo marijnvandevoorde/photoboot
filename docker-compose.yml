@@ -2,7 +2,8 @@
 # Photos live on the host in /storage/photoboot/shares, server events in
 # /storage/photoboot/events (both owned by uid 1000, the image's `node` user).
 # Secrets come from ~/photoboot/.env: ADMIN_TOKEN (/admin), BREVO_API_KEY
-# (event emails), optional UPLOAD_TOKEN (lock down /api/share). The SQLite
+# (event emails), STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET (event payments,
+# see README), optional UPLOAD_TOKEN (lock down /api/share). The SQLite
 # database lives in /data/events (photoboot.db).
 #
 #   docker compose up -d --build
@@ -33,6 +34,9 @@ services:
       BREVO_API_KEY: ${BREVO_API_KEY:-}
       MAIL_FROM: ${MAIL_FROM:-booth@small-victories.co}
       MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Photoboot}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_AUTOMATIC_TAX: ${STRIPE_AUTOMATIC_TAX:-}
     volumes:
       - /storage/photoboot/shares:/data/shares
       - /storage/photoboot/events:/data/events

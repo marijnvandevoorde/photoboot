@@ -60,10 +60,10 @@ iPad / iPhone. “Start without printer” works on anything with a camera.
   to download as a ZIP the next morning.
 - **Saved setups**: save, export and import whole setups (settings and
   template images) as a file.
-- **Event galleries** (paid): a host creates an event, gets a setup link
-  for every booth and a private gallery with a ZIP of all shared photos,
-  kept for a year. The owner manages events in `/admin` (admin token +
-  authenticator code).
+- **Event galleries** (paid): a host signs up on `/event.html`, pays once
+  with Stripe, and gets a setup link for every booth and a private gallery
+  with a ZIP of all shared photos, kept for a year. The owner manages
+  events in `/admin` (admin token + authenticator code).
 
 - **Guest-proof kiosk**: once started, the booth stays on the camera — a
   reload or app restart comes straight back and reconnects to the same
@@ -155,8 +155,29 @@ over SSH and runs Compose there.
 | `MAIL_FROM`      | `booth@small-victories.co` | Sender address (a verified Brevo sender)                |
 | `DB_PATH`        | `EVENTS_DIR/photoboot.db` | SQLite database (events, photos, payments, sessions)     |
 | `UPLOAD_TOKEN`   | —             | If set, uploads need this token (set it in settings) or an event key |
+| `STRIPE_SECRET_KEY` | —          | Stripe secret key (`sk_live_…` / `sk_test_…`); without it there's no checkout |
+| `STRIPE_WEBHOOK_SECRET` | —      | Signing secret (`whsec_…`) of the Stripe webhook endpoint            |
+| `STRIPE_AUTOMATIC_TAX` | —       | `1` lets Stripe Tax add VAT (the price is then VAT-inclusive)        |
 
 Put the secrets in a `.env` next to `docker-compose.yml`.
+
+### Payments (Stripe)
+
+Hosts pay for an event gallery on `/event.html` through Stripe Checkout;
+the server talks to Stripe's API directly (no SDK).
+
+1. In the Stripe dashboard (Developers → API keys) copy the secret key into
+   `STRIPE_SECRET_KEY`.
+2. Developers → Webhooks → Add endpoint: `https://<host>/api/stripe/webhook`
+   with the events `checkout.session.completed`,
+   `checkout.session.async_payment_succeeded` and `charge.refunded`. Copy
+   its signing secret into `STRIPE_WEBHOOK_SECRET`.
+3. Optional: turn on Stripe Tax (with your registrations) and set
+   `STRIPE_AUTOMATIC_TAX=1`. Checkout always offers an invoice.
+
+Test mode works the same: use the `sk_test_…` key and a test-mode webhook
+(or `stripe listen --forward-to localhost:8080/api/stripe/webhook`). A full
+refund in Stripe ends the event's paid perks; its photos stay.
 
 ## Privacy
 

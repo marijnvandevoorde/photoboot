@@ -162,7 +162,7 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
 - `server/share.ts` — the one middleware (Vite dev + prod): CORS for the
   app, `POST /api/share`, `/s/{uuid}` share page (save / delete),
   `/share/{uuid}.jpg`, `DELETE /api/share/{uuid}`, rate limit, then the
-  admin and event routes.
+  admin, event and Stripe routes.
 - `server/db.ts` — SQLite (`node:sqlite`): events, photos, stats, payments,
   admin sessions, settings (TOTP secret). Imports the pre-database JSON
   events and photo sidecars once (`PRAGMA user_version`).
@@ -175,12 +175,21 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
 - `server/billing.ts` — the paid-event lifecycle every payment path uses:
   `createPendingEvent`, `activateEvent` (idempotent per payment ref,
   emails the links), `refundPayment`, `compEvent`, `sendEventEmail`.
+- `server/stripe.ts` — Stripe over fetch (no SDK): `POST /api/checkout`
+  (pending event + Checkout Session → `{url}`), `GET /api/checkout/price`,
+  `GET /api/checkout/status?session=cs_…` (asks Stripe; activates and
+  returns the links once paid), `POST /api/stripe/webhook` (raw body,
+  `verifyStripeSignature`: HMAC of `t.body`, 5 min tolerance). Payment
+  ref = the PaymentIntent id, so `charge.refunded` (which only carries
+  `payment_intent`) maps straight to `refundPayment`; only full refunds
+  un-pay. Page: `event.html` + `src/event.ts` (sign-up, success, cancel).
 - `server/admin.ts` — `/api/admin/*`: ADMIN_TOKEN + TOTP login (first
   login enrolls), cookie sessions, list / edit / comp / delete events,
   payments. Page: `admin.html` + `src/admin.ts`.
 - `server/mail.ts` — Brevo HTTP API; logs to `outbox` without a key.
 - `server/totp.ts` — RFC 6238 codes, base32.
-- `server/http.ts` — helpers + the HTML shell of the public pages.
+- `server/http.ts` — helpers (incl. the per-IP `rateLimiter`) + the HTML
+  shell of the public pages.
 - `server/zip.ts` — stored-ZIP writer + CRC32, shared with the browser.
 - `server/index.ts` — production server (node builtins only): `dist/` +
   routes; `createApp()` is what the tests start.
@@ -205,7 +214,9 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
 ## Config (env)
 
 See the table in README.md: `BASE_URL`, `PORT`, `SHARE_DIR`, `EVENTS_DIR`,
-`SHARE_TTL_DAYS`, `SHARE_MAX_MB`, `ADMIN_TOKEN`, `UPLOAD_TOKEN`. On the
+`SHARE_TTL_DAYS`, `SHARE_MAX_MB`, `ADMIN_TOKEN`, `UPLOAD_TOKEN`, the
+event price / mail / Stripe keys (`STRIPE_SECRET_KEY`,
+`STRIPE_WEBHOOK_SECRET`, `STRIPE_AUTOMATIC_TAX`). On the
 production host the secrets are in `~/photoboot/.env`.
 
 ## Open questions / next things to do

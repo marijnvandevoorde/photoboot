@@ -11,7 +11,6 @@
 // kiosk.ts). The hidden long-presses in the booth (and /?admin=1) are the
 // only entry points — this URL isn't linked from anywhere public.
 
-import './platform.ts';
 import { deletePhotos, exportZip, photoEvents } from './archive.ts';
 import type { Config, TextTemplateConfig } from './config.ts';
 import { DEFAULTS, eventKey, getConfig, PAPER_PRESETS, portableConfig, resetConfig, setConfig } from './config.ts';
@@ -19,7 +18,9 @@ import { $, errorMessage, option } from './dom.ts';
 import { LANGUAGES, STRING_KEYS, STRINGS } from './i18n.ts';
 import { adminUnlocked, checkPin, hasPin, kioskState, pinHash, setAdminUnlocked, unlockKiosk } from './kiosk.ts';
 import { PHOTO_STYLES, PHOTO_TWISTS } from './photo.ts';
+import { isIosApp } from './platform.ts';
 import { listPrinters } from './printers/index.ts';
+import type { PurchasedEvent } from './purchase.ts';
 import type { Setup } from './remote.ts';
 import { remote } from './remote.ts';
 import { getPaper, getStats, getStatus, newRoll, paperLeft, resetStats } from './stats.ts';
@@ -607,7 +608,7 @@ async function importFromHash() {
   await importSetupLink(link);
 }
 
-async function importSetupLink(link: string) {
+async function importSetupLink(link: string): Promise<boolean> {
   const m = link.trim().match(SETUP_LINK);
   const notice = $('import-status');
   notice.classList.remove('warn');
@@ -615,7 +616,7 @@ async function importSetupLink(link: string) {
     notice.hidden = false;
     notice.textContent = "That isn't a setup link. It ends in #event=…";
     notice.classList.add('warn');
-    return;
+    return false;
   }
   notice.hidden = false;
   notice.textContent = 'Loading the event setup…';
@@ -623,11 +624,130 @@ async function importSetupLink(link: string) {
     const setup = await remote.loadEvent(m[1], m[2]);
     await applySetup(setup, { serverEvent: { id: m[1], key: m[2], name: setup.name } });
     notice.textContent = `This booth is now set up for “${setup.name}”. Go back to the booth to start.`;
+    return true;
   } catch (err) {
     notice.textContent = `Couldn't load the event: ${errorMessage(err)}`;
     notice.classList.add('warn');
+    return false;
   }
 }
+
+// ---------- buying an event gallery (iOS app: Apple in-app purchase) ----------
+// The web keeps its link to /event.html (Stripe). In the iOS app Apple
+// requires in-app purchase: src/purchase.ts talks to StoreKit and the server.
+
+const purchaseModule = () => import('./purchase.ts');
+
+function buyStatus(text: string, warn = false) {
+  const box = $('buy-status');
+  box.textContent = text;
+  box.classList.toggle('warn', warn);
+  box.hidden = !text;
+}
+
+// The server confirmed a purchase: join the event and show its gallery link.
+async function delivered(event: PurchasedEvent) {
+  $<HTMLInputElement>('gallery-link').value = event.galleryLink;
+  $('event-bought').hidden = false;
+  const joined = await importSetupLink(event.setupLink);
+  buyStatus(
+    joined
+      ? `Paid ✓ This booth is set up for “${event.eventName}”. The links are in your email too.`
+      : `Paid ✓ “${event.eventName}” is ready, but this booth couldn't load it yet: open the setup link from the email.`,
+    !joined
+  );
+  renderServerEvent();
+}
+
+async function redeemUnfinished(manual: boolean) {
+  const { redeemUnfinished } = await purchaseModule();
+  const { redeemed, failed } = await redeemUnfinished();
+  const last = redeemed.at(-1);
+  if (last) await delivered(last);
+  if (failed.length)
+    buyStatus(`A purchase couldn't be confirmed yet (${failed[0]}). Try "Restore unfinished purchase" later.`, true);
+  else if (manual && !last) buyStatus('No unfinished purchases on this device.');
+}
+
+let appPurchaseReady = false;
+async function setupAppPurchase() {
+  if (!isIosApp || appPurchaseReady) return;
+  appPurchaseReady = true;
+  $('event-buy-web').hidden = true;
+  $('event-buy-app').hidden = false;
+  if (!$<HTMLInputElement>('buy-name').value) $<HTMLInputElement>('buy-name').value = config.eventName || '';
+  const p = await purchaseModule();
+  // Ask to Buy approved (or another late delivery) while settings are open.
+  p.onTransactionDelivered((tx) => {
+    p.redeem(tx).then(delivered, (err) => buyStatus(`Couldn't confirm the purchase: ${errorMessage(err)}`, true));
+  });
+  const button = $<HTMLButtonElement>('buy-gallery');
+  try {
+    const price = await p.productPrice();
+    if (!price) throw new Error('product not found');
+    button.textContent = `Buy — ${price}`;
+    button.disabled = false;
+  } catch {
+    buyStatus("The App Store isn't reachable right now. Check the internet connection and reopen settings.", true);
+  }
+  await redeemUnfinished(false).catch(() => {});
+}
+
+$<HTMLButtonElement>('buy-gallery').addEventListener('click', async () => {
+  const name = $<HTMLInputElement>('buy-name').value.trim();
+  const email = $<HTMLInputElement>('buy-email').value.trim();
+  const eventDate = $<HTMLInputElement>('buy-date').value || null;
+  if (!name) return buyStatus('Give the event a name first.', true);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return buyStatus('Enter the email address for the links.', true);
+  const button = $<HTMLButtonElement>('buy-gallery');
+  button.disabled = true;
+  buyStatus('Opening the App Store…');
+  try {
+    const { buyEventGallery } = await purchaseModule();
+    const result = await buyEventGallery({ name, email, eventDate });
+    if (result.status === 'cancelled') buyStatus('Purchase cancelled. Nothing was charged.');
+    else if (result.status === 'pending')
+      buyStatus(
+        'Waiting for approval (Ask to Buy). Once it’s approved, open these settings again and the booth sets itself up; the links also arrive by email.'
+      );
+    else await delivered(result.event);
+  } catch (err) {
+    buyStatus(
+      `Couldn't finish: ${errorMessage(err)} If you were charged, nothing is lost: tap “Restore unfinished purchase” once you're online.`,
+      true
+    );
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$<HTMLButtonElement>('restore-purchase').addEventListener('click', async () => {
+  const button = $<HTMLButtonElement>('restore-purchase');
+  button.disabled = true;
+  buyStatus('Looking for unfinished purchases…');
+  try {
+    await redeemUnfinished(true);
+  } catch (err) {
+    buyStatus(`Couldn't restore: ${errorMessage(err)}`, true);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$<HTMLButtonElement>('copy-gallery').addEventListener('click', async () => {
+  const input = $<HTMLInputElement>('gallery-link');
+  try {
+    await navigator.clipboard.writeText(input.value);
+    flashStatus('Gallery link copied ✓');
+  } catch {
+    input.select(); // the host can copy it by hand
+  }
+});
+$<HTMLButtonElement>('share-gallery').addEventListener('click', () => {
+  const url = $<HTMLInputElement>('gallery-link').value;
+  if (navigator.share) navigator.share({ title: 'Photo booth gallery', url }).catch(() => {});
+  else $<HTMLButtonElement>('copy-gallery').click();
+});
 
 // ---------- security: PIN + kiosk lock ----------
 
@@ -698,6 +818,7 @@ function start() {
   fillAll();
   renderProfiles();
   importFromHash();
+  setupAppPurchase().catch((err) => buyStatus(errorMessage(err), true));
 }
 
 // Fills in keys added since the stored config was written.

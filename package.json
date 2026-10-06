@@ -35,6 +35,7 @@
     "@capacitor-community/keep-awake": "^8.0.1",
     "@capacitor/core": "^8.5.2",
     "@capacitor/ios": "^8.5.2",
+    "@capgo/native-purchases": "^8.8.1",
     "qrcode-generator": "^2.0.4"
   },
   "engines": {

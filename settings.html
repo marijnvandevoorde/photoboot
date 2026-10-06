@@ -104,17 +104,47 @@
               </div>
             </div>
             <div id="event-join">
-              <p class="help">
+              <p class="help" id="event-buy-web">
                 Want every shared photo of the evening in one private online gallery, with a download of all of
                 them? <a href="/event.html" target="_blank" rel="noopener">Get an event gallery</a>. You'll get
                 an email with a setup link: open it on this device, or paste it here.
               </p>
+              <div id="event-buy-app" hidden>
+                <p class="help">
+                  Want every shared photo of the evening in one private online gallery, with a download of all of
+                  them? Buy it once for this event: photos are kept for a year and you can run as many booths as you
+                  like. This booth is set up right away, and you also get the links by email.
+                </p>
+                <label>Event name <input id="buy-name" type="text" maxlength="120" autocomplete="off" /></label>
+                <label>Date <input id="buy-date" type="date" /></label>
+                <label>
+                  Your email
+                  <input id="buy-email" type="email" maxlength="200" autocomplete="email" inputmode="email" />
+                </label>
+                <div class="row">
+                  <button type="button" id="buy-gallery" class="primary" disabled>Buy</button>
+                  <button type="button" id="restore-purchase">Restore unfinished purchase</button>
+                </div>
+                <p class="help">Already have a setup link (from the email, or another booth)? Paste it here.</p>
+              </div>
               <div class="row">
                 <label class="grow">
                   Setup link
                   <input id="setup-link" type="url" placeholder="https://…/settings.html#event=…" />
                 </label>
                 <button type="button" id="use-setup-link">Set up this booth</button>
+              </div>
+            </div>
+            <p id="buy-status" class="small" hidden></p>
+            <div id="event-bought" hidden>
+              <p class="help">
+                Your private gallery: every photo guests share shows up there, with a download of all of them.
+                Share the link only with whoever should get the photos.
+              </p>
+              <div class="row">
+                <label class="grow">Gallery link <input id="gallery-link" type="url" readonly /></label>
+                <button type="button" id="copy-gallery">Copy</button>
+                <button type="button" id="share-gallery">Share</button>
               </div>
             </div>
           </div>

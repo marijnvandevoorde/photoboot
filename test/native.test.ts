@@ -5,6 +5,7 @@ import { PHOMEMO_UUIDS, PhomemoPrinter } from '../src/printers/phomemo.ts';
 const ble = vi.hoisted(() => ({
   initialize: vi.fn(async () => {}),
   requestDevice: vi.fn(async (_opts: unknown) => ({ deviceId: 'AA:BB', name: 'P2S-9' })),
+  getDevices: vi.fn(async (ids: string[]) => ids.map((deviceId) => ({ deviceId, name: 'P2S-9' }))),
   connect: vi.fn(async (_id: string, _onDisconnect?: (id: string) => void) => {}),
   disconnect: vi.fn(async (_id: string) => {}),
   // iOS reports UUIDs in upper case: matching must not care.
@@ -20,6 +21,7 @@ const ble = vi.hoisted(() => ({
 vi.mock('@capacitor-community/bluetooth-le', () => ({ BleClient: ble }));
 
 const { nativeBle } = await import('../src/printers/native.ts');
+const { restorePrinter } = await import('../src/printers/index.ts');
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -61,5 +63,19 @@ describe('native BLE transport', () => {
   it('reports a device without a known service', async () => {
     ble.getServices.mockResolvedValueOnce([]);
     await expect(new PhomemoPrinter({ transport: nativeBle }).connect()).rejects.toThrow(/No known Phomemo service/);
+  });
+
+  it('restores a printer from an earlier app run without the picker', async () => {
+    const printer = await restorePrinter({ id: 'AA:BB', name: 'P2S-9', type: 'auto' }, { transport: nativeBle });
+    expect(ble.getDevices).toHaveBeenCalledWith(['AA:BB']);
+    expect(ble.requestDevice).not.toHaveBeenCalled();
+    await printer?.reconnect();
+    expect(ble.connect).toHaveBeenCalledWith('AA:BB', expect.any(Function));
+    expect(printer?.connected).toBe(true);
+  });
+
+  it('returns null when iOS no longer knows the device', async () => {
+    ble.getDevices.mockResolvedValueOnce([]);
+    expect(await nativeBle.restoreDevice('gone')).toBeNull();
   });
 });

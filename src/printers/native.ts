@@ -33,6 +33,13 @@ export const nativeBle: BleTransport = {
     return { id: device.deviceId, name: device.name ?? '' };
   },
 
+  // iOS: retrievePeripherals; Android connects to any address it's given.
+  async restoreDevice(id) {
+    await init();
+    const [device] = await BleClient.getDevices([id]);
+    return device ? { id: device.deviceId, name: device.name ?? '' } : null;
+  },
+
   async connect({ id }, onDisconnect) {
     await init();
     await BleClient.connect(id, () => {

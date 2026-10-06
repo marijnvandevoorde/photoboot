@@ -1,15 +1,18 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { restorePrinter, savedPrinter } from '../src/printers/index.ts';
 import { PHOMEMO_UUIDS, PhomemoPrinter } from '../src/printers/phomemo.ts';
 import type { BleDevice, BleTransport, WriteTarget } from '../src/printers/transport.ts';
 
 // A transport that records every write instead of talking to hardware.
-function fakeTransport({ services = [PHOMEMO_UUIDS[1].service] } = {}) {
+// `known` = device ids the platform can find again without the picker.
+function fakeTransport({ services = [PHOMEMO_UUIDS[1].service], known = ['dev-1'] } = {}) {
   const writes: Uint8Array[] = [];
   let connected = false;
   let onDisconnect = () => {};
   const transport: BleTransport = {
     available: true,
     requestDevice: async () => ({ id: 'dev-1', name: 'P2S-1234' }),
+    restoreDevice: async (id: string) => (known.includes(id) ? { id, name: 'P2S-1234' } : null),
     connect: async (_device: BleDevice, cb: () => void) => {
       connected = true;
       onDisconnect = cb;
@@ -99,5 +102,48 @@ describe('PhomemoPrinter', () => {
     expect(printer.connected).toBe(false);
     await printer.reconnect();
     expect(printer.connected).toBe(true);
+  });
+});
+
+describe('restorePrinter', () => {
+  it('finds the saved printer again without the picker, then reconnects', async () => {
+    const { transport } = fakeTransport();
+    const picked = new PhomemoPrinter({ transport });
+    await picked.connect();
+    const saved = savedPrinter(picked, 'auto');
+    expect(saved).toEqual({ id: 'dev-1', name: 'P2S-1234', type: 'auto' });
+
+    const requestDevice = vi.spyOn(transport, 'requestDevice');
+    const { transport: fresh } = fakeTransport(); // a new page load: nothing connected
+    const spy = vi.spyOn(fresh, 'requestDevice');
+    const printer = await restorePrinter(saved as NonNullable<typeof saved>, { transport: fresh });
+    expect(printer).toBeInstanceOf(PhomemoPrinter);
+    expect(printer?.device).toEqual({ id: 'dev-1', name: 'P2S-1234' });
+    expect(printer?.connected).toBe(false); // adopted, not connected yet
+    await printer?.reconnect();
+    expect(printer?.connected).toBe(true);
+    expect(spy).not.toHaveBeenCalled();
+    expect(requestDevice).not.toHaveBeenCalled();
+  });
+
+  it('uses an explicit printer type', async () => {
+    const { transport } = fakeTransport({ known: ['x'] });
+    const printer = await restorePrinter({ id: 'x', name: 'Mystery', type: 'phomemo' }, { transport });
+    expect(printer).toBeInstanceOf(PhomemoPrinter);
+  });
+
+  it('gives up when the device is gone or unrecognised', async () => {
+    const { transport } = fakeTransport({ known: [] });
+    expect(await restorePrinter({ id: 'dev-1', name: 'P2S-1234', type: 'auto' }, { transport })).toBeNull();
+    const other = fakeTransport({ known: ['dev-2'] }).transport;
+    other.restoreDevice = async (id) => ({ id, name: 'Headphones' });
+    expect(await restorePrinter({ id: 'dev-2', name: 'Headphones', type: 'auto' }, { transport: other })).toBeNull();
+  });
+
+  it('gives up without Bluetooth', async () => {
+    const { transport } = fakeTransport();
+    expect(
+      await restorePrinter({ id: 'dev-1', name: '', type: 'auto' }, { transport: { ...transport, available: false } })
+    ).toBeNull();
   });
 });

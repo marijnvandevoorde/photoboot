@@ -43,6 +43,13 @@ export abstract class PrinterBase {
     await this.attach(this.device);
   }
 
+  // Take over a device restored from an earlier visit (see
+  // transport.restoreDevice) without connecting yet: `reconnect` connects,
+  // and keeps working when the printer is switched on later.
+  adopt(device: BleDevice) {
+    this.device = device;
+  }
+
   // Connect to an already picked device and find its write channel.
   abstract attach(device: BleDevice): Promise<void>;
 

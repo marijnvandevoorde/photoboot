@@ -24,6 +24,9 @@ export interface DeviceFilter {
 export interface BleTransport {
   readonly available: boolean;
   requestDevice(filter: DeviceFilter): Promise<BleDevice>;
+  // A device picked on an earlier visit or app run, found again by id
+  // without the picker. Null when it's gone or the platform can't do this.
+  restoreDevice(id: string): Promise<BleDevice | null>;
   connect(device: BleDevice, onDisconnect: () => void): Promise<void>;
   isConnected(device: BleDevice): boolean;
   // First of `candidates` the device offers, or null.
@@ -37,6 +40,24 @@ export interface BleTransport {
 const webDevices = new Map<string, BluetoothDevice>();
 const listeners = new WeakMap<BluetoothDevice, () => void>();
 const chars = new Map<string, BluetoothRemoteGATTCharacteristic>();
+const ADVERTISEMENT_WAIT_MS = 10_000;
+
+// Chrome only connects to a device from getDevices() once it has seen it
+// advertise, so watch for one (briefly: the printer may be switched off).
+function seenNearby(device: BluetoothDevice, ms = ADVERTISEMENT_WAIT_MS): Promise<void> {
+  if (typeof device.watchAdvertisements !== 'function') return Promise.resolve();
+  const abort = new AbortController();
+  return new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      abort.abort();
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    device.addEventListener('advertisementreceived', done, { once: true });
+    device.watchAdvertisements({ signal: abort.signal }).catch(done);
+  });
+}
 
 export const webBluetooth: BleTransport = {
   get available() {
@@ -50,6 +71,17 @@ export const webBluetooth: BleTransport = {
       optionalServices: services,
     });
     webDevices.set(device.id, device);
+    return { id: device.id, name: device.name ?? '' };
+  },
+
+  // getDevices() lists the devices this site was allowed before (Chrome;
+  // not Bluefy or Safari, which then start without the printer).
+  async restoreDevice(id) {
+    if (typeof navigator.bluetooth?.getDevices !== 'function') return null;
+    const device = (await navigator.bluetooth.getDevices()).find((d) => d.id === id);
+    if (!device) return null;
+    webDevices.set(device.id, device);
+    await seenNearby(device);
     return { id: device.id, name: device.name ?? '' };
   },
 

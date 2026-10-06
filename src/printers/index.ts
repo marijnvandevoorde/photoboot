@@ -42,7 +42,7 @@ export function listPrinters() {
 
 // Match a BLE device to a backend. Checks name prefixes first, falling back
 // to its advertised service UUIDs if the name is empty.
-function detectType(device: BleDevice): string | null {
+export function detectType(device: BleDevice): string | null {
   const name = device.name || '';
   for (const [id, spec] of Object.entries(PRINTERS)) {
     if (spec.namePrefixes.some((p) => name.startsWith(p))) return id;
@@ -83,5 +83,32 @@ export async function connectPrinter(type: string, opts: PrinterOptions = {}): P
   // Bypass the picker: we already have the device, go straight to attach.
   printer.log(`Auto-detected: ${spec.label}`);
   await printer.attach(device);
+  return printer;
+}
+
+// The printer the booth used before a reload or app restart: what the kiosk
+// lock remembers.
+export interface SavedPrinter {
+  id: string;
+  name: string;
+  type: string; // a type id, or 'auto'
+}
+
+export function savedPrinter(printer: PrinterBase, type: string): SavedPrinter | null {
+  return printer.device ? { id: printer.device.id, name: printer.device.name, type } : null;
+}
+
+// Find a saved printer again without the picker. Resolves to a printer that
+// owns the device but may not be connected yet (call `reconnect`), or null
+// when the platform can't restore devices or the device is gone.
+export async function restorePrinter(saved: SavedPrinter, opts: PrinterOptions = {}): Promise<PrinterBase | null> {
+  const ble = opts.transport ?? transport();
+  if (!ble.available) return null;
+  const device = await ble.restoreDevice(saved.id);
+  if (!device) return null;
+  const spec = PRINTERS[saved.type] ?? PRINTERS[detectType(device) ?? ''];
+  if (!spec) return null;
+  const printer = spec.create(opts);
+  printer.adopt(device);
   return printer;
 }

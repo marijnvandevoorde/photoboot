@@ -160,10 +160,11 @@ describe('webhook signature', () => {
 
 describe('checkout', () => {
   it('shows the price', async () => {
-    expect(await (await fetch(`${base}/api/checkout/price`)).json()).toEqual({
+    expect(await (await fetch(`${base}/api/checkout/price`)).json()).toMatchObject({
       amount: 1900,
       currency: 'eur',
       enabled: true,
+      paidDays: 365,
     });
   });
 

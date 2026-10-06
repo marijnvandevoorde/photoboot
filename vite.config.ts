@@ -34,6 +34,7 @@ export default defineConfig({
         settings: 'settings.html',
         preview: 'preview.html',
         admin: 'admin.html',
+        event: 'event.html',
       },
     },
   },

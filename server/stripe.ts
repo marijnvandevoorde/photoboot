@@ -1,6 +1,7 @@
 // Stripe Checkout for paid events: Stripe's REST API over fetch (no SDK).
 //
-//   GET  /api/checkout/price    { amount, currency, enabled } for the sign-up page
+//   GET  /api/checkout/price    { amount, currency, enabled, paidDays, freeDays }
+//                               for the sign-up page (event.html)
 //   POST /api/checkout          { name, email, eventDate? } → pending event +
 //                               Checkout Session → { url } (redirect there)
 //   GET  /api/checkout/status?session=cs_…
@@ -36,6 +37,7 @@ import {
 } from './billing.ts';
 import { deleteEvent } from './events.ts';
 import { clientIp, HttpError, type Req, type Res, rateLimiter, readBody, readJson, sendJson } from './http.ts';
+import { PAID_RETENTION_DAYS, TTL_DAYS } from './photos.ts';
 
 const API = 'https://api.stripe.com/v1';
 const TOLERANCE_SEC = 5 * 60; // reject webhook signatures older than this
@@ -227,7 +229,13 @@ async function webhook(req: Req, res: Res) {
 export async function stripeRoutes(req: Req, res: Res, url: URL): Promise<boolean> {
   const { pathname } = url;
   if (pathname === '/api/checkout/price' && req.method === 'GET') {
-    sendJson(res, 200, { amount: EVENT_PRICE_CENTS, currency: EVENT_CURRENCY, enabled: !!secretKey() });
+    sendJson(res, 200, {
+      amount: EVENT_PRICE_CENTS,
+      currency: EVENT_CURRENCY,
+      enabled: !!secretKey(),
+      paidDays: PAID_RETENTION_DAYS,
+      freeDays: TTL_DAYS,
+    });
     return true;
   }
   const routes: Record<string, (() => Promise<void>) | undefined> = {

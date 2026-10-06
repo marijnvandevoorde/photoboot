@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1f9e6e" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <title>Photoboot — Event gallery</title>
+    <meta
+      name="description"
+      content="Every photo your guests share, in one private online gallery with a download of all of them."
+    />
+    <link rel="stylesheet" href="/src/event.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="brand"><a href="/">Photoboot</a></p>
+        <h1>Your party's photos, all in one place</h1>
+        <p class="lead">
+          The photo booth is free. Add an <strong>event gallery</strong> and every photo your guests share ends up
+          in one private online gallery.
+        </p>
+      </header>
+
+      <!-- After Stripe: ?session=cs_… -->
+      <section id="paid" class="card stack" hidden aria-live="polite">
+        <h2>Payment received 🎉</h2>
+        <p>We've emailed you the setup link and the gallery link. Check your inbox (and your spam folder).</p>
+        <p id="paid-waiting" class="muted">Getting your links…</p>
+        <div id="paid-links" class="stack" hidden>
+          <p>
+            <strong id="paid-name"></strong> is ready. Open the setup link on every device you'll use as a booth.
+          </p>
+          <div class="actions">
+            <a id="setup-open" class="btn" href="/">Open on this booth</a>
+            <button type="button" id="setup-copy" class="btn secondary">Copy setup link</button>
+          </div>
+          <p class="small muted">Your gallery (keep it private, share it with whoever should get the photos):</p>
+          <p><a id="gallery-link" class="link" href="/" target="_blank" rel="noopener">Your gallery</a></p>
+        </div>
+      </section>
+
+      <section id="offer" class="stack">
+        <ul class="perks">
+          <li>
+            <strong>One private gallery</strong>
+            <span>Every photo guests share from the booth, together on one page only you have the link to.</span>
+          </li>
+          <li>
+            <strong>Download them all</strong>
+            <span>One ZIP with every shared photo, whenever you like.</span>
+          </li>
+          <li>
+            <strong>Kept for <span data-paid-days>a year</span></strong>
+            <span>Instead of the usual <span data-free-days>30 days</span>, so nobody has to hurry.</span>
+          </li>
+          <li>
+            <strong>Several booths</strong>
+            <span>Run the same event on as many devices as you want; their photos and counters add up.</span>
+          </li>
+          <li>
+            <strong>Links by email</strong>
+            <span>A setup link for the booths and the gallery link, right after you pay.</span>
+          </li>
+        </ul>
+
+        <p id="cancelled" class="notice" hidden>Payment cancelled: nothing was charged. You can try again below.</p>
+
+        <form id="form" class="card stack" novalidate>
+          <h2>Get an event gallery <span id="price" class="price"></span></h2>
+          <label>
+            Event name
+            <input id="name" name="name" type="text" maxlength="120" autocomplete="off" required
+              placeholder="Anna &amp; Tom's wedding" />
+          </label>
+          <label>
+            <span>Date <span class="muted">(optional)</span></span>
+            <input id="date" name="eventDate" type="date" />
+          </label>
+          <label>
+            Your email
+            <input id="email" name="email" type="email" autocomplete="email" required placeholder="you@example.com" />
+          </label>
+          <p id="form-error" class="error" role="alert" hidden></p>
+          <button type="submit" id="pay" class="btn">Continue to payment</button>
+          <p class="small muted">
+            One payment per event, no subscription. You pay securely with Stripe and can ask for an invoice.
+          </p>
+        </form>
+      </section>
+
+      <footer class="small muted">
+        The booth itself stays free: without a gallery, guests still get their own photo by QR code (kept <span data-free-days>30 days</span>). <a class="link" href="/">Back to the booth</a>
+      </footer>
+    </main>
+    <script type="module" src="/src/event.ts"></script>
+  </body>
+</html>

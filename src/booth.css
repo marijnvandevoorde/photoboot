@@ -18,9 +18,24 @@ body {
   background: var(--bg);
   color: var(--fg);
   overflow: hidden;
+  /* Guest-proofing: no pull-to-refresh or bounce, no text selection, no
+     long-press callout (save image…) on the photos. */
+  overscroll-behavior: none;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
   touch-action: manipulation;
+}
+img,
+canvas,
+video {
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+}
+/* Safari won't type into inputs that inherit user-select: none. */
+input {
+  user-select: text;
+  -webkit-user-select: text;
 }
 [hidden] {
   display: none !important;
@@ -347,6 +362,7 @@ button:focus-visible {
   width: 72px;
   height: 72px;
   touch-action: none;
+  z-index: 6; /* above the attract screen */
 }
 .shot-counter {
   position: absolute;
@@ -574,6 +590,37 @@ button:focus-visible {
   width: min(70vw, 62vh, 30rem);
   height: auto;
   display: block;
+}
+
+/* Host menu */
+.host-card {
+  background: #1a1a1c;
+  border-radius: 24px;
+  padding: 1.6rem;
+  width: min(100%, 24rem);
+}
+.host-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  text-align: center;
+}
+.host-stack p {
+  margin: 0;
+}
+.host-title {
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+.host-stack input {
+  font: inherit;
+  font-size: 1.4rem;
+  text-align: center;
+  padding: 0.7rem;
+  border-radius: 12px;
+  border: 1px solid #444;
+  background: #000;
+  color: var(--fg);
 }
 
 /* Printing overlay */

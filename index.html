@@ -24,6 +24,10 @@
           Use Chrome on Android, or the Bluefy browser on iPad.
         </p>
         <button type="button" id="skip-printer" class="link">Start without printer</button>
+        <p id="pin-nudge" class="muted small" hidden>
+          Tip: set a PIN in settings so guests can't leave the booth.
+          Settings: long-press “Photoboot” above.
+        </p>
       </div>
     </section>
 
@@ -46,7 +50,7 @@
         <button type="button" id="printer-pill" class="pill" hidden tabindex="-1"></button>
         <div id="shot-counter" class="shot-counter" hidden aria-live="polite"></div>
         <button type="button" id="switch-camera" class="icon-btn" hidden aria-label="Switch camera" title="Switch camera">⟲</button>
-        <!-- Hidden host entry: long-press this corner for 2 s to open settings. -->
+        <!-- Hidden host entry: long-press this corner for 2 s for the host menu. -->
         <div id="admin-hatch" class="admin-hatch" aria-hidden="true"></div>
 
         <div id="camera-error" class="camera-error" hidden role="alert">
@@ -126,6 +130,29 @@
         <div id="qr"></div>
         <p class="qr-sub" data-t="colourVersion"></p>
         <button type="button" id="qr-close" class="primary big" data-t="done"></button>
+      </div>
+    </div>
+
+    <!-- Host menu, behind the hidden long-presses. Asks for the PIN first
+         when one is set. Host-facing, so English only. -->
+    <div id="host-dialog" class="overlay" hidden>
+      <div class="host-card">
+        <form id="host-pin" class="host-stack">
+          <label for="host-pin-input" class="host-title">Host PIN</label>
+          <input id="host-pin-input" type="password" autocomplete="off" />
+          <p id="host-pin-error" class="warn" hidden>Wrong PIN.</p>
+          <button type="submit" class="primary big">Unlock</button>
+          <button type="button" class="secondary big" data-host-close>Cancel</button>
+        </form>
+        <div id="host-menu" class="host-stack" hidden>
+          <p class="host-title">Host menu</p>
+          <p id="host-hint" class="muted small" role="status" hidden></p>
+          <button type="button" id="host-settings" class="secondary big">Settings</button>
+          <button type="button" id="host-printer" class="secondary big">Connect printer</button>
+          <button type="button" id="host-stop" class="secondary big">Stop booth</button>
+          <p class="muted small">Stop booth goes back to the setup screen.</p>
+          <button type="button" class="primary big" data-host-close>Back to the booth</button>
+        </div>
       </div>
     </div>
 

@@ -1,6 +1,8 @@
 // Photo booth kiosk: connect printer once → live camera → timed capture of
 // N shots → review (retake / print / share via QR / done). Config in
 // src/config.js drives everything guests see; change it via /settings.html.
+// Once started, the kiosk lock (src/kiosk.ts) brings a reload or app
+// restart straight back to the camera with the same printer.
 
 import './platform.ts';
 import qrcode from 'qrcode-generator';
@@ -8,6 +10,8 @@ import { recentPhotos, savePhoto } from './archive.ts';
 import { getConfig } from './config.ts';
 import { $, ctx2d, errorMessage } from './dom.ts';
 import { translator } from './i18n.ts';
+import type { KioskState } from './kiosk.ts';
+import { checkPin, hasPin, kioskState, lockKiosk, setAdminUnlocked, unlockKiosk } from './kiosk.ts';
 import {
   PHOTO_STYLES,
   PHOTO_TWISTS,
@@ -20,7 +24,8 @@ import {
 } from './photo.ts';
 import { apiBase, keepScreenOn } from './platform.ts';
 import type { PrinterBase } from './printers/base.ts';
-import { connectPrinter } from './printers/index.ts';
+import type { SavedPrinter } from './printers/index.ts';
+import { connectPrinter, restorePrinter, savedPrinter } from './printers/index.ts';
 import { transport } from './printers/transport.ts';
 import { rasterToCanvas } from './raster.ts';
 import { deviceId, remote } from './remote.ts';
@@ -36,12 +41,15 @@ const RECONNECT_INTERVAL_MS = 5_000;
 const RECONNECT_ON_PRINT_MS = 8_000;
 const CAMERA_RETRY_MS = 5_000;
 const ATTRACT_SLIDE_MS = 4_000;
+const HOST_MENU_TIMEOUT_MS = 60_000;
 
 const config = getConfig();
 const t = translator(config);
 let template: Template | null = null; // resolved from config.templateId
 
 let printer: PrinterBase | null = null; // null = running without printer
+// The kiosk lock's printer while it couldn't be restored after a reload.
+let missingPrinter: SavedPrinter | null = null;
 let stream: MediaStream | null = null;
 let cameras: MediaDeviceInfo[] = [];
 let cameraIndex = 0;
@@ -170,10 +178,12 @@ function shutterSound() {
   }
 }
 
-// ---------- settings access ----------
+// ---------- host access ----------
 
-// Hidden entries: long-press the Photoboot title (setup screen) or the
-// top-left corner of the camera view to open settings. Also /?admin=1.
+// Hidden entries: long-press the Photoboot title (setup screen) for
+// settings, or the top-left corner of the camera view for the host menu
+// (settings, printer, stop booth). Both ask for the PIN when one is set.
+// /?admin=1 goes to settings, which has its own PIN gate.
 function longPress(el: Element | null, ms: number, action: () => void) {
   if (!el) return;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -185,26 +195,115 @@ function longPress(el: Element | null, ms: number, action: () => void) {
   for (const type of ['pointerup', 'pointerleave', 'pointercancel']) el.addEventListener(type, cancel);
 }
 const openSettings = () => (location.href = '/settings.html');
-longPress(document.querySelector('.setup-card h1'), 1000, openSettings);
-longPress($('admin-hatch'), 2000, openSettings);
+longPress(document.querySelector('.setup-card h1'), 1000, () => askHost(openSettings));
+longPress($('admin-hatch'), 2000, () => askHost(showHostMenu));
 if (new URLSearchParams(location.search).get('admin') === '1') openSettings();
+
+// No long-press menus (save image, copy) for guests; inputs keep theirs.
+document.addEventListener('contextmenu', (e) => {
+  if (!(e.target instanceof HTMLInputElement)) e.preventDefault();
+});
+document.addEventListener('dragstart', (e) => e.preventDefault());
+
+let hostTimer: ReturnType<typeof setTimeout> | undefined;
+let afterPin: () => void = showHostMenu;
+
+// Closes by itself, so a guest who stumbles in isn't stuck.
+function armHostTimeout() {
+  clearTimeout(hostTimer);
+  hostTimer = setTimeout(closeHost, HOST_MENU_TIMEOUT_MS);
+}
+
+function openHost(step: 'pin' | 'menu') {
+  $('host-pin').hidden = step !== 'pin';
+  $('host-menu').hidden = step !== 'menu';
+  $('host-dialog').hidden = false;
+  stopIdle();
+  armHostTimeout();
+}
+
+function closeHost() {
+  clearTimeout(hostTimer);
+  $('host-dialog').hidden = true;
+  $<HTMLInputElement>('host-pin-input').value = '';
+  if (!screens.booth.hidden) armIdle();
+}
+
+function askHost(next: () => void) {
+  if (!hasPin(config)) return next();
+  afterPin = next;
+  $('host-pin-error').hidden = true;
+  openHost('pin');
+  $<HTMLInputElement>('host-pin-input').focus();
+}
+
+function showHostMenu() {
+  const offline = missingPrinter || (printer && !printer.connected);
+  hostHint(offline ? "The printer isn't connected. Turn it on: the booth keeps trying. Or connect it again here." : '');
+  $('host-printer').textContent = printer ? 'Change printer' : 'Connect printer';
+  $<HTMLButtonElement>('host-printer').hidden = !transport().available;
+  openHost('menu');
+}
+
+function hostHint(text: string) {
+  $('host-hint').textContent = text;
+  $('host-hint').hidden = !text;
+}
+
+$('host-pin').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  armHostTimeout();
+  if (await checkPin(config, $<HTMLInputElement>('host-pin-input').value)) {
+    setAdminUnlocked(true); // settings won't ask again in this tab
+    $<HTMLInputElement>('host-pin-input').value = '';
+    $('host-dialog').hidden = true;
+    afterPin();
+  } else {
+    $('host-pin-error').hidden = false;
+    $<HTMLInputElement>('host-pin-input').select();
+  }
+});
+$('host-dialog').addEventListener('input', armHostTimeout);
+for (const btn of document.querySelectorAll('[data-host-close]')) btn.addEventListener('click', closeHost);
+$<HTMLButtonElement>('host-settings').addEventListener('click', openSettings);
+$<HTMLButtonElement>('host-stop').addEventListener('click', () => {
+  unlockKiosk();
+  location.replace('/');
+});
+$<HTMLButtonElement>('host-printer').addEventListener('click', async (e) => {
+  e.stopPropagation(); // the picker needs this tap, not the fullscreen handler
+  armHostTimeout();
+  try {
+    const p = await pickPrinter(hostHint);
+    // Same device again (after a failed restore): it's already connected.
+    if (printer && printer.device?.id !== p.device?.id) printer.disconnect().catch(() => {});
+    printer = p;
+    missingPrinter = null;
+    lockKiosk(savedPrinter(p, config.printerType));
+    setStatus({ lastError: '' });
+    setPill();
+    closeHost();
+  } catch (err) {
+    hostHint(connectError(err));
+  }
+});
 
 // ---------- printer ----------
 
 function setPill() {
   const pill = $<HTMLButtonElement>('printer-pill');
-  if (!printer) {
+  if (!printer && !missingPrinter) {
     pill.hidden = true;
     return;
   }
   pill.hidden = false;
-  const ok = printer.connected;
+  const ok = !!printer?.connected;
   const paper = paperLeft(config);
-  pill.textContent =
-    (ok ? `🖨 ${printer.device?.name || 'Printer'}` : '🖨 Reconnecting…') + (paper?.low ? ' · 📄 low' : '');
+  const name = printer?.device?.name || missingPrinter?.name || 'Printer';
+  pill.textContent = (ok ? `🖨 ${name}` : '🖨 Reconnecting…') + (paper?.low ? ' · 📄 low' : '');
   pill.classList.toggle('bad', !ok);
   pill.classList.toggle('low', !!paper?.low);
-  setStatus({ printer: printer.device?.name || 'Printer', printerConnected: ok });
+  setStatus({ printer: name, printerConnected: ok });
   updatePrintButton();
 }
 
@@ -226,25 +325,62 @@ async function reconnectLoop() {
   setPill();
 }
 
+// Opens the system picker: call straight from a tap.
+function pickPrinter(onLog: (msg: string) => void): Promise<PrinterBase> {
+  return connectPrinter(config.printerType, { onLog, onDisconnect: () => reconnectLoop() });
+}
+
+const connectError = (err: unknown) =>
+  (err as Error).name === 'NotFoundError' ? 'No printer selected.' : `Couldn't connect: ${errorMessage(err)}`;
+
 $<HTMLButtonElement>('connect').addEventListener('click', async () => {
   const status = $('setup-status');
   try {
-    const p = await connectPrinter(config.printerType, {
-      onLog: (msg) => (status.textContent = msg),
-      onDisconnect: () => reconnectLoop(),
-    });
-    printer = p;
+    printer = await pickPrinter((msg) => (status.textContent = msg));
+    lockKiosk(savedPrinter(printer, config.printerType));
     await startBooth();
   } catch (err) {
-    status.textContent =
-      (err as Error).name === 'NotFoundError' ? 'No printer selected.' : `Couldn't connect: ${errorMessage(err)}`;
+    status.textContent = connectError(err);
   }
 });
 
 $<HTMLButtonElement>('skip-printer').addEventListener('click', () => {
   setStatus({ printer: null, printerConnected: false });
+  lockKiosk(null);
   startBooth();
 });
+
+// Nudge the host before the booth locks without a way to keep guests in.
+$('pin-nudge').hidden = hasPin(config);
+// Back at the booth: settings ask for the PIN again.
+setAdminUnlocked(false);
+
+// Kiosk lock: the booth was started on this device before (a reload, a
+// crash, an app restart). Back to the camera without the setup screen, and
+// pick the same printer up again without the picker. Where that can't work
+// (no getDevices, e.g. Bluefy) the pill says "Reconnecting…" and the host
+// reconnects from the host menu; guests can still take and share photos.
+async function resumeBooth({ printer: saved }: KioskState) {
+  missingPrinter = saved;
+  const booth = startBooth();
+  if (saved) {
+    const restored = await restorePrinter(saved, { onDisconnect: () => reconnectLoop() }).catch((err) => {
+      console.warn('Printer restore failed', err);
+      return null;
+    });
+    if (restored) {
+      printer = restored;
+      missingPrinter = null;
+      reconnectLoop();
+    } else {
+      setStatus({
+        lastError: 'Printer not reconnected after a restart: long-press the top-left corner of the camera view.',
+      });
+      setPill();
+    }
+  }
+  await booth;
+}
 
 if (!transport().available) {
   $('no-bluetooth').hidden = false;
@@ -337,6 +473,7 @@ $<HTMLButtonElement>('switch-camera').addEventListener('click', async (e) => {
 });
 
 async function startBooth() {
+  screens.setup.hidden = true;
   template = await loadTemplate(config.templateId, config.templateConfig?.[config.templateId]);
   setupLiveLooks();
   show('booth');
@@ -975,4 +1112,7 @@ if (demo) {
     startSession(Array.from({ length: shotCount }, () => canvas));
   };
   img.src = demo;
+} else {
+  const kiosk = kioskState();
+  if (kiosk) resumeBooth(kiosk);
 }

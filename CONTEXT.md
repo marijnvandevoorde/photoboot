@@ -230,7 +230,10 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
 
 ## Config (env)
 
-See the table in README.md: `BASE_URL`, `PORT`, `SHARE_DIR`, `EVENTS_DIR`,
+Every variable is listed in `.env.example` (and the README table); copy it to
+`.env`. Empty values mean the default (`server/env.ts`). Compose loads `.env`
+via `env_file`; `npm start` / the Vite dev server read it too
+(`server/load-env.ts`). Variables: `BASE_URL`, `PORT`, `SHARE_DIR`, `EVENTS_DIR`,
 `SHARE_TTL_DAYS`, `SHARE_MAX_MB`, `ADMIN_TOKEN`, `UPLOAD_TOKEN`, the
 event price / mail / Stripe keys (`STRIPE_SECRET_KEY`,
 `STRIPE_WEBHOOK_SECRET`, `STRIPE_AUTOMATIC_TAX`) and the in-app purchase

@@ -19,6 +19,7 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { adminRoutes } from './admin.ts';
 import { appleRoutes } from './apple.ts';
+import { env } from './env.ts';
 import { eventRoutes, verifyEventKey } from './events.ts';
 import {
   baseUrl,
@@ -45,7 +46,7 @@ const rateLimited = rateLimiter(RATE_MAX, RATE_WINDOW_MS);
 
 // The iOS / Android app serves its pages from these origins and calls the
 // API cross-origin. Every API route still needs its own key or token.
-const CORS_ORIGINS = (process.env.CORS_ORIGINS ?? 'capacitor://localhost,https://localhost')
+const CORS_ORIGINS = env('CORS_ORIGINS', 'capacitor://localhost,https://localhost')
   .split(',')
   .map((o) => o.trim())
   .filter(Boolean);

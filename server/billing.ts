@@ -14,13 +14,14 @@
 //   EVENT_CURRENCY         ISO currency (default eur)
 
 import { db } from './db.ts';
+import { env, envNumber } from './env.ts';
 import { createEvent, getEvent, type StoredEvent, updateEvent } from './events.ts';
 import { escapeHtml } from './http.ts';
 import { sendMail } from './mail.ts';
 import { PAID_RETENTION_DAYS } from './photos.ts';
 
-export const EVENT_PRICE_CENTS = Number(process.env.EVENT_PRICE_CENTS ?? 1900);
-export const EVENT_CURRENCY = (process.env.EVENT_CURRENCY ?? 'eur').toLowerCase();
+export const EVENT_PRICE_CENTS = envNumber('EVENT_PRICE_CENTS', 1900);
+export const EVENT_CURRENCY = env('EVENT_CURRENCY', 'eur').toLowerCase();
 
 const publicUrl = () =>
   (process.env.PUBLIC_URL || process.env.BASE_URL || 'https://boot.small-victories.co').replace(/\/+$/, '');

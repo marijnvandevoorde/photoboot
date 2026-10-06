@@ -1,3 +1,4 @@
+import './server/load-env.ts'; // first: server modules read .env at import
 import basicSsl from '@vitejs/plugin-basic-ssl';
 import { defineConfig, type Plugin } from 'vite';
 import { shareMiddleware } from './server/share.ts';

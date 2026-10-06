@@ -163,7 +163,10 @@ over SSH and runs Compose there.
 | `STRIPE_WEBHOOK_SECRET` | —      | Signing secret (`whsec_…`) of the Stripe webhook endpoint            |
 | `STRIPE_AUTOMATIC_TAX` | —       | `1` lets Stripe Tax add VAT (the price is then VAT-inclusive)        |
 
-Put the secrets in a `.env` next to `docker-compose.yml`.
+All settings live in a `.env` next to `docker-compose.yml`: copy
+[`.env.example`](.env.example), which lists every variable with its default, and
+fill in what you need (empty = default). Compose loads it into the container,
+and `npm start` / `npm run dev` read it too.
 
 ### Payments (Stripe)
 

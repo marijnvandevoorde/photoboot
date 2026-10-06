@@ -14,11 +14,12 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { db, SHARE_DIR } from './db.ts';
+import { envNumber } from './env.ts';
 
 export { SHARE_DIR };
-export const TTL_DAYS = Number(process.env.SHARE_TTL_DAYS ?? 30);
-export const PAID_RETENTION_DAYS = Number(process.env.PAID_RETENTION_DAYS ?? 365);
-const MAX_BYTES = Number(process.env.SHARE_MAX_MB ?? 5000) * 1024 * 1024;
+export const TTL_DAYS = envNumber('SHARE_TTL_DAYS', 30);
+export const PAID_RETENTION_DAYS = envNumber('PAID_RETENTION_DAYS', 365);
+const MAX_BYTES = envNumber('SHARE_MAX_MB', 5000) * 1024 * 1024;
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 const DAY_MS = 86_400_000;
 

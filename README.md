@@ -64,9 +64,20 @@ iPad / iPhone. “Start without printer” works on anything with a camera.
   device to get the same booth, and share a private gallery (with ZIP
   download and counters) with the host afterwards.
 
-Settings live on a hidden page: long-press the “Photoboot” title on the
-start screen, long-press the top-left corner of the camera view for 2 s, or
-open `/?admin=1`. You can protect it with a PIN.
+- **Guest-proof kiosk**: once started, the booth stays on the camera — a
+  reload or app restart comes straight back and reconnects to the same
+  printer by itself (Chrome and the app). Leaving the booth needs the host
+  PIN. No pull-to-refresh, zoom or long-press menus. For a fully locked
+  tablet, use iPad Guided Access or Android app pinning.
+
+Settings live on a hidden page, grouped for hosts (Tonight, Event, What
+guests see, Printer & paper, Photos, Security, Advanced) with a short
+explanation under every setting. To get there: long-press the “Photoboot”
+title on the start screen, or long-press the top-left corner of the camera
+view for 2 s for the host menu (settings, change printer, stop booth). Both
+ask for the PIN when one is set; `/?admin=1` opens settings behind the same
+PIN. **Stop booth** (host menu or Settings → Security) brings back the
+start screen.
 
 ## Hardware
 

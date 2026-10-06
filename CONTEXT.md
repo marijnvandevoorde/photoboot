@@ -87,8 +87,21 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
 - `index.html` + `src/booth.ts` + `src/booth.css` — the booth app (kiosk):
   1. Setup screen: connect the printer once (or "Start without printer").
      After that it keeps reconnecting to the same device on a dropout.
-     Settings: long-press the "Photoboot" title (~1 s), long-press the
-     top-left corner of the camera view (2 s), or `/?admin=1`.
+     Starting sets the **kiosk lock** (`src/kiosk.ts`, localStorage
+     `photoboot:kiosk` = { since, printer: { id, name, type } }): every
+     later load skips setup, goes to the camera and restores the printer
+     via `restorePrinter` (no picker; `transport.restoreDevice` =
+     `navigator.bluetooth.getDevices()` + watchAdvertisements on the web,
+     `BleClient.getDevices` in the app). If that fails (e.g. Bluefy has no
+     getDevices) the pill shows "Reconnecting…" and lastError tells the host.
+     Host access: long-press the "Photoboot" title (~1 s) → settings;
+     long-press the top-left corner of the camera view (2 s) → host menu
+     (settings, connect/change printer, stop booth = clear the lock). Both
+     ask for the PIN in the booth when one is set (then set the
+     sessionStorage `photoboot:admin-ok` flag so settings don't ask again;
+     the booth clears it on load). `/?admin=1` → settings' own gate.
+     Guest-proofing: overscroll-behavior none, no callouts / context menu /
+     drag; a "set a PIN" nudge on setup when none is set.
   2. Camera: timer chips (remembered), optional 1–4 photo chips
      (`guestShotChoice`), shutter with caption, tap anywhere to start.
      Live look chips (`livePreview`): Camera or a style + twist, rendered
@@ -105,11 +118,18 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
   - Shared/archived photo = `renderColour`: the sticker layout in colour
     (header, shots, gaps, footer, 24-dot side margins), with the twist.
   - Writes a health heartbeat (`photoboot:status`) and counters (stats.ts).
-- `settings.html` + `src/settings.ts` — admin page: tonight (health, paper,
-  counters), event name + language, saved setups / export / import,
-  printer, paper (+ roll meter), printing, capture, looks, template,
-  guest screens + wording, local photos (ZIP), server events, PIN, reset.
+- `settings.html` + `src/settings.ts` — admin page for a non-technical
+  host, in sections: Tonight (health, paper, counters), Event (name,
+  language, saved setups / export / import), What guests see (capture,
+  looks + live preview, sticker design, screens + wording), Printer &
+  paper (roll + meter, printing), Photos (local copies, ZIP), Security
+  (PIN, booth lock + Stop booth, Guided Access / app pinning help), and a
+  collapsed `<details id="advanced">` (printer type, join a server event,
+  server events — buttons only once an admin token is entered — upload
+  token, reset). Every setting has a one-line `.help` text.
   Inputs use a small `bind()` helper; listeners are bound once.
+- `src/kiosk.ts` — kiosk lock state + PIN hashing/checking (shared by the
+  booth's host menu and the settings gate).
 - `preview.html` + `src/preview.ts` — renders a sticker through the current
   config/template from a synthetic sample or an uploaded photo; reloads when
   settings change in another tab.
@@ -132,7 +152,8 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
   were tried in a "filter lab" and dropped; they're in commit 8b32a21.
 - `src/printers/` — printer abstraction: `transport.ts` (BleTransport —
   Web Bluetooth today, a native plugin in the app), `base.ts`,
-  `phomemo.ts`, registry + auto-detect in `index.ts`. `src/printer.ts` is a
+  `phomemo.ts`, registry + auto-detect + `restorePrinter` (adopt a saved
+  device, connect via `reconnect`) in `index.ts`. `src/printer.ts` is a
   compat shim.
 - `src/raster.ts` — canvas → packed-bit bitmap (error diffusion, screens,
   tone options), `rasterToCanvas`, calibration generators.

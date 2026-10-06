@@ -151,6 +151,9 @@ over SSH and runs Compose there.
 | `PAID_RETENTION_DAYS` | `365`    | How long a paid event keeps its photos                               |
 | `EVENT_PRICE_CENTS` | `1900`     | Web price of an event gallery, in cents                              |
 | `EVENT_CURRENCY` | `eur`         | Currency of that price                                               |
+| `APPLE_BUNDLE_ID` | `co.smallvictories.photoboot` | iOS app whose in-app purchases are accepted               |
+| `APPLE_PRODUCT_ID` | `co.smallvictories.photoboot.eventgallery` | The consumable that buys an event gallery |
+| `APPLE_ALLOW_SANDBOX` | `1`      | Accept Sandbox purchases (TestFlight, sandbox testers); `0` = Production only |
 | `BREVO_API_KEY`  | —             | Sends the event emails through Brevo (without it they're logged)     |
 | `MAIL_FROM`      | `booth@small-victories.co` | Sender address (a verified Brevo sender)                |
 | `DB_PATH`        | `EVENTS_DIR/photoboot.db` | SQLite database (events, photos, payments, sessions)     |

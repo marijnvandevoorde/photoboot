@@ -31,6 +31,7 @@ export interface ToneOptions {
   gamma?: number;
   clip?: number;
   sharpen?: number;
+  denoise?: number;
   outline?: number;
 }
 

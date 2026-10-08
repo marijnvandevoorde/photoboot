@@ -1,0 +1,124 @@
+main {
+  max-width: 96rem;
+}
+
+.lab-top {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.source-wrap canvas,
+#video {
+  width: 100%;
+  border-radius: 8px;
+  cursor: crosshair;
+}
+
+.recent {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+}
+.recent img {
+  height: 4rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.custom {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: 0.6rem;
+  align-items: end;
+}
+.custom input {
+  width: 100%;
+}
+
+.lab-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.variant {
+  margin: 0;
+  background: var(--card);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: min-content;
+  min-width: 15rem;
+  max-width: 100%;
+}
+.variant.picked {
+  border-color: var(--accent);
+}
+.variant .head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.variant .letter {
+  font-weight: 800;
+  font-size: 1.3rem;
+  min-width: 1.6rem;
+}
+.variant .name {
+  font-weight: 600;
+  flex: 1;
+}
+.variant .opts {
+  font-family: ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin: 0;
+}
+.variant .controls {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  font-size: 0.85rem;
+}
+.variant .controls label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.variant select {
+  padding: 0.2rem 0.4rem;
+}
+.variant button {
+  padding: 0.2rem 0.7rem;
+  font-size: 0.8rem;
+}
+.variant .paper {
+  overflow: auto;
+  width: fit-content;
+  max-width: calc(100vw - 4rem);
+  background: #000;
+  border-radius: 6px;
+}
+.variant canvas {
+  display: block;
+}
+.variant canvas.dots {
+  image-rendering: pixelated;
+}
+.variant .pending {
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 2rem 1rem;
+}

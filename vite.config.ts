@@ -34,6 +34,7 @@ export default defineConfig({
         print: 'print.html',
         settings: 'settings.html',
         preview: 'preview.html',
+        lab: 'lab.html',
         admin: 'admin.html',
         event: 'event.html',
       },

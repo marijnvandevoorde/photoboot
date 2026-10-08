@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#111" />
+    <meta name="robots" content="noindex,nofollow" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <title>Photoboot — Print lab</title>
+    <link rel="stylesheet" href="/src/settings.css" />
+    <link rel="stylesheet" href="/src/lab.css" />
+  </head>
+  <body>
+    <main>
+      <header class="topbar">
+        <h1>Print lab</h1>
+        <nav>
+          <a href="/">Back to booth</a>
+          <a href="/preview.html">Print preview</a>
+          <a href="/settings.html">Settings</a>
+        </nav>
+      </header>
+
+      <p class="muted small">
+        Compare dither looks on a simulated thermal print, tick the promising ones, print them as labelled strips,
+        then pick by letter.
+      </p>
+
+      <div class="lab-top">
+        <section class="card">
+          <h2>1. Photo</h2>
+          <div class="row">
+            <button type="button" id="pick-file" class="primary">Upload a photo</button>
+            <button type="button" id="camera">Take one with the camera</button>
+            <input id="file" type="file" accept="image/*" hidden />
+          </div>
+          <div id="recent" class="recent" hidden></div>
+          <video id="video" playsinline muted hidden></video>
+          <button type="button" id="snap" hidden>Snap</button>
+          <div id="source-wrap" class="source-wrap" hidden>
+            <canvas id="source"></canvas>
+            <p class="muted small">Click the photo to move the strip that gets printed.</p>
+          </div>
+          <label>
+            Strip to print (and show)
+            <select id="band">
+              <option value="0">Whole photo</option>
+              <option value="30" selected>30 mm</option>
+              <option value="20">20 mm</option>
+              <option value="12">12 mm</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="card">
+          <h2>2. View</h2>
+          <label>
+            Show as
+            <select id="view">
+              <option value="sim" selected>Simulated print</option>
+              <option value="dots">Raw dots (what gets sent)</option>
+            </select>
+          </label>
+          <label>
+            Zoom
+            <select id="zoom">
+              <option value="1">Real size (roughly)</option>
+              <option value="2" selected>2×</option>
+              <option value="4">4×</option>
+              <option value="8">8× loupe</option>
+            </select>
+          </label>
+          <details class="advanced">
+            <summary>Calibrate the simulation</summary>
+            <p class="muted small">
+              Print one strip, hold it next to the screen at real size, and nudge these until they match.
+            </p>
+            <label>
+              Dot spread <output id="spread-out"></output>
+              <input id="spread" type="range" min="0.25" max="0.7" step="0.01" />
+            </label>
+            <label>
+              Extra dot gain <output id="gain-out"></output>
+              <input id="gain" type="range" min="-0.2" max="0.2" step="0.01" />
+            </label>
+            <button type="button" id="sim-reset">Reset</button>
+          </details>
+        </section>
+
+        <section class="card">
+          <h2>3. Print the picks</h2>
+          <p id="no-ble" class="warn small" hidden>
+            No Web Bluetooth here: use Chrome (Android/desktop) or Bluefy (iOS) to print.
+          </p>
+          <div class="row">
+            <button type="button" id="connect">Connect printer</button>
+            <button type="button" id="print" class="primary" disabled>Print picks</button>
+          </div>
+          <p id="picked" class="muted small">Tick “Print” on the variants you want on paper.</p>
+          <p id="status" class="muted small" role="status"></p>
+        </section>
+      </div>
+
+      <section class="card">
+        <h2>Add a variant</h2>
+        <div class="custom">
+          <label>
+            Dither
+            <select id="c-dither"></select>
+          </label>
+          <label>Noise <input id="c-noise" type="number" min="0" max="48" step="1" value="0" /></label>
+          <label>Sharpen <input id="c-sharpen" type="number" min="0" max="2" step="0.1" value="0.6" /></label>
+          <label>Denoise <input id="c-denoise" type="number" min="0" max="1" step="0.1" value="0" /></label>
+          <label>Gamma <input id="c-gamma" type="number" min="0.3" max="1.2" step="0.05" value="0.6" /></label>
+          <label>Halftone cell <input id="c-period" type="number" min="3" max="16" step="1" value="5" /></label>
+          <label>
+            Density
+            <select id="c-density">
+              <option value="1">1 (thin)</option>
+              <option value="3" selected>3 (normal)</option>
+              <option value="4">4 (thick)</option>
+            </select>
+          </label>
+          <button type="button" id="c-add">Add</button>
+        </div>
+        <p class="muted small">
+          Noise jitters the threshold (breaks up hatching, adds grain). Denoise smooths camera noise before
+          sharpening. Gamma below 1 lifts the midtones.
+        </p>
+      </section>
+
+      <div id="grid" class="lab-grid"></div>
+    </main>
+    <script type="module" src="/src/lab.ts"></script>
+  </body>
+</html>

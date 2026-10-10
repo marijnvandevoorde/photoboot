@@ -21,7 +21,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
     "@capacitor/cli": "^8.5.2",
-    "@types/node": "^24.19.1",
+    "@types/node": "^26.6.4",
     "@types/web-bluetooth": "^0.0.21",
     "@vitejs/plugin-basic-ssl": "^2.3.0",
     "happy-dom": "^20.14.5",

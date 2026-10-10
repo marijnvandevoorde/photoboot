@@ -1,14 +1,8 @@
 # Production: https://boot.small-victories.co behind the host's Traefik.
 # Photos live on the host in /storage/photoboot/shares, server events in
 # /storage/photoboot/events (both owned by uid 1000, the image's `node` user).
-# Secrets come from ~/photoboot/.env: ADMIN_TOKEN (server events), optional
-# UPLOAD_TOKEN (lock down /api/share).
-#
-#   docker compose up -d --build
-#
-# Like the server's other apps it has its own edge network `photoboot-edge`
-# (10.192.17.0/24), shared only with Traefik (~/traefik lists it too).
-# Needs a proxied (orange cloud) DNS record: Traefik only accepts Cloudflare.
+# Settings and secrets come from ~/photoboot/.env (template: .env.example).
+# The SQLite database lives in /data/events (photoboot.db).
 
 services:
   photoboot:
@@ -16,14 +10,14 @@ services:
     image: photoboot:latest
     container_name: photoboot
     restart: unless-stopped
+    # Every setting comes from .env (see .env.example). Only the container's
+    # own data paths are fixed here; they match the volumes below.
+    env_file:
+      - path: .env
+        required: false
     environment:
-      BASE_URL: https://boot.small-victories.co
       SHARE_DIR: /data/shares
       EVENTS_DIR: /data/events
-      SHARE_TTL_DAYS: ${SHARE_TTL_DAYS:-30}
-      SHARE_MAX_MB: ${SHARE_MAX_MB:-5000}
-      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
-      UPLOAD_TOKEN: ${UPLOAD_TOKEN:-}
     volumes:
       - /storage/photoboot/shares:/data/shares
       - /storage/photoboot/events:/data/events

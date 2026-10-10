@@ -80,7 +80,7 @@ const DITHER_KERNELS: Record<string, Kernel> = {
   },
 };
 // Non-diffusing screens, see `screen()`.
-const SCREENS = ['halftone', 'threshold'];
+const SCREENS = ['bluenoise', 'bayer', 'halftone', 'threshold'];
 export const DITHER_MODES = [...Object.keys(DITHER_KERNELS), ...SCREENS];
 
 // Canvas → packed MSB-first bitmap. 1 bit = black dot. Canvas width must be
@@ -92,10 +92,11 @@ export const DITHER_MODES = [...Object.keys(DITHER_KERNELS), ...SCREENS];
 // `noise` jitters the threshold by ±noise levels, which breaks up the regular
 // hatching error diffusion produces in flat areas (walls, sky).
 //
-// `photo: true` stretches contrast (`clip` to 1−`clip` percentile), applies
-// `gamma` (< 1 lifts midtones) and sharpens by `sharpen` — camera frames are
-// flat/soft and thermal prints come out dark. `outline` (0–1) darkens the
-// edges, keeping features defined when the tones are very light.
+// `photo: true` smooths sensor noise by `denoise` (0–1), stretches contrast
+// (`clip` to 1−`clip` percentile), applies `gamma` (< 1 lifts midtones) and
+// sharpens by `sharpen` — camera frames are flat/soft and thermal prints come
+// out dark. `outline` (0–1) darkens the edges, keeping features defined when
+// the tones are very light.
 export function canvasToRaster(
   canvas: HTMLCanvasElement,
   { dither = 'floyd', noise = 0, period, ...toneOptions }: RasterOptions = {}
@@ -113,7 +114,7 @@ export function canvasToRaster(
 // Canvas → luminance 0–255, with the tone options of canvasToRaster applied.
 export function toGray(
   canvas: HTMLCanvasElement,
-  { photo = false, gamma = 0.6, clip = 0.01, sharpen: amount = 0.6, outline = 0 }: ToneOptions = {}
+  { photo = false, gamma = 0.6, clip = 0.01, sharpen: amount = 0.6, denoise = 0, outline = 0 }: ToneOptions = {}
 ): Float32Array {
   const { width, height } = canvas;
   const img = ctx2d(canvas).getImageData(0, 0, width, height);
@@ -122,6 +123,10 @@ export function toGray(
     gray[i] = 0.299 * img.data[p] + 0.587 * img.data[p + 1] + 0.114 * img.data[p + 2];
   }
   if (photo) {
+    if (denoise) {
+      const blurred = boxBlur(gray, width, height);
+      for (let i = 0; i < gray.length; i++) gray[i] += denoise * (blurred[i] - gray[i]);
+    }
     enhanceForThermal(gray, { gamma, clip });
     if (amount) sharpen(gray, width, height, amount);
   }
@@ -173,11 +178,26 @@ const HALFTONE_PERIOD = 5; // dots per cell (~60 lpi at 300 dpi)
 //
 // halftone: newspaper-style round dots on a 45° grid. Clustered dots survive
 //   thermal dot gain far better than scattered single dots.
+// bluenoise: threshold against a tiled blue-noise mask. Evenly spread dots
+//   with no hatching or worms, and no random clumps like `noise` gives.
+// bayer: 8×8 ordered dither, the regular cross-hatch look of old printers.
 // threshold: plain 50% cut, for canvases that are already black and white.
 function screen(gray: Float32Array, width: number, height: number, mode: string, period?: number) {
   const ink = new Uint8Array(width * height);
   if (mode === 'threshold') {
     for (let i = 0; i < ink.length; i++) ink[i] = gray[i] < 128 ? 1 : 0;
+    return ink;
+  }
+  if (mode === 'bluenoise' || mode === 'bayer') {
+    const { size, ranks } = mode === 'bluenoise' ? blueNoiseMask() : bayerMask();
+    const levels = size * size;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = y * width + x;
+        const t = ((ranks[(y % size) * size + (x % size)] + 0.5) / levels) * 255;
+        ink[i] = gray[i] < t ? 1 : 0;
+      }
+    }
     return ink;
   }
   if (mode === 'halftone') {
@@ -193,6 +213,115 @@ function screen(gray: Float32Array, width: number, height: number, mode: string,
     return ink;
   }
   throw new Error(`Unknown screen: ${mode}`);
+}
+
+interface Mask {
+  size: number;
+  ranks: Uint16Array; // threshold order, 0 … size² − 1
+}
+
+let blueNoise: Mask | null = null;
+
+// 64×64 blue-noise threshold mask by void-and-cluster (Ulichney 1993),
+// built once (~20 ms) and deterministic. Energy is a toroidal Gaussian so
+// the mask tiles without seams.
+export function blueNoiseMask(size = 64): Mask {
+  if (blueNoise?.size === size) return blueNoise;
+  const n = size * size;
+  const SIGMA = 1.5;
+  const R = 6;
+  const energy = new Float32Array(n);
+  const on = new Uint8Array(n);
+  const splat = (p: number, sign: number) => {
+    const px = p % size;
+    const py = (p / size) | 0;
+    for (let dy = -R; dy <= R; dy++) {
+      const row = ((py + dy + size) % size) * size;
+      for (let dx = -R; dx <= R; dx++) {
+        energy[row + ((px + dx + size) % size)] += sign * Math.exp(-(dx * dx + dy * dy) / (2 * SIGMA * SIGMA));
+      }
+    }
+  };
+  // Tightest cluster: the set pixel with most energy; largest void: the
+  // empty one with least.
+  const extreme = (want: number, most: boolean) => {
+    let best = -1;
+    for (let i = 0; i < n; i++) {
+      if (on[i] !== want) continue;
+      if (best < 0 || (most ? energy[i] > energy[best] : energy[i] < energy[best])) best = i;
+    }
+    return best;
+  };
+
+  // Seed ~10% of pixels (fixed LCG so every build is identical), then move
+  // cluster pixels into voids until the pattern is stable.
+  let seed = 12345;
+  const rand = () => {
+    seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
+    return seed / 4294967296;
+  };
+  let ones = 0;
+  while (ones < n / 10) {
+    const p = (rand() * n) | 0;
+    if (on[p]) continue;
+    on[p] = 1;
+    splat(p, 1);
+    ones++;
+  }
+  for (;;) {
+    const cluster = extreme(1, true);
+    on[cluster] = 0;
+    splat(cluster, -1);
+    const voidP = extreme(0, false);
+    if (voidP === cluster) {
+      on[cluster] = 1;
+      splat(cluster, 1);
+      break;
+    }
+    on[voidP] = 1;
+    splat(voidP, 1);
+  }
+
+  const ranks = new Uint16Array(n);
+  const initial = on.slice();
+  const initialEnergy = energy.slice();
+  // Phase 1: peel the seed pattern, tightest cluster first, ranks counting down.
+  for (let rank = ones - 1; rank >= 0; rank--) {
+    const p = extreme(1, true);
+    on[p] = 0;
+    splat(p, -1);
+    ranks[p] = rank;
+  }
+  // Phase 2: from the seed pattern, fill the largest void, ranks counting up.
+  on.set(initial);
+  energy.set(initialEnergy);
+  for (let rank = ones; rank < n; rank++) {
+    const p = extreme(0, false);
+    on[p] = 1;
+    splat(p, 1);
+    ranks[p] = rank;
+  }
+  blueNoise = { size, ranks };
+  return blueNoise;
+}
+
+function bayerMask(): Mask {
+  const size = 8;
+  const ranks = new Uint16Array(size * size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      // Bit-interleave of x^y and y, lowest bits most significant: the
+      // classic recursive Bayer index.
+      let v = 0;
+      for (let bit = 0; bit < 3; bit++) {
+        const xb = (x >> bit) & 1;
+        const yb = (y >> bit) & 1;
+        v = (v << 2) | ((xb ^ yb) << 1) | yb;
+      }
+      ranks[y * size + x] = v;
+    }
+  }
+  return { size, ranks };
 }
 
 export function boxBlur(gray: Float32Array, width: number, height: number): Float32Array {

@@ -11,8 +11,6 @@
 // kiosk.ts). The hidden long-presses in the booth (and /?admin=1) are the
 // only entry points — this URL isn't linked from anywhere public.
 
-import './platform.ts';
-import qrcode from 'qrcode-generator';
 import { deletePhotos, exportZip, photoEvents } from './archive.ts';
 import type { Config, TextTemplateConfig } from './config.ts';
 import { DEFAULTS, eventKey, getConfig, PAPER_PRESETS, portableConfig, resetConfig, setConfig } from './config.ts';
@@ -20,9 +18,11 @@ import { $, errorMessage, option } from './dom.ts';
 import { LANGUAGES, STRING_KEYS, STRINGS } from './i18n.ts';
 import { adminUnlocked, checkPin, hasPin, kioskState, pinHash, setAdminUnlocked, unlockKiosk } from './kiosk.ts';
 import { PHOTO_STYLES, PHOTO_TWISTS } from './photo.ts';
+import { isIosApp } from './platform.ts';
 import { listPrinters } from './printers/index.ts';
-import type { EventSummary, Setup } from './remote.ts';
-import { galleryUrl, getAdminToken, remote, setAdminToken, setupUrl } from './remote.ts';
+import type { PurchasedEvent } from './purchase.ts';
+import type { Setup } from './remote.ts';
+import { remote } from './remote.ts';
 import { getPaper, getStats, getStatus, newRoll, paperLeft, resetStats } from './stats.ts';
 import { kv } from './storage.ts';
 import type { Slot } from './templates.ts';
@@ -558,123 +558,41 @@ $<HTMLButtonElement>('delete-local').addEventListener('click', async () => {
   renderLocalPhotos();
 });
 
-// ---------- server events ----------
+// ---------- server event (online gallery) ----------
+// Managing events is the owner's job, in /admin. A booth only joins one
+// with its setup link, saves its setup to it, or leaves it.
 
 bind('upload-token', 'uploadToken', { from: (v) => v.trim() });
-$<HTMLInputElement>('admin-token').value = getAdminToken();
-$<HTMLInputElement>('admin-token').addEventListener('change', (e) => {
-  setAdminToken((e.target as HTMLInputElement).value.trim());
-  refreshEvents();
-});
 
 function renderServerEvent() {
   const ev = config.serverEvent;
   $('server-event').innerHTML = ev?.id
-    ? `This device runs the server event <strong>${escapeHtml(ev.name || ev.id)}</strong>: shared photos go to its gallery.`
-    : 'This device is not part of a server event.';
-  $<HTMLButtonElement>('leave-event').hidden = !ev?.id;
+    ? `This booth is part of <strong>${escapeHtml(ev.name || ev.id)}</strong>: every photo goes to its online gallery.`
+    : '';
+  $('event-joined').hidden = !ev?.id;
+  $('event-join').hidden = !!ev?.id;
 }
 fillers.push(renderServerEvent);
 
-function showQr(title: string, url: string) {
-  const qr = qrcode(0, 'M');
-  qr.addData(url);
-  qr.make();
-  const box = $('event-qr');
-  box.innerHTML = `<p><strong>${escapeHtml(title)}</strong></p>${qr.createSvgTag({ cellSize: 6, margin: 2, scalable: true })}<p class="small"><a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a></p>`;
-  box.hidden = false;
-  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-
-// Without the admin token there's nothing to manage: only the explanation
-// and the token field show.
-async function refreshEvents() {
-  const list = $('event-list');
-  list.replaceChildren();
-  $('server-admin').hidden = !getAdminToken();
-  if (!getAdminToken()) return;
+$<HTMLButtonElement>('save-to-event').addEventListener('click', async () => {
+  const ev = config.serverEvent;
+  if (!ev?.id) return;
+  if (!confirm(`Save this booth's setup to “${ev.name || ev.id}”? Booths that open its setup link get it.`)) return;
   try {
-    const { events } = await remote.listEvents();
-    if (!events.length) list.innerHTML = '<li class="muted">No events on the server yet.</li>';
-    for (const ev of events) {
-      const li = document.createElement('li');
-      const current = config.serverEvent?.id === ev.id;
-      li.innerHTML =
-        `<div><strong>${escapeHtml(ev.name || ev.id)}</strong>${current ? ' <span class="tag">this booth</span>' : ''}<br>` +
-        `<span class="muted small">${ev.photos} shared photos · ${ev.stats.sessions} sessions · ${ev.stats.prints} prints · created ${fmtTime(ev.created)}</span></div>`;
-      const row = document.createElement('div');
-      row.className = 'row';
-      const btn = (label: string, fn: () => unknown, cls = '') => {
-        const b = document.createElement('button');
-        b.textContent = label;
-        if (cls) b.className = cls;
-        b.addEventListener('click', fn);
-        row.append(b);
-      };
-      btn('Setup QR', () =>
-        showQr(`Scan on a booth device to set it up as “${ev.name}”`, setupUrl(ev.id, ev.setupKey))
-      );
-      btn('Gallery', () => showQr(`Gallery for “${ev.name}” — share with the host`, galleryUrl(ev.id, ev.galleryKey)));
-      btn('Use here', () => useEvent(ev));
-      btn('Overwrite with current setup', async () => {
-        if (!confirm(`Replace the setup of “${ev.name}” on the server with this page's settings?`)) return;
-        await remote.updateEvent(ev.id, await currentSetup());
-        flashStatus('Event updated ✓');
-        refreshEvents();
-      });
-      btn(
-        'Delete',
-        async () => {
-          if (!confirm(`Delete “${ev.name}” and all its shared photos from the server? This can't be undone.`)) return;
-          await remote.deleteEvent(ev.id);
-          if (config.serverEvent?.id === ev.id) save({ serverEvent: null });
-          renderServerEvent();
-          refreshEvents();
-        },
-        'danger'
-      );
-      li.append(row);
-      list.append(li);
-    }
+    await remote.saveEvent(ev.id, ev.key, await currentSetup());
+    flashStatus('Saved to the event ✓');
   } catch (err) {
-    list.innerHTML = `<li class="warn">Couldn't list events: ${escapeHtml(errorMessage(err))}</li>`;
-  }
-}
-
-async function useEvent(ev: EventSummary) {
-  const setup = await remote.loadEvent(ev.id, ev.setupKey);
-  await applySetup(setup, { serverEvent: { id: ev.id, key: ev.setupKey, name: setup.name } });
-  flashStatus(`This booth now runs “${setup.name}” ✓`);
-  refreshEvents();
-}
-
-$<HTMLButtonElement>('publish-event').addEventListener('click', async () => {
-  if (!getAdminToken()) return flashStatus('Enter the server admin token first.', true);
-  const name = prompt('Event name on the server:', config.eventName || '');
-  if (!name?.trim()) return;
-  try {
-    if (!config.eventName) save({ eventName: name.trim() });
-    const setup = { ...(await currentSetup()), name: name.trim() };
-    const ev = await remote.createEvent(setup);
-    save({ serverEvent: { id: ev.id, key: ev.setupKey, name: ev.name } });
-    renderServerEvent();
-    renderStatus();
-    showQr(`Scan on a booth device to set it up as “${ev.name}”`, setupUrl(ev.id, ev.setupKey));
-    refreshEvents();
-  } catch (err) {
-    flashStatus(`Publish failed: ${errorMessage(err)}`, true);
+    flashStatus(`Couldn't save: ${errorMessage(err)}`, true);
   }
 });
-$<HTMLButtonElement>('refresh-events').addEventListener('click', refreshEvents);
 $<HTMLButtonElement>('use-setup-link').addEventListener('click', () =>
   importSetupLink($<HTMLInputElement>('setup-link').value)
 );
 $<HTMLButtonElement>('leave-event').addEventListener('click', () => {
-  if (!confirm('Unlink this booth from its server event? Settings stay as they are.')) return;
+  if (!confirm('Disconnect this booth from the event? Settings stay as they are.')) return;
   save({ serverEvent: null });
   renderServerEvent();
   renderStatus();
-  refreshEvents();
 });
 
 // Setup QR: /settings.html#event=<id>.<setupKey>
@@ -690,7 +608,7 @@ async function importFromHash() {
   await importSetupLink(link);
 }
 
-async function importSetupLink(link: string) {
+async function importSetupLink(link: string): Promise<boolean> {
   const m = link.trim().match(SETUP_LINK);
   const notice = $('import-status');
   notice.classList.remove('warn');
@@ -698,7 +616,7 @@ async function importSetupLink(link: string) {
     notice.hidden = false;
     notice.textContent = "That isn't a setup link. It ends in #event=…";
     notice.classList.add('warn');
-    return;
+    return false;
   }
   notice.hidden = false;
   notice.textContent = 'Loading the event setup…';
@@ -706,11 +624,130 @@ async function importSetupLink(link: string) {
     const setup = await remote.loadEvent(m[1], m[2]);
     await applySetup(setup, { serverEvent: { id: m[1], key: m[2], name: setup.name } });
     notice.textContent = `This booth is now set up for “${setup.name}”. Go back to the booth to start.`;
+    return true;
   } catch (err) {
     notice.textContent = `Couldn't load the event: ${errorMessage(err)}`;
     notice.classList.add('warn');
+    return false;
   }
 }
+
+// ---------- buying an event gallery (iOS app: Apple in-app purchase) ----------
+// The web keeps its link to /event.html (Stripe). In the iOS app Apple
+// requires in-app purchase: src/purchase.ts talks to StoreKit and the server.
+
+const purchaseModule = () => import('./purchase.ts');
+
+function buyStatus(text: string, warn = false) {
+  const box = $('buy-status');
+  box.textContent = text;
+  box.classList.toggle('warn', warn);
+  box.hidden = !text;
+}
+
+// The server confirmed a purchase: join the event and show its gallery link.
+async function delivered(event: PurchasedEvent) {
+  $<HTMLInputElement>('gallery-link').value = event.galleryLink;
+  $('event-bought').hidden = false;
+  const joined = await importSetupLink(event.setupLink);
+  buyStatus(
+    joined
+      ? `Paid ✓ This booth is set up for “${event.eventName}”. The links are in your email too.`
+      : `Paid ✓ “${event.eventName}” is ready, but this booth couldn't load it yet: open the setup link from the email.`,
+    !joined
+  );
+  renderServerEvent();
+}
+
+async function redeemUnfinished(manual: boolean) {
+  const { redeemUnfinished } = await purchaseModule();
+  const { redeemed, failed } = await redeemUnfinished();
+  const last = redeemed.at(-1);
+  if (last) await delivered(last);
+  if (failed.length)
+    buyStatus(`A purchase couldn't be confirmed yet (${failed[0]}). Try "Restore unfinished purchase" later.`, true);
+  else if (manual && !last) buyStatus('No unfinished purchases on this device.');
+}
+
+let appPurchaseReady = false;
+async function setupAppPurchase() {
+  if (!isIosApp || appPurchaseReady) return;
+  appPurchaseReady = true;
+  $('event-buy-web').hidden = true;
+  $('event-buy-app').hidden = false;
+  if (!$<HTMLInputElement>('buy-name').value) $<HTMLInputElement>('buy-name').value = config.eventName || '';
+  const p = await purchaseModule();
+  // Ask to Buy approved (or another late delivery) while settings are open.
+  p.onTransactionDelivered((tx) => {
+    p.redeem(tx).then(delivered, (err) => buyStatus(`Couldn't confirm the purchase: ${errorMessage(err)}`, true));
+  });
+  const button = $<HTMLButtonElement>('buy-gallery');
+  try {
+    const price = await p.productPrice();
+    if (!price) throw new Error('product not found');
+    button.textContent = `Buy — ${price}`;
+    button.disabled = false;
+  } catch {
+    buyStatus("The App Store isn't reachable right now. Check the internet connection and reopen settings.", true);
+  }
+  await redeemUnfinished(false).catch(() => {});
+}
+
+$<HTMLButtonElement>('buy-gallery').addEventListener('click', async () => {
+  const name = $<HTMLInputElement>('buy-name').value.trim();
+  const email = $<HTMLInputElement>('buy-email').value.trim();
+  const eventDate = $<HTMLInputElement>('buy-date').value || null;
+  if (!name) return buyStatus('Give the event a name first.', true);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return buyStatus('Enter the email address for the links.', true);
+  const button = $<HTMLButtonElement>('buy-gallery');
+  button.disabled = true;
+  buyStatus('Opening the App Store…');
+  try {
+    const { buyEventGallery } = await purchaseModule();
+    const result = await buyEventGallery({ name, email, eventDate });
+    if (result.status === 'cancelled') buyStatus('Purchase cancelled. Nothing was charged.');
+    else if (result.status === 'pending')
+      buyStatus(
+        'Waiting for approval (Ask to Buy). Once it’s approved, open these settings again and the booth sets itself up; the links also arrive by email.'
+      );
+    else await delivered(result.event);
+  } catch (err) {
+    buyStatus(
+      `Couldn't finish: ${errorMessage(err)} If you were charged, nothing is lost: tap “Restore unfinished purchase” once you're online.`,
+      true
+    );
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$<HTMLButtonElement>('restore-purchase').addEventListener('click', async () => {
+  const button = $<HTMLButtonElement>('restore-purchase');
+  button.disabled = true;
+  buyStatus('Looking for unfinished purchases…');
+  try {
+    await redeemUnfinished(true);
+  } catch (err) {
+    buyStatus(`Couldn't restore: ${errorMessage(err)}`, true);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$<HTMLButtonElement>('copy-gallery').addEventListener('click', async () => {
+  const input = $<HTMLInputElement>('gallery-link');
+  try {
+    await navigator.clipboard.writeText(input.value);
+    flashStatus('Gallery link copied ✓');
+  } catch {
+    input.select(); // the host can copy it by hand
+  }
+});
+$<HTMLButtonElement>('share-gallery').addEventListener('click', () => {
+  const url = $<HTMLInputElement>('gallery-link').value;
+  if (navigator.share) navigator.share({ title: 'Photo booth gallery', url }).catch(() => {});
+  else $<HTMLButtonElement>('copy-gallery').click();
+});
 
 // ---------- security: PIN + kiosk lock ----------
 
@@ -780,8 +817,8 @@ function start() {
   $('panels').hidden = false;
   fillAll();
   renderProfiles();
-  refreshEvents();
   importFromHash();
+  setupAppPurchase().catch((err) => buyStatus(errorMessage(err), true));
 }
 
 // Fills in keys added since the stored config was written.

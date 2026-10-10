@@ -61,7 +61,7 @@ export const DEFAULTS: Config = {
   // (24-dot margins on 576-dot head); 384 = 32 mm; 288 = 24 mm paper.
   paperWidthDots: 552,
   // Thermal print density: 1 (thin) / 3 (normal) / 4 (thick).
-  printDensity: 3,
+  printDensity: 4,
 
   // Printing behaviour.
   autoPrint: false, // print the default look as soon as the review opens

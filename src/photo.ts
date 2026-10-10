@@ -21,7 +21,7 @@ export interface PhotoTwist {
   apply?: (canvas: HTMLCanvasElement) => HTMLCanvasElement;
 }
 
-export const PHOTO_DENSITY_DEFAULT = 3;
+export const PHOTO_DENSITY_DEFAULT = 4;
 
 // Blank paper after each print so the sticker clears the tear bar (~6 mm).
 // Printed rows always advance the paper, unlike a bare feed command.

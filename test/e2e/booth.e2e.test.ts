@@ -76,6 +76,7 @@ describe.skipIf(!CHROME)('booth in a real browser', () => {
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     // localhost (not 127.0.0.1) is a secure context: camera + IndexedDB work.
     base = `http://localhost:${(server.address() as AddressInfo).port}`;
+    process.env.PUBLIC_URL = base; // links in emails / admin point here
 
     browser = await puppeteer.launch({
       executablePath: CHROME,
@@ -206,26 +207,49 @@ describe.skipIf(!CHROME)('booth in a real browser', () => {
     expect(await page.$eval('#printer-pill', (p) => p.classList.contains('bad'))).toBe(false);
   });
 
-  it('publishes the setup and sets up a second device from its link', async () => {
+  it('joins an event from its setup link, saves its setup, and a second device gets it', async () => {
+    const { compEvent, setupLink } = await import('../../server/billing.ts');
+    const ev = await compEvent({ name: 'E2E party', email: '', sendEmail: false });
+    const link = setupLink(ev);
+
     await page.goto(`${base}/settings.html`);
     await page.waitForSelector('#panels:not([hidden])');
     await page.waitForFunction(() => document.getElementById('local-photos')?.textContent?.includes('1 photos'));
-    expect(await visible('#server-admin')).toBe(false); // no admin token yet: explanation only
-    await page.click('#advanced > summary');
-    await page.type('#admin-token', 'e2e-admin');
-    await page.$eval('#admin-token', (e) => e.dispatchEvent(new Event('change')));
-    await page.click('#publish-event');
-    await page.waitForSelector('#event-qr:not([hidden])');
-    const link = await page.$eval('#event-qr a', (a) => (a as HTMLAnchorElement).href);
-    expect(link).toMatch(/#event=[\w-]+\.[\w-]+$/);
+    await page.type('#setup-link', link);
+    await page.click('#use-setup-link');
+    await page.waitForFunction(() => document.getElementById('import-status')?.textContent?.includes('now set up'));
+    expect(await visible('#event-joined')).toBe(true);
+
+    // Customise this booth, then save it to the event for the other booths.
+    await page.select('#copies', '3');
+    await page.click('#save-to-event');
+    await page.waitForFunction(() =>
+      document.getElementById('save-status')?.textContent?.includes('Saved to the event')
+    );
 
     const other = await browser.createBrowserContext();
     const page2 = await other.newPage();
     await page2.goto(link);
     await page2.waitForFunction(() => document.getElementById('import-status')?.textContent?.includes('now set up'));
     const cfg = await page2.evaluate(() => JSON.parse(localStorage.getItem('photoboot:config') ?? '{}'));
-    expect(cfg).toMatchObject({ templateId: 'text', copies: 2, serverEvent: { name: 'E2E party' } });
+    expect(cfg).toMatchObject({ copies: 3, serverEvent: { id: ev.id, name: 'E2E party' } });
     await other.close();
+  });
+
+  it('logs in to /admin with an authenticator and lists the event', async () => {
+    const { totp } = await import('../../server/totp.ts');
+    const admin = await browser.newPage();
+    await admin.goto(`${base}/admin`);
+    await admin.waitForSelector('#login:not([hidden])');
+    await admin.type('#login-token', 'e2e-admin');
+    await admin.click('#login-form button[type="submit"]');
+    await admin.waitForSelector('#enroll:not([hidden])');
+    const secret = (await admin.$eval('#enroll-secret', (e) => e.textContent ?? '')).replace(/\s/g, '');
+    await admin.type('#login-code', totp(secret));
+    await admin.click('#login-form button[type="submit"]');
+    await admin.waitForSelector('#panels:not([hidden])');
+    await admin.waitForFunction(() => document.getElementById('events')?.textContent?.includes('E2E party'));
+    await admin.close();
   });
 
   it('asks for the PIN before a guest can leave the booth', async () => {
@@ -271,6 +295,20 @@ describe.skipIf(!CHROME)('booth in a real browser', () => {
     // Settings are locked again once the host walked away.
     await page.goto(`${base}/settings.html`);
     await page.waitForSelector('#auth:not([hidden])');
+  });
+
+  it('shows the event gallery offer with its price (no Stripe here)', async () => {
+    const offer = await browser.newPage();
+    offer.on('pageerror', (e) => errors.push(e instanceof Error ? e.message : String(e)));
+    await offer.goto(`${base}/event.html?cancelled=1`);
+    await offer.waitForFunction(() => /19/.test(document.getElementById('price')?.textContent ?? ''));
+    expect(await offer.$eval('#form', (f) => !(f as HTMLElement).hidden)).toBe(true);
+    expect(await offer.$$eval('#form input', (i) => i.map((x) => x.id))).toEqual(['name', 'date', 'email']);
+    expect(await offer.$eval('#cancelled', (p) => !(p as HTMLElement).hidden)).toBe(true);
+    expect(await offer.$eval('#paid', (p) => (p as HTMLElement).hidden)).toBe(true);
+    // This server has no Stripe key: say so instead of failing at checkout.
+    expect(await offer.$eval('#pay', (b) => (b as HTMLButtonElement).disabled)).toBe(true);
+    await offer.close();
   });
 
   it('had no uncaught page errors', () => {

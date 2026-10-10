@@ -35,6 +35,7 @@ async function serveStatic(req: Req, res: Res): Promise<void> {
     return;
   }
   if (pathname.endsWith('/')) pathname += 'index.html';
+  if (pathname === '/admin') pathname = '/admin.html';
   const file = path.join(DIST, path.normalize(pathname));
   if (!file.startsWith(DIST + path.sep)) {
     res.writeHead(403).end();

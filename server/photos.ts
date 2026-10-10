@@ -1,18 +1,27 @@
-// Shared-photo storage: `<id>.jpg` plus a `<id>.json` sidecar
-// ({ id, event, created }) in SHARE_DIR. Handles expiry and the disk quota.
+// Shared-photo storage: `<id>.jpg` files in SHARE_DIR, metadata in the
+// database (see db.ts). Handles expiry and the disk quota.
+//
+// A photo expires SHARE_TTL_DAYS after it was taken, unless it belongs to a
+// paid event: then the event's retention applies (PAID_RETENTION_DAYS by
+// default, or the event's own retention_days).
 //
 // Config (env):
-//   SHARE_DIR       where photos are stored (default ./shares)
-//   SHARE_TTL_DAYS  delete photos older than this (default 30, 0 = keep forever)
-//   SHARE_MAX_MB    refuse uploads once the folder is this big (default 5000)
+//   SHARE_DIR            where photos are stored (default ./shares)
+//   SHARE_TTL_DAYS       free retention (default 30, 0 = keep forever)
+//   PAID_RETENTION_DAYS  retention for paid events (default 365)
+//   SHARE_MAX_MB         refuse uploads once photos take this much (default 5000)
 
-import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { db, SHARE_DIR } from './db.ts';
+import { envNumber } from './env.ts';
 
-export const SHARE_DIR = path.resolve(process.env.SHARE_DIR || 'shares');
-export const TTL_DAYS = Number(process.env.SHARE_TTL_DAYS ?? 30);
-const MAX_BYTES = Number(process.env.SHARE_MAX_MB ?? 5000) * 1024 * 1024;
+export { SHARE_DIR };
+export const TTL_DAYS = envNumber('SHARE_TTL_DAYS', 30);
+export const PAID_RETENTION_DAYS = envNumber('PAID_RETENTION_DAYS', 365);
+const MAX_BYTES = envNumber('SHARE_MAX_MB', 5000) * 1024 * 1024;
 const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+const DAY_MS = 86_400_000;
 
 export const ID = /^[0-9a-f-]{36}$/;
 
@@ -20,78 +29,67 @@ export interface PhotoMeta {
   id: string;
   event: string | null;
   created: string;
+  retentionDays: number; // 0 = kept forever
 }
 
-const jpgPath = (id: string) => path.join(SHARE_DIR, `${id}.jpg`);
-const metaPath = (id: string) => path.join(SHARE_DIR, `${id}.json`);
+export const jpgPath = (id: string) => path.join(SHARE_DIR, `${id}.jpg`);
 
-export { jpgPath };
-
-let usedBytes: number | null = null; // folder size, computed lazily, then kept up to date
-
-async function folderBytes(): Promise<number> {
-  if (usedBytes !== null) return usedBytes;
-  let total = 0;
-  for (const name of await readdir(SHARE_DIR).catch(() => [])) {
-    total += (await stat(path.join(SHARE_DIR, name)).catch(() => ({ size: 0 }))).size;
-  }
-  usedBytes = total;
-  return total;
-}
+// Retention in days for a row joined with its event (see SELECT_META).
+const SELECT_META = `
+  SELECT p.id, p.event_id AS event, p.created,
+    CASE WHEN e.paid = 1 THEN COALESCE(e.retention_days, ${PAID_RETENTION_DAYS}) ELSE ${TTL_DAYS} END AS retentionDays
+  FROM photos p LEFT JOIN events e ON e.id = p.event_id`;
 
 export async function hasRoomFor(bytes: number): Promise<boolean> {
-  return (await folderBytes()) + bytes <= MAX_BYTES;
+  const { used } = db.prepare('SELECT COALESCE(SUM(bytes), 0) AS used FROM photos').get() as { used: number };
+  return used + bytes <= MAX_BYTES;
 }
 
 export async function savePhoto(id: string, body: Buffer, event: string | null = null): Promise<void> {
   await mkdir(SHARE_DIR, { recursive: true });
-  const meta = JSON.stringify({ id, event, created: new Date().toISOString() });
   await writeFile(jpgPath(id), body);
-  await writeFile(metaPath(id), meta);
-  if (usedBytes !== null) usedBytes += body.length + meta.length;
+  db.prepare('INSERT INTO photos (id, event_id, created, bytes) VALUES (?, ?, ?, ?)').run(
+    id,
+    event,
+    new Date().toISOString(),
+    body.length
+  );
 }
 
-// { id, event, created } — falls back to the file time for photos uploaded
-// before sidecars existed.
 export async function photoMeta(id: string): Promise<PhotoMeta | null> {
-  try {
-    return JSON.parse(await readFile(metaPath(id), 'utf8'));
-  } catch {
-    const info = await stat(jpgPath(id)).catch(() => null);
-    return info ? { id, event: null, created: info.mtime.toISOString() } : null;
-  }
+  return (db.prepare(`${SELECT_META} WHERE p.id = ?`).get(id) as unknown as PhotoMeta | undefined) ?? null;
 }
 
 export async function deletePhoto(id: string): Promise<void> {
-  for (const file of [jpgPath(id), metaPath(id)]) {
-    const size = (await stat(file).catch(() => ({ size: 0 }))).size;
-    await rm(file, { force: true });
-    if (usedBytes !== null) usedBytes -= size;
-  }
+  db.prepare('DELETE FROM photos WHERE id = ?').run(id);
+  await rm(jpgPath(id), { force: true });
+  // Pre-database sidecars, if any.
+  await rm(path.join(SHARE_DIR, `${id}.json`), { force: true });
 }
 
 export async function listPhotos({ event }: { event?: string | null } = {}): Promise<PhotoMeta[]> {
-  const names = await readdir(SHARE_DIR).catch(() => []);
-  const ids = names
-    .filter((n) => n.endsWith('.jpg'))
-    .map((n) => n.slice(0, -4))
-    .filter((id) => ID.test(id));
-  const metas = await Promise.all(ids.map(photoMeta));
-  return metas
-    .filter((m): m is PhotoMeta => !!m && (event === undefined || m.event === event))
-    .sort((a, b) => a.created.localeCompare(b.created));
+  const rows =
+    event === undefined
+      ? db.prepare(`${SELECT_META} ORDER BY p.created`).all()
+      : event === null
+        ? db.prepare(`${SELECT_META} WHERE p.event_id IS NULL ORDER BY p.created`).all()
+        : db.prepare(`${SELECT_META} WHERE p.event_id = ? ORDER BY p.created`).all(event);
+  return rows as unknown as PhotoMeta[];
 }
 
-export function expiresAt(created: string): Date | null {
-  return TTL_DAYS > 0 ? new Date(new Date(created).getTime() + TTL_DAYS * 86_400_000) : null;
+export function countPhotos(event: string): number {
+  return (db.prepare('SELECT COUNT(*) AS n FROM photos WHERE event_id = ?').get(event) as { n: number }).n;
 }
 
-export async function cleanup() {
-  if (!(TTL_DAYS > 0)) return 0;
+export function expiresAt(meta: Pick<PhotoMeta, 'created' | 'retentionDays'>): Date | null {
+  return meta.retentionDays > 0 ? new Date(new Date(meta.created).getTime() + meta.retentionDays * DAY_MS) : null;
+}
+
+export async function cleanup(): Promise<number> {
   const now = Date.now();
   let removed = 0;
   for (const meta of await listPhotos()) {
-    const expires = expiresAt(meta.created);
+    const expires = expiresAt(meta);
     if (expires && expires.getTime() < now) {
       await deletePhoto(meta.id);
       removed++;

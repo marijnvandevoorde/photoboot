@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boxBlur, inkToRaster, sobel } from '../src/raster.ts';
+import { blueNoiseMask, boxBlur, inkToRaster, sobel } from '../src/raster.ts';
 
 describe('inkToRaster', () => {
   it('packs 1-per-dot ink MSB first, 8 dots per byte', () => {
@@ -33,5 +33,13 @@ describe('boxBlur / sobel', () => {
     const edges = sobel(img, w, h);
     expect(edges[1 * w + 2]).toBeGreaterThan(500); // next to the step
     expect(edges[1 * w + 4]).toBe(0); // inside the flat white part
+  });
+});
+
+describe('threshold masks', () => {
+  it('blue-noise mask ranks every cell exactly once', () => {
+    const { size, ranks } = blueNoiseMask(16);
+    expect(new Set(ranks).size).toBe(size * size);
+    expect(Math.max(...ranks)).toBe(size * size - 1);
   });
 });

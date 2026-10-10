@@ -1,0 +1,56 @@
+.stack {
+  display: grid;
+  gap: 0.7rem;
+}
+.enroll {
+  display: grid;
+  gap: 0.5rem;
+  background: #fff;
+  color: #000;
+  border-radius: 12px;
+  padding: 1rem;
+}
+.enroll svg {
+  width: min(70vw, 14rem);
+  height: auto;
+}
+.enroll code {
+  word-break: break-all;
+}
+.event-list .meta {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-left: 0.3rem;
+}
+.badge.paid {
+  background: var(--accent);
+  color: #000;
+}
+.badge.pending {
+  background: #8a6200;
+  color: #fff;
+}
+.badge.free {
+  background: #444;
+  color: #fff;
+}
+button.link {
+  background: none;
+  color: var(--muted);
+  padding: 0;
+  font-weight: 400;
+}
+#qr-box {
+  position: fixed;
+  inset: auto 1rem 1rem auto;
+  max-width: 20rem;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+  z-index: 20;
+}

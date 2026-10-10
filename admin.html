@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#111" />
+    <meta name="robots" content="noindex,nofollow" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <title>Photoboot — Admin</title>
+    <link rel="stylesheet" href="/src/settings.css" />
+    <link rel="stylesheet" href="/src/admin.css" />
+  </head>
+  <body>
+    <main>
+      <header class="topbar">
+        <h1>Photoboot admin</h1>
+        <nav>
+          <a href="/">Booth</a>
+          <button type="button" id="logout" class="link" hidden>Log out</button>
+        </nav>
+      </header>
+
+      <!-- Login: token + authenticator code; first time, enroll the authenticator. -->
+      <section id="login" class="card" hidden>
+        <h2>Log in</h2>
+        <form id="login-form" class="stack">
+          <label>
+            Admin token
+            <input id="login-token" type="password" autocomplete="current-password" required />
+          </label>
+          <label id="login-code-label">
+            Code from your authenticator app
+            <input id="login-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" />
+          </label>
+          <div id="enroll" class="enroll" hidden>
+            <p>
+              <strong>First login:</strong> scan this with an authenticator app (1Password, Google Authenticator,
+              Authy…), then type the 6-digit code it shows.
+            </p>
+            <div id="enroll-qr"></div>
+            <p class="small">Or enter this key by hand: <code id="enroll-secret"></code></p>
+          </div>
+          <button type="submit" class="primary">Log in</button>
+          <p id="login-error" class="warn" hidden></p>
+        </form>
+        <p class="help">
+          The token is <code>ADMIN_TOKEN</code> in the server's <code>.env</code>. Lost your authenticator? Restart
+          the server once with <code>ADMIN_TOTP_RESET=1</code> and log in again to set up a new one.
+        </p>
+      </section>
+
+      <div id="panels" hidden>
+        <section class="card">
+          <h2>Events</h2>
+          <div class="row">
+            <input id="search" type="search" placeholder="Search name, email or id" class="grow" />
+            <button type="button" id="refresh">Refresh</button>
+          </div>
+          <p id="summary" class="help"></p>
+          <ul id="events" class="event-list"></ul>
+        </section>
+
+        <section class="card">
+          <h2>Give an event away</h2>
+          <p class="help">Creates a paid event for free (a comp): gallery, long retention, several booths.</p>
+          <form id="comp-form" class="stack">
+            <label>Event name <input id="comp-name" required maxlength="120" /></label>
+            <label>Host email <input id="comp-email" type="email" /></label>
+            <label>Date <input id="comp-date" type="date" /></label>
+            <label class="checkbox"><input id="comp-send" type="checkbox" checked /> Email the links to the host</label>
+            <button type="submit" class="primary">Create event</button>
+          </form>
+        </section>
+
+        <section class="card">
+          <h2>Payments</h2>
+          <ul id="payments" class="summary"></ul>
+        </section>
+      </div>
+
+      <div id="qr-box" class="event-qr" hidden></div>
+    </main>
+    <p id="save-status" class="save-toast" role="status" hidden></p>
+    <script type="module" src="/src/admin.ts"></script>
+  </body>
+</html>

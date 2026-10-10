@@ -1,85 +1,199 @@
 // Server-side events: a named booth setup (config + template images) that
-// any device can load by scanning its setup QR, plus a private gallery of the
+// any device can load with its setup link, plus a private gallery of the
 // photos shared at that event and the booths' summed counters.
 //
-// Three secrets per event:
-//   ADMIN_TOKEN (env)   create / list / update / delete events
-//   setupKey            load the setup, upload photos, push stats (booths)
-//   galleryKey          view the gallery and download the ZIP (the host)
+// Two secrets per event, handed out as links (see mail.ts / admin):
+//   setupKey    load and save the setup, upload photos, push stats (booths)
+//   galleryKey  view the gallery and download the ZIP (the host)
+// The owner manages all events in /admin (admin.ts).
 //
-// Stored as EVENTS_DIR/<id>.json (default: next to SHARE_DIR, in ./events).
+// An event is 'pending' until it's paid (billing.ts); pending events don't
+// accept photos and have no gallery yet.
 
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
-import path from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { db } from './db.ts';
 import { escapeHtml, HttpError, page, type Req, type Res, readJson, sendHtml, sendJson } from './http.ts';
-import { deletePhoto, jpgPath, listPhotos, SHARE_DIR, TTL_DAYS } from './photos.ts';
+import { countPhotos, deletePhoto, jpgPath, listPhotos, PAID_RETENTION_DAYS, TTL_DAYS } from './photos.ts';
 import { crc32 } from './zip.ts';
 
-const EVENTS_DIR = path.resolve(process.env.EVENTS_DIR || path.join(SHARE_DIR, '..', 'events'));
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const MAX_EVENT_BYTES = 10 * 1024 * 1024; // config + template images as data URLs
 const EVENT_ID = /^[\w-]{6,32}$/;
 
-const newKey = (bytes: number) => randomBytes(bytes).toString('base64url');
-const eventFile = (id: string) => path.join(EVENTS_DIR, `${id}.json`);
+export const newKey = (bytes: number) => randomBytes(bytes).toString('base64url');
 
 // Stats as a booth reports them (see src/stats.ts); only numbers are summed.
+const STAT_FIELDS = ['sessions', 'prints', 'stickers', 'shares', 'failedPrints', 'printedMm'] as const;
 type DeviceStats = Partial<Record<(typeof STAT_FIELDS)[number], number>> & { byHour?: Record<string, number> };
+export type Totals = Record<(typeof STAT_FIELDS)[number], number> & { byHour: Record<string, number>; booths: number };
 
 export interface EventImages {
   header: string | null;
   footer: string | null;
 }
 
+export type EventStatus = 'pending' | 'active';
+export type EventSource = 'admin' | 'stripe' | 'apple' | 'comp' | 'legacy';
+
 export interface StoredEvent {
   id: string;
   name: string;
+  email: string | null;
+  eventDate: string | null;
+  status: EventStatus;
+  paid: boolean;
+  retentionDays: number | null;
+  source: EventSource;
+  setupKey: string;
+  galleryKey: string;
   config: Record<string, unknown>;
   images: EventImages;
   created: string;
   updated: string;
-  setupKey: string;
-  galleryKey: string;
-  stats: Record<string, DeviceStats>;
 }
 
-function safeEqual(a: unknown, b: unknown): boolean {
-  const x = Buffer.from(String(a));
-  const y = Buffer.from(String(b));
+interface EventRow {
+  id: string;
+  name: string;
+  email: string | null;
+  event_date: string | null;
+  status: EventStatus;
+  paid: number;
+  retention_days: number | null;
+  source: EventSource;
+  setup_key: string;
+  gallery_key: string;
+  config: string;
+  images: string;
+  created: string;
+  updated: string;
+}
+
+const fromRow = (r: EventRow): StoredEvent => ({
+  id: r.id,
+  name: r.name,
+  email: r.email,
+  eventDate: r.event_date,
+  status: r.status,
+  paid: r.paid === 1,
+  retentionDays: r.retention_days,
+  source: r.source,
+  setupKey: r.setup_key,
+  galleryKey: r.gallery_key,
+  config: JSON.parse(r.config || '{}'),
+  images: { header: null, footer: null, ...JSON.parse(r.images || '{}') },
+  created: r.created,
+  updated: r.updated,
+});
+
+export function safeEqual(a: unknown, b: unknown): boolean {
+  const x = Buffer.from(String(a ?? ''));
+  const y = Buffer.from(String(b ?? ''));
   return x.length === y.length && x.length > 0 && timingSafeEqual(x, y);
 }
 
-function isAdmin(req: Req): boolean {
-  const m = String(req.headers.authorization || '').match(/^Bearer (.+)$/);
-  return !!ADMIN_TOKEN && !!m && safeEqual(m[1], ADMIN_TOKEN);
-}
+// ---------- store ----------
 
-async function readEvent(id: string): Promise<StoredEvent | null> {
+export function getEvent(id: string): StoredEvent | null {
   if (!EVENT_ID.test(id)) return null;
-  try {
-    return JSON.parse(await readFile(eventFile(id), 'utf8'));
-  } catch {
-    return null;
-  }
+  const row = db.prepare('SELECT * FROM events WHERE id = ?').get(id) as EventRow | undefined;
+  return row ? fromRow(row) : null;
 }
 
-async function writeEvent(ev: StoredEvent): Promise<void> {
-  await mkdir(EVENTS_DIR, { recursive: true });
-  await writeFile(eventFile(ev.id), JSON.stringify(ev));
+export interface NewEvent {
+  name: string;
+  email?: string | null;
+  eventDate?: string | null;
+  status?: EventStatus;
+  paid?: boolean;
+  source: EventSource;
+  config?: Record<string, unknown>;
+  images?: EventImages;
 }
 
-// Used by the upload route: is this a real event with this setup key?
+export function createEvent(input: NewEvent): StoredEvent {
+  const now = new Date().toISOString();
+  const id = newKey(9);
+  db.prepare(
+    `INSERT INTO events (id, name, email, event_date, status, paid, source, setup_key, gallery_key, config, images, created, updated)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    id,
+    input.name.slice(0, 120),
+    input.email ?? null,
+    input.eventDate ?? null,
+    input.status ?? 'active',
+    input.paid ? 1 : 0,
+    input.source,
+    newKey(16),
+    newKey(16),
+    JSON.stringify(input.config ?? { eventName: input.name }),
+    JSON.stringify(input.images ?? { header: null, footer: null }),
+    now,
+    now
+  );
+  return getEvent(id) as StoredEvent;
+}
+
+export function updateEvent(
+  id: string,
+  fields: Partial<
+    Pick<StoredEvent, 'name' | 'email' | 'eventDate' | 'status' | 'paid' | 'retentionDays' | 'config' | 'images'>
+  >
+) {
+  const cols: Record<string, unknown> = {
+    name: fields.name,
+    email: fields.email,
+    event_date: fields.eventDate,
+    status: fields.status,
+    paid: fields.paid === undefined ? undefined : fields.paid ? 1 : 0,
+    retention_days: fields.retentionDays,
+    config: fields.config === undefined ? undefined : JSON.stringify(fields.config),
+    images: fields.images === undefined ? undefined : JSON.stringify(fields.images),
+  };
+  const set = Object.entries(cols).filter(([, v]) => v !== undefined);
+  if (!set.length) return;
+  db.prepare(`UPDATE events SET ${set.map(([k]) => `${k} = ?`).join(', ')}, updated = ? WHERE id = ?`).run(
+    ...(set.map(([, v]) => v) as (string | number | null)[]),
+    new Date().toISOString(),
+    id
+  );
+}
+
+export async function deleteEvent(id: string): Promise<void> {
+  for (const photo of await listPhotos({ event: id })) await deletePhoto(photo.id);
+  db.prepare('DELETE FROM events WHERE id = ?').run(id);
+}
+
+export interface EventSummary extends StoredEvent {
+  photos: number;
+  stats: Totals;
+}
+
+export function listEvents({ q = '', limit = 200 }: { q?: string; limit?: number } = {}): EventSummary[] {
+  const like = `%${q.trim()}%`;
+  const rows = db
+    .prepare('SELECT * FROM events WHERE name LIKE ? OR email LIKE ? OR id = ? ORDER BY created DESC LIMIT ?')
+    .all(like, like, q.trim(), limit) as unknown as EventRow[];
+  return rows.map((r) => {
+    const ev = fromRow(r);
+    return { ...ev, photos: countPhotos(ev.id), stats: eventStats(ev.id) };
+  });
+}
+
+// Used by the upload route: is this an active event with this setup key?
 export async function verifyEventKey(id: unknown, key: unknown): Promise<StoredEvent | null> {
-  const ev = await readEvent(String(id || ''));
-  return ev && safeEqual(key, ev.setupKey) ? ev : null;
+  const ev = getEvent(String(id || ''));
+  return ev && ev.status === 'active' && safeEqual(key, ev.setupKey) ? ev : null;
 }
 
-const STAT_FIELDS = ['sessions', 'prints', 'stickers', 'shares', 'failedPrints', 'printedMm'] as const;
+export function retentionOf(ev: Pick<StoredEvent, 'paid' | 'retentionDays'>): number {
+  return ev.paid ? (ev.retentionDays ?? PAID_RETENTION_DAYS) : TTL_DAYS;
+}
 
-type Totals = Record<(typeof STAT_FIELDS)[number], number> & { byHour: Record<string, number>; booths: number };
+// ---------- stats ----------
 
-function sumStats(byDevice: Record<string, DeviceStats> = {}): Totals {
+function sumStats(byDevice: DeviceStats[]): Totals {
   const total: Totals = {
     sessions: 0,
     prints: 0,
@@ -88,14 +202,18 @@ function sumStats(byDevice: Record<string, DeviceStats> = {}): Totals {
     failedPrints: 0,
     printedMm: 0,
     byHour: {},
-    booths: 0,
+    booths: byDevice.length,
   };
-  for (const s of Object.values(byDevice)) {
+  for (const s of byDevice) {
     for (const f of STAT_FIELDS) total[f] += Number(s?.[f]) || 0;
     for (const [h, n] of Object.entries(s?.byHour ?? {})) total.byHour[h] = (total.byHour[h] ?? 0) + (Number(n) || 0);
   }
-  total.booths = Object.keys(byDevice).length;
   return total;
+}
+
+export function eventStats(id: string): Totals {
+  const rows = db.prepare('SELECT stats FROM stats WHERE event_id = ?').all(id) as { stats: string }[];
+  return sumStats(rows.map((r) => JSON.parse(r.stats)));
 }
 
 interface SetupBody {
@@ -104,12 +222,11 @@ interface SetupBody {
   images?: { header?: string | null; footer?: string | null };
 }
 
-function setupOf(body: SetupBody | null): Pick<StoredEvent, 'name' | 'config' | 'images'> {
+function setupOf(body: SetupBody | null): { config: Record<string, unknown>; images: EventImages } {
   if (!body || typeof body.config !== 'object' || body.config === null) {
-    throw new HttpError(400, 'Expected { name, config, images }.');
+    throw new HttpError(400, 'Expected { config, images }.');
   }
   return {
-    name: String(body.name || 'Untitled event').slice(0, 120),
     config: body.config as Record<string, unknown>,
     images: { header: body.images?.header ?? null, footer: body.images?.footer ?? null },
   };
@@ -117,19 +234,19 @@ function setupOf(body: SetupBody | null): Pick<StoredEvent, 'name' | 'config' | 
 
 // ---------- routes ----------
 
-const API = /^\/api\/events(?:\/([\w-]+))?(\/stats)?$/;
+const API = /^\/api\/events\/([\w-]+)(\/stats)?$/;
 const GALLERY = /^\/g\/([\w-]+)\/([\w-]+)(\/photos\.zip)?$/;
 
 // Returns true when it handled the request.
 export async function eventRoutes(req: Req, res: Res, url: URL): Promise<boolean> {
   const api = url.pathname.match(API);
   if (api) {
-    await apiRoute(req, res, api[1], !!api[2]);
+    await boothRoute(req, res, api[1], !!api[2]);
     return true;
   }
   const gallery = req.method === 'GET' && url.pathname.match(GALLERY);
   if (gallery) {
-    const ev = await readEvent(gallery[1]);
+    const ev = getEvent(gallery[1]);
     if (!ev || !safeEqual(gallery[2], ev.galleryKey)) {
       sendHtml(
         res,
@@ -137,6 +254,15 @@ export async function eventRoutes(req: Req, res: Res, url: URL): Promise<boolean
         page(
           'Not found',
           '<h1>Gallery not found</h1><p class="muted">The link may be wrong or the event was deleted.</p>'
+        )
+      );
+    } else if (ev.status !== 'active') {
+      sendHtml(
+        res,
+        402,
+        page(
+          ev.name,
+          `<h1>${escapeHtml(ev.name)}</h1><p class="muted">This event isn't active yet: the payment hasn't come through.</p>`
         )
       );
     } else if (gallery[3]) {
@@ -149,90 +275,40 @@ export async function eventRoutes(req: Req, res: Res, url: URL): Promise<boolean
   return false;
 }
 
-async function apiRoute(req: Req, res: Res, id: string | undefined, isStats: boolean): Promise<void> {
-  const { method } = req;
-
-  if (!id) {
-    if (!ADMIN_TOKEN) return sendJson(res, 503, { error: 'Events are off: the server has no ADMIN_TOKEN.' });
-    if (!isAdmin(req)) return sendJson(res, 401, { error: 'Wrong admin token.' });
-    if (method === 'GET') return sendJson(res, 200, { events: await listEvents() });
-    if (method === 'POST') {
-      const setup = setupOf(await readJson<SetupBody>(req, MAX_EVENT_BYTES));
-      const now = new Date().toISOString();
-      const ev = {
-        id: newKey(9),
-        ...setup,
-        created: now,
-        updated: now,
-        setupKey: newKey(16),
-        galleryKey: newKey(16),
-        stats: {},
-      };
-      await writeEvent(ev);
-      return sendJson(res, 201, { id: ev.id, name: ev.name, setupKey: ev.setupKey, galleryKey: ev.galleryKey });
-    }
-    return sendJson(res, 405, { error: 'Method not allowed.' });
-  }
-
-  const ev = await readEvent(id);
+// The routes a booth uses, all with the event's setup key.
+async function boothRoute(req: Req, res: Res, id: string, isStats: boolean): Promise<void> {
+  const ev = getEvent(id);
   if (!ev) return sendJson(res, 404, { error: 'No such event.' });
-  const booth = safeEqual(req.headers['x-event-key'], ev.setupKey);
+  if (!safeEqual(req.headers['x-event-key'], ev.setupKey)) return sendJson(res, 401, { error: 'Wrong event key.' });
+  if (ev.status !== 'active') return sendJson(res, 402, { error: "This event isn't paid yet." });
 
   if (isStats) {
-    if (method !== 'POST') return sendJson(res, 405, { error: 'Method not allowed.' });
-    if (!booth) return sendJson(res, 401, { error: 'Wrong event key.' });
+    if (req.method !== 'POST') return sendJson(res, 405, { error: 'Method not allowed.' });
     const { device, stats } = await readJson<{ device?: unknown; stats?: DeviceStats }>(req, 64 * 1024);
     if (typeof device !== 'string' || !/^[\w-]{1,64}$/.test(device))
       return sendJson(res, 400, { error: 'Bad device id.' });
-    ev.stats = { ...ev.stats, [device]: stats ?? {} };
-    await writeEvent(ev);
+    db.prepare(
+      `INSERT INTO stats (event_id, device, stats, updated) VALUES (?, ?, ?, ?)
+       ON CONFLICT(event_id, device) DO UPDATE SET stats = excluded.stats, updated = excluded.updated`
+    ).run(ev.id, device, JSON.stringify(stats ?? {}), new Date().toISOString());
     return sendJson(res, 200, { ok: true });
   }
-
-  if (method === 'GET') {
-    if (!booth && !isAdmin(req)) return sendJson(res, 401, { error: 'Wrong event key.' });
+  if (req.method === 'GET') {
     return sendJson(res, 200, { id: ev.id, name: ev.name, config: ev.config, images: ev.images });
   }
-  if (!isAdmin(req)) return sendJson(res, 401, { error: 'Wrong admin token.' });
-  if (method === 'PUT') {
-    Object.assign(ev, setupOf(await readJson<SetupBody>(req, MAX_EVENT_BYTES)), { updated: new Date().toISOString() });
-    await writeEvent(ev);
-    return sendJson(res, 200, { ok: true });
-  }
-  if (method === 'DELETE') {
-    for (const photo of await listPhotos({ event: ev.id })) await deletePhoto(photo.id);
-    await rm(eventFile(ev.id), { force: true });
+  // A booth saves its setup to the event, so the other booths can load it.
+  if (req.method === 'PUT') {
+    updateEvent(ev.id, setupOf(await readJson<SetupBody>(req, MAX_EVENT_BYTES)));
     return sendJson(res, 200, { ok: true });
   }
   return sendJson(res, 405, { error: 'Method not allowed.' });
-}
-
-async function listEvents() {
-  const names = (await readdir(EVENTS_DIR).catch(() => [])).filter((n) => n.endsWith('.json'));
-  const photos = await listPhotos();
-  const events = [];
-  for (const name of names) {
-    const ev = await readEvent(name.slice(0, -5));
-    if (!ev) continue;
-    events.push({
-      id: ev.id,
-      name: ev.name,
-      created: ev.created,
-      updated: ev.updated,
-      setupKey: ev.setupKey,
-      galleryKey: ev.galleryKey,
-      photos: photos.filter((p) => p.event === ev.id).length,
-      stats: sumStats(ev.stats),
-    });
-  }
-  return events.sort((a, b) => b.created.localeCompare(a.created));
 }
 
 // ---------- gallery ----------
 
 async function sendGallery(res: Res, ev: StoredEvent, base: string): Promise<void> {
   const photos = await listPhotos({ event: ev.id });
-  const s = sumStats(ev.stats);
+  const s = eventStats(ev.id);
   const busiest = Object.entries(s.byHour).sort((a, b) => b[1] - a[1])[0];
   const statLine = [
     `${photos.length} shared photo${photos.length === 1 ? '' : 's'}`,
@@ -242,7 +318,8 @@ async function sendGallery(res: Res, ev: StoredEvent, base: string): Promise<voi
   ]
     .filter(Boolean)
     .join(' · ');
-  const expiry = TTL_DAYS > 0 ? `Photos are deleted automatically ${TTL_DAYS} days after they were taken.` : '';
+  const days = retentionOf(ev);
+  const expiry = days > 0 ? `Photos are deleted automatically ${days} days after they were taken.` : '';
   const grid = photos
     .map(
       (p) =>

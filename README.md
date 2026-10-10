@@ -60,9 +60,11 @@ iPad / iPhone. “Start without printer” works on anything with a camera.
   to download as a ZIP the next morning.
 - **Saved setups**: save, export and import whole setups (settings and
   template images) as a file.
-- **Server events**: publish a setup to your server, scan its QR on any other
-  device to get the same booth, and share a private gallery (with ZIP
-  download and counters) with the host afterwards.
+- **Event galleries** (paid): a host signs up on `/event.html` and pays once
+  with Stripe — or, in the iOS app, with an in-app purchase right in
+  settings — and gets a setup link for every booth and a private gallery
+  with a ZIP of all the event's photos, kept for a year. The owner manages
+  events in `/admin` (admin token + authenticator code).
 
 - **Guest-proof kiosk**: once started, the booth stays on the camera — a
   reload or app restart comes straight back and reconnects to the same
@@ -144,15 +146,78 @@ over SSH and runs Compose there.
 | `EVENTS_DIR`     | `./events`    | Where server events are stored                                       |
 | `SHARE_TTL_DAYS` | `30`          | Shared photos are deleted after this many days (`0` = never)          |
 | `SHARE_MAX_MB`   | `5000`        | Refuse uploads once the photo folder is this big                     |
-| `ADMIN_TOKEN`    | —             | Enables server events; enter it on the settings page to manage them  |
+| `ADMIN_TOKEN`    | —             | Enables `/admin` (log in with it + an authenticator code)            |
+| `ADMIN_TOTP_RESET` | —           | `1` forgets the enrolled authenticator (next login sets up a new one) |
+| `PUBLIC_URL`     | `BASE_URL`    | Origin used in emailed setup / gallery links                         |
+| `PAID_RETENTION_DAYS` | `365`    | How long a paid event keeps its photos                               |
+| `EVENT_PRICE_CENTS` | `1900`     | Web price of an event gallery, in cents                              |
+| `EVENT_CURRENCY` | `eur`         | Currency of that price                                               |
+| `APPLE_BUNDLE_ID` | `co.smallvictories.photoboot` | iOS app whose in-app purchases are accepted               |
+| `APPLE_PRODUCT_ID` | `co.smallvictories.photoboot.eventgallery` | The consumable that buys an event gallery |
+| `APPLE_ALLOW_SANDBOX` | `1`      | Accept Sandbox purchases (TestFlight, sandbox testers); `0` = Production only |
+| `BREVO_API_KEY`  | —             | Sends the event emails through Brevo (without it they're logged)     |
+| `MAIL_FROM`      | `booth@small-victories.co` | Sender address (a verified Brevo sender)                |
+| `DB_PATH`        | `EVENTS_DIR/photoboot.db` | SQLite database (events, photos, payments, sessions)     |
 | `UPLOAD_TOKEN`   | —             | If set, uploads need this token (set it in settings) or an event key |
+| `STRIPE_SECRET_KEY` | —          | Stripe secret key (`sk_live_…` / `sk_test_…`); without it there's no checkout |
+| `STRIPE_WEBHOOK_SECRET` | —      | Signing secret (`whsec_…`) of the Stripe webhook endpoint            |
+| `STRIPE_AUTOMATIC_TAX` | —       | `1` lets Stripe Tax add VAT (the price is then VAT-inclusive)        |
 
-Put the secrets in a `.env` next to `docker-compose.yml`.
+All settings live in a `.env` next to `docker-compose.yml`: copy
+[`.env.example`](.env.example), which lists every variable with its default, and
+fill in what you need (empty = default). Compose loads it into the container,
+and `npm start` / `npm run dev` read it too.
+
+### Payments (Stripe)
+
+Hosts pay for an event gallery on `/event.html` through Stripe Checkout;
+the server talks to Stripe's API directly (no SDK).
+
+1. In the Stripe dashboard (Developers → API keys) copy the secret key into
+   `STRIPE_SECRET_KEY`.
+2. Developers → Webhooks → Add endpoint: `https://<host>/api/stripe/webhook`
+   with the events `checkout.session.completed`,
+   `checkout.session.async_payment_succeeded` and `charge.refunded`. Copy
+   its signing secret into `STRIPE_WEBHOOK_SECRET`.
+3. Optional: turn on Stripe Tax (with your registrations) and set
+   `STRIPE_AUTOMATIC_TAX=1`. Checkout always offers an invoice.
+
+Test mode works the same: use the `sk_test_…` key and a test-mode webhook
+(or `stripe listen --forward-to localhost:8080/api/stripe/webhook`). A full
+refund in Stripe ends the event's paid perks; its photos stay.
+
+### In-app purchase (iOS)
+
+Inside the iOS app, an event gallery is sold through Apple in-app purchase
+(App Store guideline 3.1.1); the web keeps its own checkout. The app asks the
+server for a pending event, buys the consumable with that event's
+`appAccountToken`, and sends the signed StoreKit 2 transaction to
+`/api/apple/redeem`. The server verifies Apple's signature and certificate
+chain itself (pinned Apple Root CA - G3, `server/apple-root-ca-g3.pem`) and
+activates the event; the host gets the usual email and the booth sets itself
+up right away. To set it up:
+
+1. **App Store Connect → the app → In-App Purchases**: create a
+   **Consumable** with product id `co.smallvictories.photoboot.eventgallery`
+   (or set `APPLE_PRODUCT_ID` on the server and `VITE_APPLE_PRODUCT_ID` when
+   building the app), a price, a display name and description, and a review
+   screenshot of the settings card. Submit it together with the next app
+   version.
+2. **App Information → App Store Server Notifications**: Version 2, with
+   `https://<host>/api/apple/notifications` as both the Production and the
+   Sandbox URL. Refunds then end the paid perks, and a purchase whose app
+   never got back to the server still activates its event.
+3. **Agreements, Tax, and Banking**: the Paid Apps agreement must be active.
+   Join the **App Store Small Business Program** (15% commission instead of
+   30% under $1M a year).
+4. Test with TestFlight or a sandbox account: those purchases are Sandbox,
+   accepted unless `APPLE_ALLOW_SANDBOX=0`.
 
 ## Privacy
 
-Only photos a guest chooses to share leave the booth. Each shared photo gets
-an unguessable link and a page where the guest can save it or delete it, and
+Without a server event, only photos a guest chooses to share leave the
+booth; a booth in an event uploads every photo to that event's gallery. Each
+uploaded photo gets an unguessable link and a page where the guest can save it or delete it, and
 it's deleted automatically after `SHARE_TTL_DAYS`. Images are served with
 `Cache-Control: private`, so a CDN doesn't keep copies after a delete.
 Uploads are rate-limited per IP unless they come from a booth with a valid

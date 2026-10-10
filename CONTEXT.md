@@ -114,7 +114,8 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
      Printing shows a full-screen overlay; copies, a per-photo limit, and
      auto-print are settings. Back to the camera `doneTimeoutSec` after a
      print/share, `reviewTimeoutSec` when idle. Leaving the review archives
-     the colour keepsake locally.
+     the colour keepsake locally and, in a server event, uploads it to the
+     event (unless it was already shared with that twist).
   - Shared/archived photo = `renderColour`: the sticker layout in colour
     (header, shots, gaps, footer, 24-dot side margins), with the twist.
   - Writes a health heartbeat (`photoboot:status`) and counters (stats.ts).
@@ -143,6 +144,14 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
 - `src/archive.ts` — local colour copies in IndexedDB (`photo:<event>:<iso>`)
   and ZIP export (uses `server/zip.ts`).
 - `src/remote.ts` — client for the server event API.
+- `src/purchase.ts` — iOS app only: Apple in-app purchase of an event
+  gallery (`@capgo/native-purchases`, StoreKit 2): `/api/apple/start` →
+  purchase with the event's appAccountToken → `/api/apple/redeem` → finish
+  the transaction only after the server confirmed. Unconfirmed ones are
+  kept (localStorage `photoboot:apple-unredeemed` + StoreKit's unfinished
+  list) and redeemed on settings load / "Restore unfinished purchase".
+  `platform.ts` starts `watchTransactions()` (late deliveries, Ask to Buy).
+  Settings' "Online gallery" card shows the buy form when `isIosApp`.
 - `src/photo.ts` — looks (`PHOTO_STYLES`, `PHOTO_TWISTS`), `photoToRaster`,
   `renderSticker`, `renderColour`, `printPhoto` (copies + tear margin).
 - `src/strip.ts` — `composeStrip` (1-bit sticker) and `composeColour`.
@@ -159,14 +168,46 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
   tone options), `rasterToCanvas`, calibration generators.
 - `src/storage.ts` — tiny IndexedDB key/value store (template images,
   saved setups, local photos). Closes on `pagehide`.
-- `server/share.ts` — the one middleware (Vite dev + prod): `POST
-  /api/share`, `/s/{uuid}` share page (save / delete), `/share/{uuid}.jpg`,
-  `DELETE /api/share/{uuid}`, rate limit, then event routes.
-- `server/photos.ts` — photo files + `{id}.json` sidecars (event, created),
-  expiry cleanup (hourly), disk quota.
-- `server/events.ts` — events: admin CRUD (`ADMIN_TOKEN`), setup load and
-  stats push (setup key), gallery `/g/{id}/{galleryKey}` + streamed ZIP.
-- `server/http.ts` — helpers + the HTML shell of the public pages.
+- `server/share.ts` — the one middleware (Vite dev + prod): CORS for the
+  app, `POST /api/share`, `/s/{uuid}` share page (save / delete),
+  `/share/{uuid}.jpg`, `DELETE /api/share/{uuid}`, rate limit, then the
+  admin, event and Stripe routes.
+- `server/db.ts` — SQLite (`node:sqlite`): events, photos, stats, payments,
+  admin sessions, settings (TOTP secret). Imports the pre-database JSON
+  events and photo sidecars once (`PRAGMA user_version` 1), then runs
+  `MIGRATIONS` in order (2: `apple_tokens`, appAccountToken → event).
+- `server/photos.ts` — photo files + rows; expiry per photo: free
+  `SHARE_TTL_DAYS`, paid events `retention_days` / `PAID_RETENTION_DAYS`;
+  disk quota.
+- `server/events.ts` — event store + the booth routes (setup key: load /
+  save setup, stats) and the host gallery + streamed ZIP (gallery key).
+  Pending (unpaid) events refuse photos and show no gallery.
+- `server/billing.ts` — the paid-event lifecycle every payment path uses:
+  `createPendingEvent`, `activateEvent` (idempotent per payment ref,
+  emails the links), `refundPayment`, `compEvent`, `sendEventEmail`.
+- `server/stripe.ts` — Stripe over fetch (no SDK): `POST /api/checkout`
+  (pending event + Checkout Session → `{url}`), `GET /api/checkout/price`,
+  `GET /api/checkout/status?session=cs_…` (asks Stripe; activates and
+  returns the links once paid), `POST /api/stripe/webhook` (raw body,
+  `verifyStripeSignature`: HMAC of `t.body`, 5 min tolerance). Payment
+  ref = the PaymentIntent id, so `charge.refunded` (which only carries
+  `payment_intent`) maps straight to `refundPayment`; only full refunds
+  un-pay. Page: `event.html` + `src/event.ts` (sign-up, success, cancel).
+- `server/apple.ts` — `/api/apple/start|redeem|notifications`. Verifies
+  StoreKit 2 JWS with node:crypto only: x5c chain (validity, issuer
+  signatures, root = `apple-root-ca-g3.pem` by fingerprint256, Apple's
+  marker OIDs), ES256 (ieee-p1363); then bundle / product / Consumable /
+  environment / not revoked / appAccountToken. Payment ref = transactionId.
+  Notifications V2: REFUND / REVOKE → refundPayment, ONE_TIME_CHARGE →
+  activate, everything else 200. `configureApple()` injects a test root
+  (fixtures + openssl script in `test/fixtures/apple`).
+- `server/admin.ts` — `/api/admin/*`: ADMIN_TOKEN + TOTP login (first
+  login enrolls), cookie sessions, list / edit / comp / delete events,
+  payments. Page: `admin.html` + `src/admin.ts`.
+- `server/mail.ts` — Brevo HTTP API; logs to `outbox` without a key.
+- `server/totp.ts` — RFC 6238 codes, base32.
+- `server/http.ts` — helpers (incl. the per-IP `rateLimiter`) + the HTML
+  shell of the public pages.
 - `server/zip.ts` — stored-ZIP writer + CRC32, shared with the browser.
 - `server/index.ts` — production server (node builtins only): `dist/` +
   routes; `createApp()` is what the tests start.
@@ -190,8 +231,14 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
 
 ## Config (env)
 
-See the table in README.md: `BASE_URL`, `PORT`, `SHARE_DIR`, `EVENTS_DIR`,
-`SHARE_TTL_DAYS`, `SHARE_MAX_MB`, `ADMIN_TOKEN`, `UPLOAD_TOKEN`. On the
+Every variable is listed in `.env.example` (and the README table); copy it to
+`.env`. Empty values mean the default (`server/env.ts`). Compose loads `.env`
+via `env_file`; `npm start` / the Vite dev server read it too
+(`server/load-env.ts`). Variables: `BASE_URL`, `PORT`, `SHARE_DIR`, `EVENTS_DIR`,
+`SHARE_TTL_DAYS`, `SHARE_MAX_MB`, `ADMIN_TOKEN`, `UPLOAD_TOKEN`, the
+event price / mail / Stripe keys (`STRIPE_SECRET_KEY`,
+`STRIPE_WEBHOOK_SECRET`, `STRIPE_AUTOMATIC_TAX`) and the in-app purchase
+settings (`APPLE_BUNDLE_ID`, `APPLE_PRODUCT_ID`, `APPLE_ALLOW_SANDBOX`). On the
 production host the secrets are in `~/photoboot/.env`.
 
 ## Open questions / next things to do

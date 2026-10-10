@@ -5,7 +5,8 @@
 //   GET    /s/{uuid}           photo page: view, download, delete
 //   GET    /share/{uuid}.jpg   the photo itself
 //   DELETE /api/share/{uuid}   delete (the unguessable id is the capability)
-//   …and /api/events, /g/… from events.js.
+//   …and /api/admin/… (admin.ts), /api/events, /g/… (events.ts),
+//   /api/checkout, /api/stripe/webhook (stripe.ts), /api/apple/… (apple.ts).
 //
 // Uploads are limited per IP unless they carry a valid event key
 // (X-Event-Id + X-Event-Key), refused when the disk quota is hit, and, if
@@ -16,6 +17,9 @@
 import { randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
+import { adminRoutes } from './admin.ts';
+import { appleRoutes } from './apple.ts';
+import { env } from './env.ts';
 import { eventRoutes, verifyEventKey } from './events.ts';
 import {
   baseUrl,
@@ -26,22 +30,23 @@ import {
   page,
   type Req,
   type Res,
+  rateLimiter,
   readBody,
   sendHtml,
   sendJson,
 } from './http.ts';
-import { deletePhoto, expiresAt, hasRoomFor, ID, jpgPath, photoMeta, savePhoto, TTL_DAYS } from './photos.ts';
+import { deletePhoto, expiresAt, hasRoomFor, ID, jpgPath, photoMeta, savePhoto } from './photos.ts';
+import { stripeRoutes } from './stripe.ts';
 
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const UPLOAD_TOKEN = process.env.UPLOAD_TOKEN || '';
 const RATE_WINDOW_MS = 60 * 60 * 1000;
 const RATE_MAX = 120; // uploads per IP per hour without an event key
-
-const recent = new Map<string, number[]>(); // ip → timestamps
+const rateLimited = rateLimiter(RATE_MAX, RATE_WINDOW_MS);
 
 // The iOS / Android app serves its pages from these origins and calls the
 // API cross-origin. Every API route still needs its own key or token.
-const CORS_ORIGINS = (process.env.CORS_ORIGINS ?? 'capacitor://localhost,https://localhost')
+const CORS_ORIGINS = env('CORS_ORIGINS', 'capacitor://localhost,https://localhost')
   .split(',')
   .map((o) => o.trim())
   .filter(Boolean);
@@ -49,7 +54,9 @@ const CORS_ORIGINS = (process.env.CORS_ORIGINS ?? 'capacitor://localhost,https:/
 // Adds CORS headers for the app; returns true when it answered a preflight.
 function cors(req: Req, res: Res, pathname: string): boolean {
   const origin = req.headers.origin;
-  if (!origin || !CORS_ORIGINS.includes(origin) || !pathname.startsWith('/api/')) return false;
+  // Never for /api/admin: that's the owner's browser only.
+  if (!origin || !CORS_ORIGINS.includes(origin) || !pathname.startsWith('/api/') || pathname.startsWith('/api/admin/'))
+    return false;
   res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Vary', 'Origin');
   if (req.method !== 'OPTIONS') return false;
@@ -60,15 +67,6 @@ function cors(req: Req, res: Res, pathname: string): boolean {
   });
   res.end();
   return true;
-}
-
-function rateLimited(ip: string): boolean {
-  const now = Date.now();
-  const hits = (recent.get(ip) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
-  hits.push(now);
-  recent.set(ip, hits);
-  if (recent.size > 10_000) recent.clear(); // crude bound on memory
-  return hits.length > RATE_MAX;
 }
 
 async function upload(req: Req, res: Res): Promise<void> {
@@ -118,9 +116,9 @@ async function sharePage(id: string, res: Res): Promise<void> {
       page('Photo not found', '<h1>This photo is gone</h1><p class="muted">It was deleted, or it expired.</p>')
     );
   }
-  const expires = expiresAt(meta.created);
+  const expires = expiresAt(meta);
   const expiryText = expires
-    ? `This photo is deleted automatically on ${expires.toISOString().slice(0, 10)} (${TTL_DAYS} days after it was taken).`
+    ? `This photo is deleted automatically on ${expires.toISOString().slice(0, 10)} (${meta.retentionDays} days after it was taken).`
     : '';
   sendHtml(
     res,
@@ -171,7 +169,10 @@ async function route(req: Req, res: Res, next: Next): Promise<void> {
     await deletePhoto(id);
     return sendJson(res, 200, { ok: true });
   }
+  if (await adminRoutes(req, res, url)) return;
+  if (await appleRoutes(req, res, url)) return;
   if (await eventRoutes(req, res, url)) return;
+  if (await stripeRoutes(req, res, url)) return;
   next();
 }
 

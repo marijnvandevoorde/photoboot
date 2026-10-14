@@ -20,22 +20,22 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
-    "@capacitor/cli": "^8.5.2",
-    "@types/node": "^26.6.4",
+    "@capacitor/cli": "^8.5.3",
+    "@types/node": "^26.6.5",
     "@types/web-bluetooth": "^0.0.21",
     "@vitejs/plugin-basic-ssl": "^2.3.0",
-    "happy-dom": "^20.14.5",
-    "puppeteer-core": "^25.12.0",
+    "happy-dom": "^20.14.6",
+    "puppeteer-core": "^25.13.0",
     "typescript": "^7.0.2",
-    "vite": "^8.3.2",
+    "vite": "^8.3.4",
     "vitest": "^5.0.3"
   },
   "dependencies": {
     "@capacitor-community/bluetooth-le": "^8.3.0",
     "@capacitor-community/keep-awake": "^8.0.1",
-    "@capacitor/core": "^8.5.2",
-    "@capacitor/ios": "^8.5.2",
-    "@capgo/native-purchases": "^8.8.1",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/ios": "^8.5.3",
+    "@capgo/native-purchases": "^8.9.2",
     "qrcode-generator": "^2.0.4"
   },
   "engines": {

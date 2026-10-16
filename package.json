@@ -16,7 +16,9 @@
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "check": "npm run typecheck && npm run lint && npm test",
     "app:sync": "vite build && cap sync",
-    "app:open": "cap open ios"
+    "app:open": "cap open ios",
+    "deploy": "\"${SV_DEPLOY:-../Oracle/deploy/sv-deploy}\"",
+    "deploy:check": "\"${SV_DEPLOY:-../Oracle/deploy/sv-deploy}\" --check"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",

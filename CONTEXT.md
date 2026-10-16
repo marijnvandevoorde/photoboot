@@ -230,8 +230,8 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
   routes; `createApp()` is what the tests start.
 - `Dockerfile` / `docker-compose.yml` — volumes `/data/shares`, `/data/events`.
 - `run.sh` — self-contained local launcher (portable Node in `.node/`).
-- `deploy.sh` — tar over SSH + `docker compose up -d --build`; keeps the
-  server's `.env`, skips `template-assets/` (local, gitignored).
+- `deploy.env` — config for `npm run deploy` (the Oracle repo's `sv-deploy`:
+  build, push to OCIR, roll the Kubernetes deployment).
 
 ## Adding a new printer type
 

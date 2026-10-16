@@ -135,8 +135,12 @@ docker compose up -d --build
 ```
 
 `docker-compose.yml` is set up for a Traefik reverse proxy; adapt the labels,
-domain and volumes to your host. `./deploy.sh user@host` copies the project
-over SSH and runs Compose there.
+domain and volumes to your host.
+
+Production (boot.small-victories.co) runs on the Kubernetes cluster `sv-oke`.
+`npm run deploy` ships `origin/main` there with the shared `sv-deploy` script from
+the Oracle repo (config in `deploy.env`; `npm run deploy:check` shows what runs;
+`SV_DEPLOY` overrides the script's path, default `../Oracle/deploy/sv-deploy`).
 
 | Variable         | Default       | What it does                                                        |
 | ---------------- | ------------- | ------------------------------------------------------------------- |

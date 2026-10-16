@@ -11,10 +11,10 @@
 // accept photos and have no gallery yet.
 
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import { db } from './db.ts';
+import { db, upsert } from './db.ts';
 import { escapeHtml, HttpError, page, type Req, type Res, readJson, sendHtml, sendJson } from './http.ts';
-import { countPhotos, deletePhoto, jpgPath, listPhotos, PAID_RETENTION_DAYS, TTL_DAYS } from './photos.ts';
+import { countPhotos, deletePhoto, listPhotos, PAID_RETENTION_DAYS, TTL_DAYS } from './photos.ts';
+import { store } from './storage.ts';
 import { crc32 } from './zip.ts';
 
 const MAX_EVENT_BYTES = 10 * 1024 * 1024; // config + template images as data URLs
@@ -75,7 +75,7 @@ const fromRow = (r: EventRow): StoredEvent => ({
   email: r.email,
   eventDate: r.event_date,
   status: r.status,
-  paid: r.paid === 1,
+  paid: Number(r.paid) === 1,
   retentionDays: r.retention_days,
   source: r.source,
   setupKey: r.setup_key,
@@ -94,9 +94,9 @@ export function safeEqual(a: unknown, b: unknown): boolean {
 
 // ---------- store ----------
 
-export function getEvent(id: string): StoredEvent | null {
+export async function getEvent(id: string): Promise<StoredEvent | null> {
   if (!EVENT_ID.test(id)) return null;
-  const row = db.prepare('SELECT * FROM events WHERE id = ?').get(id) as EventRow | undefined;
+  const row = await db.get<EventRow>('SELECT * FROM events WHERE id = ?', id);
   return row ? fromRow(row) : null;
 }
 
@@ -111,13 +111,12 @@ export interface NewEvent {
   images?: EventImages;
 }
 
-export function createEvent(input: NewEvent): StoredEvent {
+export async function createEvent(input: NewEvent): Promise<StoredEvent> {
   const now = new Date().toISOString();
   const id = newKey(9);
-  db.prepare(
+  await db.run(
     `INSERT INTO events (id, name, email, event_date, status, paid, source, setup_key, gallery_key, config, images, created, updated)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id,
     input.name.slice(0, 120),
     input.email ?? null,
@@ -132,10 +131,10 @@ export function createEvent(input: NewEvent): StoredEvent {
     now,
     now
   );
-  return getEvent(id) as StoredEvent;
+  return (await getEvent(id)) as StoredEvent;
 }
 
-export function updateEvent(
+export async function updateEvent(
   id: string,
   fields: Partial<
     Pick<StoredEvent, 'name' | 'email' | 'eventDate' | 'status' | 'paid' | 'retentionDays' | 'config' | 'images'>
@@ -153,7 +152,8 @@ export function updateEvent(
   };
   const set = Object.entries(cols).filter(([, v]) => v !== undefined);
   if (!set.length) return;
-  db.prepare(`UPDATE events SET ${set.map(([k]) => `${k} = ?`).join(', ')}, updated = ? WHERE id = ?`).run(
+  await db.run(
+    `UPDATE events SET ${set.map(([k]) => `${k} = ?`).join(', ')}, updated = ? WHERE id = ?`,
     ...(set.map(([, v]) => v) as (string | number | null)[]),
     new Date().toISOString(),
     id
@@ -162,7 +162,7 @@ export function updateEvent(
 
 export async function deleteEvent(id: string): Promise<void> {
   for (const photo of await listPhotos({ event: id })) await deletePhoto(photo.id);
-  db.prepare('DELETE FROM events WHERE id = ?').run(id);
+  await db.run('DELETE FROM events WHERE id = ?', id);
 }
 
 export interface EventSummary extends StoredEvent {
@@ -170,20 +170,32 @@ export interface EventSummary extends StoredEvent {
   stats: Totals;
 }
 
-export function listEvents({ q = '', limit = 200 }: { q?: string; limit?: number } = {}): EventSummary[] {
+export async function listEvents({
+  q = '',
+  limit = 200,
+}: {
+  q?: string;
+  limit?: number;
+} = {}): Promise<EventSummary[]> {
   const like = `%${q.trim()}%`;
-  const rows = db
-    .prepare('SELECT * FROM events WHERE name LIKE ? OR email LIKE ? OR id = ? ORDER BY created DESC LIMIT ?')
-    .all(like, like, q.trim(), limit) as unknown as EventRow[];
-  return rows.map((r) => {
-    const ev = fromRow(r);
-    return { ...ev, photos: countPhotos(ev.id), stats: eventStats(ev.id) };
-  });
+  const rows = await db.all<EventRow>(
+    'SELECT * FROM events WHERE name LIKE ? OR email LIKE ? OR id = ? ORDER BY created DESC LIMIT ?',
+    like,
+    like,
+    q.trim(),
+    limit
+  );
+  return Promise.all(
+    rows.map(async (r) => {
+      const ev = fromRow(r);
+      return { ...ev, photos: await countPhotos(ev.id), stats: await eventStats(ev.id) };
+    })
+  );
 }
 
 // Used by the upload route: is this an active event with this setup key?
 export async function verifyEventKey(id: unknown, key: unknown): Promise<StoredEvent | null> {
-  const ev = getEvent(String(id || ''));
+  const ev = await getEvent(String(id || ''));
   return ev && ev.status === 'active' && safeEqual(key, ev.setupKey) ? ev : null;
 }
 
@@ -211,8 +223,8 @@ function sumStats(byDevice: DeviceStats[]): Totals {
   return total;
 }
 
-export function eventStats(id: string): Totals {
-  const rows = db.prepare('SELECT stats FROM stats WHERE event_id = ?').all(id) as { stats: string }[];
+export async function eventStats(id: string): Promise<Totals> {
+  const rows = await db.all<{ stats: string }>('SELECT stats FROM stats WHERE event_id = ?', id);
   return sumStats(rows.map((r) => JSON.parse(r.stats)));
 }
 
@@ -246,7 +258,7 @@ export async function eventRoutes(req: Req, res: Res, url: URL): Promise<boolean
   }
   const gallery = req.method === 'GET' && url.pathname.match(GALLERY);
   if (gallery) {
-    const ev = getEvent(gallery[1]);
+    const ev = await getEvent(gallery[1]);
     if (!ev || !safeEqual(gallery[2], ev.galleryKey)) {
       sendHtml(
         res,
@@ -277,7 +289,7 @@ export async function eventRoutes(req: Req, res: Res, url: URL): Promise<boolean
 
 // The routes a booth uses, all with the event's setup key.
 async function boothRoute(req: Req, res: Res, id: string, isStats: boolean): Promise<void> {
-  const ev = getEvent(id);
+  const ev = await getEvent(id);
   if (!ev) return sendJson(res, 404, { error: 'No such event.' });
   if (!safeEqual(req.headers['x-event-key'], ev.setupKey)) return sendJson(res, 401, { error: 'Wrong event key.' });
   if (ev.status !== 'active') return sendJson(res, 402, { error: "This event isn't paid yet." });
@@ -287,10 +299,13 @@ async function boothRoute(req: Req, res: Res, id: string, isStats: boolean): Pro
     const { device, stats } = await readJson<{ device?: unknown; stats?: DeviceStats }>(req, 64 * 1024);
     if (typeof device !== 'string' || !/^[\w-]{1,64}$/.test(device))
       return sendJson(res, 400, { error: 'Bad device id.' });
-    db.prepare(
-      `INSERT INTO stats (event_id, device, stats, updated) VALUES (?, ?, ?, ?)
-       ON CONFLICT(event_id, device) DO UPDATE SET stats = excluded.stats, updated = excluded.updated`
-    ).run(ev.id, device, JSON.stringify(stats ?? {}), new Date().toISOString());
+    await db.run(
+      upsert('stats', ['event_id', 'device', 'stats', 'updated'], ['event_id', 'device']),
+      ev.id,
+      device,
+      JSON.stringify(stats ?? {}),
+      new Date().toISOString()
+    );
     return sendJson(res, 200, { ok: true });
   }
   if (req.method === 'GET') {
@@ -298,7 +313,7 @@ async function boothRoute(req: Req, res: Res, id: string, isStats: boolean): Pro
   }
   // A booth saves its setup to the event, so the other booths can load it.
   if (req.method === 'PUT') {
-    updateEvent(ev.id, setupOf(await readJson<SetupBody>(req, MAX_EVENT_BYTES)));
+    await updateEvent(ev.id, setupOf(await readJson<SetupBody>(req, MAX_EVENT_BYTES)));
     return sendJson(res, 200, { ok: true });
   }
   return sendJson(res, 405, { error: 'Method not allowed.' });
@@ -308,7 +323,7 @@ async function boothRoute(req: Req, res: Res, id: string, isStats: boolean): Pro
 
 async function sendGallery(res: Res, ev: StoredEvent, base: string): Promise<void> {
   const photos = await listPhotos({ event: ev.id });
-  const s = eventStats(ev.id);
+  const s = await eventStats(ev.id);
   const busiest = Object.entries(s.byHour).sort((a, b) => b[1] - a[1])[0];
   const statLine = [
     `${photos.length} shared photo${photos.length === 1 ? '' : 's'}`,
@@ -358,7 +373,10 @@ async function sendZip(res: Res, ev: StoredEvent): Promise<void> {
   const central: Buffer[] = [];
   let offset = 0;
   for (const [i, p] of photos.entries()) {
-    const data = await readFile(jpgPath(p.id)).catch(() => null);
+    const data = await store.read(p.id).catch((err: unknown) => {
+      console.error(`ZIP: photo ${p.id} unreadable`, err);
+      return null;
+    });
     if (!data) continue;
     const name = Buffer.from(`${slug}-${String(i + 1).padStart(4, '0')}.jpg`);
     const date = new Date(p.created);

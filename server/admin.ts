@@ -25,8 +25,8 @@ const MAX_FAILURES = 10; // per IP per window
 const FAILURE_WINDOW_MS = 15 * 60 * 1000;
 
 if (process.env.ADMIN_TOTP_RESET === '1') {
-  setSetting('totp_secret', null);
-  setSetting('totp_pending', null);
+  await setSetting('totp_secret', null);
+  await setSetting('totp_pending', null);
   console.log('photoboot: admin TOTP reset — the next admin login enrolls a new authenticator.');
 }
 
@@ -59,12 +59,13 @@ function isHttps(req: Req): boolean {
   return req.headers['x-forwarded-proto'] === 'https' || ('encrypted' in req.socket && !!req.socket.encrypted);
 }
 
-function startSession(req: Req, res: Res) {
+async function startSession(req: Req, res: Res) {
   const token = randomBytes(32).toString('base64url');
   const now = new Date();
   const expires = new Date(now.getTime() + SESSION_HOURS * 3_600_000);
-  db.prepare('DELETE FROM admin_sessions WHERE expires < ?').run(now.toISOString());
-  db.prepare('INSERT INTO admin_sessions (token_hash, created, expires, ip) VALUES (?, ?, ?, ?)').run(
+  await db.run('DELETE FROM admin_sessions WHERE expires < ?', now.toISOString());
+  await db.run(
+    'INSERT INTO admin_sessions (token_hash, created, expires, ip) VALUES (?, ?, ?, ?)',
     sha256(token),
     now.toISOString(),
     expires.toISOString(),
@@ -75,18 +76,19 @@ function startSession(req: Req, res: Res) {
   res.setHeader('Set-Cookie', attrs.join('; '));
 }
 
-function loggedIn(req: Req): boolean {
+async function loggedIn(req: Req): Promise<boolean> {
   const token = cookieOf(req);
   if (!token) return false;
-  const row = db.prepare('SELECT expires FROM admin_sessions WHERE token_hash = ?').get(sha256(token)) as
-    | { expires: string }
-    | undefined;
+  const row = await db.get<{ expires: string }>(
+    'SELECT expires FROM admin_sessions WHERE token_hash = ?',
+    sha256(token)
+  );
   return !!row && row.expires > new Date().toISOString();
 }
 
-function endSession(req: Req, res: Res) {
+async function endSession(req: Req, res: Res) {
   const token = cookieOf(req);
-  if (token) db.prepare('DELETE FROM admin_sessions WHERE token_hash = ?').run(sha256(token));
+  if (token) await db.run('DELETE FROM admin_sessions WHERE token_hash = ?', sha256(token));
   res.setHeader('Set-Cookie', `${COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`);
 }
 
@@ -109,10 +111,10 @@ function eventView(ev: StoredEvent) {
   };
 }
 
-function paymentsOf(eventId?: string) {
+function paymentsOf(eventId?: string): Promise<unknown[]> {
   const sql = `SELECT id, event_id AS eventId, provider, ref, amount, currency, status, created FROM payments
     ${eventId ? 'WHERE event_id = ?' : ''} ORDER BY created DESC LIMIT 500`;
-  return eventId ? db.prepare(sql).all(eventId) : db.prepare(sql).all();
+  return eventId ? db.all(sql, eventId) : db.all(sql);
 }
 
 // ---------- routes ----------
@@ -136,7 +138,7 @@ export async function adminRoutes(req: Req, res: Res, url: URL): Promise<boolean
   if (req.method !== 'GET') requireJson(req);
 
   if (pathname === '/api/admin/me' && req.method === 'GET') {
-    sendJson(res, 200, { loggedIn: loggedIn(req), enrolled: !!getSetting('totp_secret') });
+    sendJson(res, 200, { loggedIn: await loggedIn(req), enrolled: !!(await getSetting('totp_secret')) });
     return true;
   }
 
@@ -145,42 +147,42 @@ export async function adminRoutes(req: Req, res: Res, url: URL): Promise<boolean
     if (tooManyFailures(ip)) throw new HttpError(429, 'Too many attempts. Try again in 15 minutes.');
     const { token, code } = await readJson<{ token?: string; code?: string }>(req, 4096);
     if (!safeEqual(token, ADMIN_TOKEN)) fail(ip);
-    const secret = getSetting('totp_secret');
+    const secret = await getSetting('totp_secret');
     if (secret) {
       if (!verifyTotp(secret, String(code ?? ''))) fail(ip);
-      startSession(req, res);
+      await startSession(req, res);
       sendJson(res, 200, { ok: true });
       return true;
     }
     // Not enrolled yet: a code confirms the pending secret; no code starts it.
-    const pending = getSetting('totp_pending');
+    const pending = await getSetting('totp_pending');
     if (pending && code) {
       if (!verifyTotp(pending, String(code))) fail(ip);
-      setSetting('totp_secret', pending);
-      setSetting('totp_pending', null);
-      startSession(req, res);
+      await setSetting('totp_secret', pending);
+      await setSetting('totp_pending', null);
+      await startSession(req, res);
       sendJson(res, 200, { ok: true, enrolled: true });
       return true;
     }
     const fresh = newSecret();
-    setSetting('totp_pending', fresh);
+    await setSetting('totp_pending', fresh);
     sendJson(res, 200, { enroll: { secret: fresh, url: otpauthUrl(fresh, url.hostname || 'admin') } });
     return true;
   }
 
   if (pathname === '/api/admin/logout' && req.method === 'POST') {
-    endSession(req, res);
+    await endSession(req, res);
     sendJson(res, 200, { ok: true });
     return true;
   }
 
-  if (!loggedIn(req)) {
+  if (!(await loggedIn(req))) {
     sendJson(res, 401, { error: 'Log in first.' });
     return true;
   }
 
   if (pathname === '/api/admin/events' && req.method === 'GET') {
-    const events = listEvents({ q: url.searchParams.get('q') ?? '' }).map((ev) => ({
+    const events = (await listEvents({ q: url.searchParams.get('q') ?? '' })).map((ev) => ({
       ...eventView(ev),
       photos: ev.photos,
       stats: ev.stats,
@@ -207,13 +209,13 @@ export async function adminRoutes(req: Req, res: Res, url: URL): Promise<boolean
   }
 
   if (pathname === '/api/admin/payments' && req.method === 'GET') {
-    sendJson(res, 200, { payments: paymentsOf() });
+    sendJson(res, 200, { payments: await paymentsOf() });
     return true;
   }
 
   const m = pathname.match(EVENT);
   if (m) {
-    const ev = getEvent(m[1]);
+    const ev = await getEvent(m[1]);
     if (!ev) throw new HttpError(404, 'No such event.');
     if (m[2]) {
       if (req.method !== 'POST') throw new HttpError(405, 'Method not allowed.');
@@ -222,9 +224,9 @@ export async function adminRoutes(req: Req, res: Res, url: URL): Promise<boolean
     } else if (req.method === 'GET') {
       sendJson(res, 200, {
         event: eventView(ev),
-        photos: countPhotos(ev.id),
-        stats: eventStats(ev.id),
-        payments: paymentsOf(ev.id),
+        photos: await countPhotos(ev.id),
+        stats: await eventStats(ev.id),
+        payments: await paymentsOf(ev.id),
       });
     } else if (req.method === 'PATCH') {
       const body = await readJson<{ name?: string; email?: string; retentionDays?: number; paid?: boolean }>(req, 8192);
@@ -232,14 +234,14 @@ export async function adminRoutes(req: Req, res: Res, url: URL): Promise<boolean
       if (retentionDays !== undefined && !(Number.isInteger(retentionDays) && retentionDays >= 0)) {
         throw new HttpError(400, 'Retention is a whole number of days (0 = forever).');
       }
-      updateEvent(ev.id, {
+      await updateEvent(ev.id, {
         name: body.name?.trim() || undefined,
         email: body.email === undefined ? undefined : body.email.trim() || null,
         retentionDays,
         paid: body.paid,
         status: body.paid ? 'active' : undefined,
       });
-      sendJson(res, 200, { event: eventView(getEvent(ev.id) as StoredEvent) });
+      sendJson(res, 200, { event: eventView((await getEvent(ev.id)) as StoredEvent) });
     } else if (req.method === 'DELETE') {
       await deleteEvent(ev.id);
       sendJson(res, 200, { ok: true });

@@ -3,7 +3,10 @@
 //
 //   POST   /api/share          JPEG body → { id, url }  (url = the photo page)
 //   GET    /s/{uuid}           photo page: view, download, delete
-//   GET    /share/{uuid}.jpg   the photo itself
+//   GET    /share/{uuid}.jpg   the photo itself: a redirect to a short-lived
+//                               bucket URL when photos are in a bucket
+//                               (storage.ts); ?download=1 sends it as a
+//                               download (from the app, read from the bucket)
 //   DELETE /api/share/{uuid}   delete (the unguessable id is the capability)
 //   …and /api/admin/… (admin.ts), /api/events, /g/… (events.ts),
 //   /api/checkout, /api/stripe/webhook (stripe.ts), /api/apple/… (apple.ts).
@@ -15,8 +18,6 @@
 // Config (env): BASE_URL, UPLOAD_TOKEN, plus those in photos.js / events.js.
 
 import { randomUUID } from 'node:crypto';
-import { createReadStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
 import { adminRoutes } from './admin.ts';
 import { appleRoutes } from './apple.ts';
 import { env } from './env.ts';
@@ -35,7 +36,8 @@ import {
   sendHtml,
   sendJson,
 } from './http.ts';
-import { deletePhoto, expiresAt, hasRoomFor, ID, jpgPath, photoMeta, savePhoto } from './photos.ts';
+import { deletePhoto, expiresAt, hasRoomFor, ID, photoMeta, savePhoto } from './photos.ts';
+import { store } from './storage.ts';
 import { stripeRoutes } from './stripe.ts';
 
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
@@ -90,21 +92,33 @@ async function upload(req: Req, res: Res): Promise<void> {
   sendJson(res, 201, { id, url: `${baseUrl(req)}/s/${id}` });
 }
 
-async function serveJpg(id: string, res: Res): Promise<void> {
-  try {
-    const { size } = await stat(jpgPath(id));
-    res.writeHead(200, {
-      'Content-Type': 'image/jpeg',
-      'Content-Length': size,
-      // Private: no CDN copy that outlives a delete or the expiry.
-      'Cache-Control': 'private, max-age=3600',
-      'X-Robots-Tag': 'noindex',
-    });
-    createReadStream(jpgPath(id)).pipe(res);
-  } catch {
-    res.writeHead(404, { 'Content-Type': 'text/plain' });
-    res.end('Not found');
+const DOWNLOAD_NAME = 'photobooth.jpg';
+
+async function serveJpg(id: string, download: boolean, res: Res): Promise<void> {
+  const notFound = () => {
+    res.writeHead(404, { 'Content-Type': 'text/plain' }).end('Not found');
+  };
+  // The database decides whether a photo exists (deleted / expired = gone).
+  if (!(await photoMeta(id))) return notFound();
+  // Not for a download: S3 response-content-disposition support varies.
+  const link = download ? null : store.link(id);
+  if (link) {
+    // Private, short: the signed URL expires, and a delete must win soon.
+    res.writeHead(302, { Location: link, 'Cache-Control': 'private, max-age=300', 'X-Robots-Tag': 'noindex' });
+    res.end();
+    return;
   }
+  const data = await store.read(id);
+  if (!data) return notFound();
+  res.writeHead(200, {
+    'Content-Type': 'image/jpeg',
+    'Content-Length': data.length,
+    // Private: no CDN copy that outlives a delete or the expiry.
+    'Cache-Control': 'private, max-age=3600',
+    'X-Robots-Tag': 'noindex',
+    ...(download ? { 'Content-Disposition': `attachment; filename="${DOWNLOAD_NAME}"` } : {}),
+  });
+  res.end(data);
 }
 
 async function sharePage(id: string, res: Res): Promise<void> {
@@ -128,7 +142,7 @@ async function sharePage(id: string, res: Res): Promise<void> {
       `<h1>Your photo 📸</h1>
 <img class="photo" src="/share/${id}.jpg" alt="Your photo booth photo">
 <div class="actions">
-  <a class="btn" href="/share/${id}.jpg" download="photobooth.jpg">Save photo</a>
+  <a class="btn" href="/share/${id}.jpg?download=1" download="${DOWNLOAD_NAME}">Save photo</a>
   <button class="btn secondary" id="delete">Delete from the server</button>
 </div>
 <p class="muted">${escapeHtml(expiryText)} Anyone with this link can see it, so only share it with people you trust.</p>
@@ -161,7 +175,7 @@ async function route(req: Req, res: Res, next: Next): Promise<void> {
     return id && ID.test(id) ? id : null;
   };
   let id = photoId('GET', SHARE_JPG);
-  if (id) return serveJpg(id, res);
+  if (id) return serveJpg(id, url.searchParams.has('download'), res);
   id = photoId('GET', SHARE_PAGE);
   if (id) return sharePage(id, res);
   id = photoId('DELETE', SHARE_API);

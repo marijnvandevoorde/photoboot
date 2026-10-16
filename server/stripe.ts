@@ -154,7 +154,7 @@ async function checkout(req: Req, res: Res) {
     if (err instanceof HttpError) throw err;
     throw new HttpError(400, (err as Error).message);
   }
-  const ev = createPendingEvent(request, 'stripe');
+  const ev = await createPendingEvent(request, 'stripe');
   const params: Record<string, unknown> = {
     mode: 'payment',
     line_items: [
@@ -220,7 +220,7 @@ async function webhook(req: Req, res: Res) {
       // Only a full refund ends the perks; a partial one is a goodwill gesture.
       const charge = object as Charge;
       const ref = idOf(charge.payment_intent);
-      if (charge.refunded && ref) refundPayment(ref);
+      if (charge.refunded && ref) await refundPayment(ref);
       break;
     }
   }

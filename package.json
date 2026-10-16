@@ -36,6 +36,7 @@
     "@capacitor/core": "^8.5.3",
     "@capacitor/ios": "^8.5.3",
     "@capgo/native-purchases": "^8.9.2",
+    "mysql2": "^3.24.4",
     "qrcode-generator": "^2.0.4"
   },
   "engines": {

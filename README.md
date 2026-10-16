@@ -142,8 +142,10 @@ over SSH and runs Compose there.
 | ---------------- | ------------- | ------------------------------------------------------------------- |
 | `BASE_URL`       | from request  | Public origin used in QR links, e.g. `https://booth.example.com`     |
 | `PORT`           | `8080`        | HTTP port                                                            |
-| `SHARE_DIR`      | `./shares`    | Where shared photos are stored                                       |
+| `SHARE_DIR`      | `./shares`    | Where shared photos are stored (without `S3_BUCKET`)                 |
 | `EVENTS_DIR`     | `./events`    | Where server events are stored                                       |
+| `DATABASE_URL`   | —             | MySQL instead of SQLite: `mysql://user:pass@host:3306/db?ssl-mode=REQUIRED` |
+| `S3_BUCKET`      | —             | Keep photos in this S3-compatible bucket instead of `SHARE_DIR`; with `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_FORCE_PATH_STYLE` |
 | `SHARE_TTL_DAYS` | `30`          | Shared photos are deleted after this many days (`0` = never)          |
 | `SHARE_MAX_MB`   | `5000`        | Refuse uploads once the photo folder is this big                     |
 | `ADMIN_TOKEN`    | —             | Enables `/admin` (log in with it + an authenticator code)            |
@@ -157,7 +159,7 @@ over SSH and runs Compose there.
 | `APPLE_ALLOW_SANDBOX` | `1`      | Accept Sandbox purchases (TestFlight, sandbox testers); `0` = Production only |
 | `BREVO_API_KEY`  | —             | Sends the event emails through Brevo (without it they're logged)     |
 | `MAIL_FROM`      | `booth@small-victories.co` | Sender address (a verified Brevo sender)                |
-| `DB_PATH`        | `EVENTS_DIR/photoboot.db` | SQLite database (events, photos, payments, sessions)     |
+| `DB_PATH`        | `EVENTS_DIR/photoboot.db` | SQLite database (events, photos, payments, sessions), without `DATABASE_URL` |
 | `UPLOAD_TOKEN`   | —             | If set, uploads need this token (set it in settings) or an event key |
 | `STRIPE_SECRET_KEY` | —          | Stripe secret key (`sk_live_…` / `sk_test_…`); without it there's no checkout |
 | `STRIPE_WEBHOOK_SECRET` | —      | Signing secret (`whsec_…`) of the Stripe webhook endpoint            |

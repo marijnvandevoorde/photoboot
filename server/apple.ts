@@ -202,9 +202,10 @@ export function verifyTransaction(
 
 // ---------- appAccountToken ↔ event ----------
 
-export function issueToken(eventId: string): string {
+export async function issueToken(eventId: string): Promise<string> {
   const token = randomUUID();
-  db.prepare('INSERT INTO apple_tokens (token, event_id, created) VALUES (?, ?, ?)').run(
+  await db.run(
+    'INSERT INTO apple_tokens (token, event_id, created) VALUES (?, ?, ?)',
     token,
     eventId,
     new Date().toISOString()
@@ -212,11 +213,12 @@ export function issueToken(eventId: string): string {
   return token;
 }
 
-export function eventForToken(token: string | null): string | null {
+export async function eventForToken(token: string | null): Promise<string | null> {
   if (!token) return null;
-  const row = db.prepare('SELECT event_id FROM apple_tokens WHERE token = ?').get(token.toLowerCase()) as
-    | { event_id: string }
-    | undefined;
+  const row = await db.get<{ event_id: string }>(
+    'SELECT event_id FROM apple_tokens WHERE token = ?',
+    token.toLowerCase()
+  );
   return row?.event_id ?? null;
 }
 
@@ -271,19 +273,19 @@ async function start(req: Req, res: Res) {
   } catch (err) {
     return sendJson(res, 400, { error: (err as Error).message });
   }
-  const ev = createPendingEvent(request, 'apple');
-  sendJson(res, 201, { eventId: ev.id, appAccountToken: issueToken(ev.id) });
+  const ev = await createPendingEvent(request, 'apple');
+  sendJson(res, 201, { eventId: ev.id, appAccountToken: await issueToken(ev.id) });
 }
 
 async function redeem(req: Req, res: Res) {
   if (redeemLimited(clientIp(req))) return sendJson(res, 429, { error: 'Too many tries, please wait a bit.' });
   const { eventId, jws } = await readJson<{ eventId?: unknown; jws?: unknown }>(req, 64 * 1024);
   const tx = verifyTransaction(jws);
-  const forToken = eventForToken(tx.appAccountToken);
+  const forToken = await eventForToken(tx.appAccountToken);
   if (!forToken) return sendJson(res, 404, { error: 'This purchase isn’t linked to an event.' });
   if (eventId !== undefined && eventId !== null && eventId !== forToken)
     return sendJson(res, 400, { error: 'This purchase belongs to another event.' });
-  const refunded = db.prepare("SELECT 1 FROM payments WHERE ref = ? AND status = 'refunded'").get(tx.transactionId);
+  const refunded = await db.get("SELECT 1 FROM payments WHERE ref = ? AND status = 'refunded'", tx.transactionId);
   if (refunded) return sendJson(res, 409, { error: 'This purchase was refunded.' });
   const ev = await activate(tx, forToken);
   if (!ev) return sendJson(res, 404, { error: 'The event no longer exists.' });
@@ -315,11 +317,11 @@ async function notification(req: Req, res: Res) {
   if (type === 'ONE_TIME_CHARGE') {
     // The app normally redeems first; this covers a purchase whose app
     // closed (or lost its network) before it could.
-    const eventId = eventForToken(tx.appAccountToken);
-    if (!eventId || !getEvent(eventId)) return ignore('unknown token');
+    const eventId = await eventForToken(tx.appAccountToken);
+    if (!eventId || !(await getEvent(eventId))) return ignore('unknown token');
     await activate(tx, eventId);
   } else {
-    refundPayment(tx.transactionId);
+    await refundPayment(tx.transactionId);
   }
   sendJson(res, 200, { ok: true });
 }

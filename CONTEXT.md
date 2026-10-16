@@ -172,13 +172,30 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
   app, `POST /api/share`, `/s/{uuid}` share page (save / delete),
   `/share/{uuid}.jpg`, `DELETE /api/share/{uuid}`, rate limit, then the
   admin, event and Stripe routes.
-- `server/db.ts` — SQLite (`node:sqlite`): events, photos, stats, payments,
-  admin sessions, settings (TOTP secret). Imports the pre-database JSON
-  events and photo sidecars once (`PRAGMA user_version` 1), then runs
-  `MIGRATIONS` in order (2: `apple_tokens`, appAccountToken → event).
-- `server/photos.ts` — photo files + rows; expiry per photo: free
+- `server/db.ts` — the database: MySQL (`mysql2`) when `DATABASE_URL` is
+  set (production), else SQLite (`node:sqlite`; local use, tests). Async
+  `db.get/all/run` with SQL both accept; `insertIgnore()` / `upsert()` for
+  the two statements that differ; quote the column `` `key` ``. Tables:
+  events, photos, stats, payments, admin sessions, settings (TOTP secret),
+  apple_tokens. SQLite imports the pre-database JSON events and photo
+  sidecars once (`PRAGMA user_version` 1), then runs `SQLITE_MIGRATIONS`
+  (2: `apple_tokens`). The MySQL schema is created whole; a later change
+  needs its own numbered migration.
+- `server/storage.ts` — photo files: a private S3-compatible bucket when
+  `S3_BUCKET` is set (key `shares/<id>.jpg`; SigV4 presigned requests with
+  node:crypto, no SDK), else `<id>.jpg` in `SHARE_DIR`. `/share/<id>.jpg`
+  redirects to a 1 h presigned URL in bucket mode; `?download=1` (the share
+  page's Save button) is always streamed by the app with
+  Content-Disposition, since S3 response overrides vary by provider.
+- `server/import-sqlite.ts` — one-off copy of a SQLite database + photo
+  folder into MySQL + the bucket (idempotent, verifies each photo). Used
+  for the 2026-10 move off the shared disk.
+- Tests run on SQLite + disk. `PHOTOBOOT_TEST_BACKENDS=1` with
+  `DATABASE_URL` / `S3_*` set runs server, stripe and storage tests against
+  a real MySQL and bucket (use `--no-file-parallelism` and an empty schema).
+- `server/photos.ts` — photos (store + rows); expiry per photo: free
   `SHARE_TTL_DAYS`, paid events `retention_days` / `PAID_RETENTION_DAYS`;
-  disk quota.
+  storage quota.
 - `server/events.ts` — event store + the booth routes (setup key: load /
   save setup, stats) and the host gallery + streamed ZIP (gallery key).
   Pending (unpaid) events refuse photos and show no gallery.
@@ -209,7 +226,7 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
 - `server/http.ts` — helpers (incl. the per-IP `rateLimiter`) + the HTML
   shell of the public pages.
 - `server/zip.ts` — stored-ZIP writer + CRC32, shared with the browser.
-- `server/index.ts` — production server (node builtins only): `dist/` +
+- `server/index.ts` — production server (node builtins + `mysql2`): `dist/` +
   routes; `createApp()` is what the tests start.
 - `Dockerfile` / `docker-compose.yml` — volumes `/data/shares`, `/data/events`.
 - `run.sh` — self-contained local launcher (portable Node in `.node/`).
@@ -234,12 +251,15 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
 Every variable is listed in `.env.example` (and the README table); copy it to
 `.env`. Empty values mean the default (`server/env.ts`). Compose loads `.env`
 via `env_file`; `npm start` / the Vite dev server read it too
-(`server/load-env.ts`). Variables: `BASE_URL`, `PORT`, `SHARE_DIR`, `EVENTS_DIR`,
+(`server/load-env.ts`). Variables: `BASE_URL`, `PORT`, `DATABASE_URL`, `S3_*`, `SHARE_DIR`, `EVENTS_DIR`,
 `SHARE_TTL_DAYS`, `SHARE_MAX_MB`, `ADMIN_TOKEN`, `UPLOAD_TOKEN`, the
 event price / mail / Stripe keys (`STRIPE_SECRET_KEY`,
 `STRIPE_WEBHOOK_SECRET`, `STRIPE_AUTOMATIC_TAX`) and the in-app purchase
-settings (`APPLE_BUNDLE_ID`, `APPLE_PRODUCT_ID`, `APPLE_ALLOW_SANDBOX`). On the
-production host the secrets are in `~/photoboot/.env`.
+settings (`APPLE_BUNDLE_ID`, `APPLE_PRODUCT_ID`, `APPLE_ALLOW_SANDBOX`).
+Production runs on Kubernetes (deployment `photoboot`, namespace `apps`) with
+no volume: settings in the secret `photoboot-env`, `DATABASE_URL` in
+`photoboot-mysql` (HeatWave schema `photoboot`), `S3_*` in `photoboot-bucket`
+(private OCI bucket `photoboot`).
 
 ## Open questions / next things to do
 
@@ -259,7 +279,7 @@ production host the secrets are in `~/photoboot/.env`.
   on the user's 53/50 mm sticker roll. Overridable in settings.
 - Width must be a multiple of 8 (byte alignment).
 - Deps: Vite + basic-ssl (dev), `qrcode-generator` (client). Server uses
-  node builtins only.
+  node builtins plus `mysql2` (the only server dependency).
 - Config lives in localStorage (`photoboot:config`); binary template assets
   in IndexedDB (`photoboot` DB, `blobs` store). Reset both from Settings.
 

@@ -35,6 +35,8 @@ beforeAll(async () => {
   process.env.SHARE_DIR = path.join(dir, 'shares');
   process.env.EVENTS_DIR = path.join(dir, 'events');
   process.env.PUBLIC_URL = 'https://booth.test';
+  delete process.env.DATABASE_URL; // the migration check below is SQLite's
+  delete process.env.S3_BUCKET;
   delete process.env.BREVO_API_KEY;
   delete process.env.APPLE_ALLOW_SANDBOX;
   // A database from before the Apple migration (user_version 1, no
@@ -223,9 +225,9 @@ describe('JWS verification', () => {
 // ---------- routes ----------
 
 describe('purchase flow', () => {
-  it('upgraded the old database', () => {
-    expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(2);
-    expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'apple_tokens'").get()).toBeTruthy();
+  it('upgraded the old database', async () => {
+    expect((await db.get<{ user_version: number }>('PRAGMA user_version'))?.user_version).toBe(2);
+    expect(await db.get("SELECT name FROM sqlite_master WHERE name = 'apple_tokens'")).toBeTruthy();
   });
 
   it('validates the host form', async () => {
@@ -238,7 +240,7 @@ describe('purchase flow', () => {
   it('start → redeem activates the event and emails once', async () => {
     const { eventId, appAccountToken } = await startEvent('Garden party');
     expect(appAccountToken).toMatch(/^[0-9a-f-]{36}$/);
-    expect(getEvent(eventId)).toMatchObject({ status: 'pending', paid: false, source: 'apple' });
+    expect(await getEvent(eventId)).toMatchObject({ status: 'pending', paid: false, source: 'apple' });
 
     const tx = transaction({ appAccountToken: appAccountToken.toUpperCase() }); // StoreKit sends upper case
     const jws = signJws(tx);
@@ -249,7 +251,7 @@ describe('purchase flow', () => {
     expect(links).toMatchObject({ eventId, eventName: 'Garden party' });
     expect(links.setupLink).toMatch(new RegExp(`^https://booth\\.test/settings\\.html#event=${eventId}\\.[\\w-]+$`));
     expect(links.galleryLink).toMatch(new RegExp(`^https://booth\\.test/g/${eventId}/[\\w-]+$`));
-    expect(getEvent(eventId)).toMatchObject({ status: 'active', paid: true });
+    expect(await getEvent(eventId)).toMatchObject({ status: 'active', paid: true });
 
     // A second redeem (app retry, restore) gives the same links, no new mail.
     const again = await post('redeem', { jws });
@@ -258,7 +260,7 @@ describe('purchase flow', () => {
     expect(outbox.length).toBe(mails + 1);
     expect(outbox.at(-1)?.text).toContain(links.galleryLink);
 
-    const payments = db.prepare('SELECT * FROM payments WHERE event_id = ?').all(eventId) as {
+    const payments = (await db.all('SELECT * FROM payments WHERE event_id = ?', eventId)) as {
       provider: string;
       ref: string;
       amount: number;
@@ -277,13 +279,13 @@ describe('purchase flow', () => {
     const wrong = await post('redeem', { eventId: b.eventId, jws });
     expect(wrong.status).toBe(400);
     expect((await wrong.json()).error).toMatch(/another event/);
-    expect(getEvent(b.eventId)?.paid).toBe(false);
+    expect((await getEvent(b.eventId))?.paid).toBe(false);
 
     const unknown = await post('redeem', { jws: signJws(transaction()) });
     expect(unknown.status).toBe(404);
     const none = await post('redeem', { jws: signJws(transaction({ appAccountToken: undefined })) });
     expect(none.status).toBe(404);
-    expect(getEvent(a.eventId)?.paid).toBe(false);
+    expect((await getEvent(a.eventId))?.paid).toBe(false);
   });
 
   it('refuses a forged transaction', async () => {
@@ -294,7 +296,7 @@ describe('purchase flow', () => {
     });
     const res = await post('redeem', { eventId, jws: evil });
     expect(res.status).toBe(400);
-    expect(getEvent(eventId)?.paid).toBe(false);
+    expect((await getEvent(eventId))?.paid).toBe(false);
   });
 });
 
@@ -303,18 +305,18 @@ describe('server notifications', () => {
     const { eventId, appAccountToken } = await startEvent('Refunded party');
     const tx = transaction({ appAccountToken });
     expect((await post('redeem', { eventId, jws: signJws(tx) })).status).toBe(200);
-    expect(getEvent(eventId)?.paid).toBe(true);
+    expect((await getEvent(eventId))?.paid).toBe(true);
 
     const refunded = signJws({ ...tx, revocationDate: Date.now(), revocationReason: 0 });
     const res = await post('notifications', { signedPayload: notification('REFUND', refunded) });
     expect(res.status).toBe(200);
-    expect(getEvent(eventId)?.paid).toBe(false);
-    expect(db.prepare('SELECT status FROM payments WHERE ref = ?').get(tx.transactionId)).toEqual({
+    expect((await getEvent(eventId))?.paid).toBe(false);
+    expect(await db.get('SELECT status FROM payments WHERE ref = ?', tx.transactionId)).toEqual({
       status: 'refunded',
     });
     // Redeeming the old (pre-refund) JWS again doesn't bring it back.
     expect((await post('redeem', { eventId, jws: signJws(tx) })).status).toBe(409);
-    expect(getEvent(eventId)?.paid).toBe(false);
+    expect((await getEvent(eventId))?.paid).toBe(false);
   });
 
   it('ONE_TIME_CHARGE activates an event the app never redeemed', async () => {
@@ -324,7 +326,7 @@ describe('server notifications', () => {
       signedPayload: notification('ONE_TIME_CHARGE', tx, { environment: 'Production' }),
     });
     expect(res.status).toBe(200);
-    expect(getEvent(eventId)).toMatchObject({ status: 'active', paid: true });
+    expect(await getEvent(eventId)).toMatchObject({ status: 'active', paid: true });
   });
 
   it('answers 200 to types it ignores and 400 to bad signatures', async () => {

@@ -24,6 +24,11 @@ beforeAll(async () => {
   process.env.SHARE_TTL_DAYS = '30';
   process.env.PAID_RETENTION_DAYS = '365';
   process.env.PUBLIC_URL = 'https://booth.test';
+  // Disk + SQLite unless PHOTOBOOT_TEST_BACKENDS=1 (then DATABASE_URL / S3_* from the env).
+  if (process.env.PHOTOBOOT_TEST_BACKENDS !== '1') {
+    delete process.env.DATABASE_URL;
+    delete process.env.S3_BUCKET;
+  }
   delete process.env.BASE_URL;
   delete process.env.BREVO_API_KEY;
   const { createApp } = await import('../server/index.ts');
@@ -119,8 +124,13 @@ describe('sharing', () => {
     expect(await page.text()).toMatch(/deleted automatically on \d{4}-\d{2}-\d{2} \(30 days/);
 
     const img = await fetch(`${base}/share/${id}.jpg`);
-    expect(img.headers.get('cache-control')).toBe('private, max-age=3600');
+    expect(img.status).toBe(200);
     expect(Buffer.from(await img.arrayBuffer())).toEqual(JPEG);
+
+    const save = await fetch(`${base}/share/${id}.jpg?download=1`);
+    expect(save.status).toBe(200);
+    expect(save.headers.get('content-disposition')).toBe('attachment; filename="photobooth.jpg"');
+    expect(Buffer.from(await save.arrayBuffer())).toEqual(JPEG);
   });
 
   it('rejects anything that is not a JPEG', async () => {
@@ -140,11 +150,10 @@ describe('sharing', () => {
     const old = (await (await upload()).json()).id;
     const fresh = (await (await upload()).json()).id;
     const oldPaid = (await (await upload(boothHeaders(ev))).json()).id;
-    const setCreated = (id: string, iso: string) =>
-      db.prepare('UPDATE photos SET created = ? WHERE id = ?').run(iso, id);
+    const setCreated = (id: string, iso: string) => db.run('UPDATE photos SET created = ? WHERE id = ?', iso, id);
     const daysAgo = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString();
-    setCreated(old, daysAgo(31));
-    setCreated(oldPaid, daysAgo(200)); // within the paid event's 365 days
+    await setCreated(old, daysAgo(31));
+    await setCreated(oldPaid, daysAgo(200)); // within the paid event's 365 days
     expect(await cleanup()).toBeGreaterThanOrEqual(1);
     expect((await fetch(`${base}/share/${old}.jpg`)).status).toBe(404);
     expect((await fetch(`${base}/share/${fresh}.jpg`)).status).toBe(200);
@@ -336,7 +345,7 @@ describe('events', () => {
 
 describe('billing', () => {
   it('keeps a pending event closed until it is paid, then activates it once', async () => {
-    const ev = billing.createPendingEvent({ name: 'Pending', email: 'pay@example.com' }, 'stripe');
+    const ev = await billing.createPendingEvent({ name: 'Pending', email: 'pay@example.com' }, 'stripe');
     const links = { id: ev.id, setupKey: ev.setupKey, galleryKey: ev.galleryKey };
     expect((await upload(boothHeaders(links))).status).toBe(401);
     expect((await fetch(`${base}/g/${ev.id}/${ev.galleryKey}`)).status).toBe(402);
@@ -349,7 +358,7 @@ describe('billing', () => {
     expect(outbox.length).toBe(before + 1); // one email only
     expect((await upload(boothHeaders(links))).status).toBe(201);
 
-    billing.refundPayment('cs_test_123');
+    await billing.refundPayment('cs_test_123');
     const { event } = await (await admin('GET', `events/${ev.id}`)).json();
     expect(event.paid).toBe(false);
   });

@@ -13,7 +13,7 @@
 //   EVENT_PRICE_CENTS      web price per event in cents (default 1900)
 //   EVENT_CURRENCY         ISO currency (default eur)
 
-import { db } from './db.ts';
+import { db, insertIgnore } from './db.ts';
 import { env, envNumber } from './env.ts';
 import { createEvent, getEvent, type StoredEvent, updateEvent } from './events.ts';
 import { escapeHtml } from './http.ts';
@@ -52,7 +52,7 @@ export function checkEventRequest(body: unknown): EventRequest {
   return { name, email, eventDate };
 }
 
-export function createPendingEvent(req: EventRequest, source: 'stripe' | 'apple'): StoredEvent {
+export function createPendingEvent(req: EventRequest, source: 'stripe' | 'apple'): Promise<StoredEvent> {
   return createEvent({ ...req, status: 'pending', paid: false, source });
 }
 
@@ -72,41 +72,36 @@ export async function activateEvent(
   payment: PaymentRecord,
   { email = true }: { email?: boolean } = {}
 ): Promise<StoredEvent | null> {
-  const ev = getEvent(eventId);
+  const ev = await getEvent(eventId);
   if (!ev) return null;
-  const inserted = db
-    .prepare(
-      `INSERT OR IGNORE INTO payments (event_id, provider, ref, amount, currency, status, created, raw)
-       VALUES (?, ?, ?, ?, ?, 'paid', ?, ?)`
-    )
-    .run(
-      ev.id,
-      payment.provider,
-      payment.ref,
-      payment.amount,
-      payment.currency,
-      new Date().toISOString(),
-      payment.raw === undefined ? null : JSON.stringify(payment.raw)
-    );
-  if (Number(inserted.changes) === 0) return getEvent(eventId); // seen this payment before
-  updateEvent(ev.id, { status: 'active', paid: true, retentionDays: ev.retentionDays ?? PAID_RETENTION_DAYS });
-  const active = getEvent(ev.id) as StoredEvent;
+  const inserted = await db.run(
+    insertIgnore('payments', ['event_id', 'provider', 'ref', 'amount', 'currency', 'status', 'created', 'raw']),
+    ev.id,
+    payment.provider,
+    payment.ref,
+    payment.amount,
+    payment.currency,
+    'paid',
+    new Date().toISOString(),
+    payment.raw === undefined ? null : JSON.stringify(payment.raw)
+  );
+  if (inserted.changes === 0) return getEvent(eventId); // seen this payment before
+  await updateEvent(ev.id, { status: 'active', paid: true, retentionDays: ev.retentionDays ?? PAID_RETENTION_DAYS });
+  const active = (await getEvent(ev.id)) as StoredEvent;
   if (email && active.email) await sendEventEmail(active).catch((err) => console.error('Event email failed', err));
   return active;
 }
 
 // A refund (Stripe / Apple notification): keep the photos, end the paid perks.
-export function refundPayment(ref: string) {
-  const row = db.prepare('SELECT event_id FROM payments WHERE ref = ?').get(ref) as
-    | { event_id: string | null }
-    | undefined;
-  db.prepare("UPDATE payments SET status = 'refunded' WHERE ref = ?").run(ref);
-  if (row?.event_id) updateEvent(row.event_id, { paid: false });
+export async function refundPayment(ref: string): Promise<void> {
+  const row = await db.get<{ event_id: string | null }>('SELECT event_id FROM payments WHERE ref = ?', ref);
+  await db.run("UPDATE payments SET status = 'refunded' WHERE ref = ?", ref);
+  if (row?.event_id) await updateEvent(row.event_id, { paid: false });
 }
 
 // Owner gives an event away from /admin.
 export async function compEvent(req: EventRequest & { sendEmail?: boolean }): Promise<StoredEvent> {
-  const ev = createEvent({ ...req, email: req.email || null, status: 'pending', paid: false, source: 'comp' });
+  const ev = await createEvent({ ...req, email: req.email || null, status: 'pending', paid: false, source: 'comp' });
   const ref = `comp-${ev.id}`;
   const active = await activateEvent(
     ev.id,

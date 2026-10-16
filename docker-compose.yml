@@ -2,7 +2,9 @@
 # Photos live on the host in /storage/photoboot/shares, server events in
 # /storage/photoboot/events (both owned by uid 1000, the image's `node` user).
 # Settings and secrets come from ~/photoboot/.env (template: .env.example).
-# The SQLite database lives in /data/events (photoboot.db).
+# The SQLite database lives in /data/events (photoboot.db). Set DATABASE_URL
+# and S3_* in .env to use MySQL and a bucket instead; the volumes are then unused.
+# (boot.small-victories.co itself now runs on Kubernetes with MySQL + a bucket.)
 
 services:
   photoboot:

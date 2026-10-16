@@ -64,6 +64,11 @@ beforeAll(async () => {
   process.env.SHARE_DIR = path.join(dir, 'shares');
   process.env.EVENTS_DIR = path.join(dir, 'events');
   process.env.PUBLIC_URL = 'https://booth.test';
+  // Disk + SQLite unless PHOTOBOOT_TEST_BACKENDS=1 (then DATABASE_URL / S3_* from the env).
+  if (process.env.PHOTOBOOT_TEST_BACKENDS !== '1') {
+    delete process.env.DATABASE_URL;
+    delete process.env.S3_BUCKET;
+  }
   process.env.STRIPE_SECRET_KEY = 'sk_test_fake';
   process.env.STRIPE_WEBHOOK_SECRET = SECRET;
   delete process.env.STRIPE_AUTOMATIC_TAX;
@@ -189,7 +194,7 @@ describe('checkout', () => {
       cancel_url: 'https://booth.test/event.html?cancelled=1',
     });
     expect(call.form.has('automatic_tax[enabled]')).toBe(false);
-    expect(getEvent(eventId)).toMatchObject({
+    expect(await getEvent(eventId)).toMatchObject({
       name: 'Anna & Tom',
       email: 'host@example.com',
       eventDate: '2026-12-31',
@@ -246,7 +251,7 @@ describe('webhook', () => {
     const event = pay(session, 'pi_webhook_1');
     expect((await webhook(event)).status).toBe(200);
     expect((await webhook(event)).status).toBe(200); // Stripe retries
-    expect(getEvent(eventId)).toMatchObject({ status: 'active', paid: true, retentionDays: 365 });
+    expect(await getEvent(eventId)).toMatchObject({ status: 'active', paid: true, retentionDays: 365 });
     const mails = outbox.slice(before);
     expect(mails).toHaveLength(1);
     expect(mails[0].to.email).toBe('webhook@example.com');
@@ -257,12 +262,12 @@ describe('webhook', () => {
     const { session, eventId } = await startCheckout('Bank party');
     const pending = { ...session, payment_status: 'unpaid', payment_intent: 'pi_async_1' };
     await webhook({ type: 'checkout.session.completed', data: { object: pending } });
-    expect(getEvent(eventId)?.paid).toBe(false);
+    expect((await getEvent(eventId))?.paid).toBe(false);
     const paid = { ...pending, payment_status: 'paid' };
     expect((await webhook({ type: 'checkout.session.async_payment_succeeded', data: { object: paid } })).status).toBe(
       200
     );
-    expect(getEvent(eventId)?.paid).toBe(true);
+    expect((await getEvent(eventId))?.paid).toBe(true);
   });
 
   it('refuses a bad signature', async () => {
@@ -270,21 +275,21 @@ describe('webhook', () => {
     const event = pay(session, 'pi_forged');
     expect((await webhook(event, sign(JSON.stringify(event), 'whsec_wrong'))).status).toBe(400);
     expect((await webhook(event, 'garbage')).status).toBe(400);
-    expect(getEvent(eventId)?.paid).toBe(false);
+    expect((await getEvent(eventId))?.paid).toBe(false);
   });
 
   it('ends the paid perks on a full refund', async () => {
     const { session, eventId } = await startCheckout('Refunded');
     await webhook(pay(session, 'pi_refund_1'));
-    expect(getEvent(eventId)?.paid).toBe(true);
+    expect((await getEvent(eventId))?.paid).toBe(true);
     const charge = (refunded: boolean) => ({
       type: 'charge.refunded',
       data: { object: { id: 'ch_1', payment_intent: 'pi_refund_1', refunded } },
     });
     await webhook(charge(false)); // partial refund: keep it
-    expect(getEvent(eventId)?.paid).toBe(true);
+    expect((await getEvent(eventId))?.paid).toBe(true);
     expect((await webhook(charge(true))).status).toBe(200);
-    expect(getEvent(eventId)?.paid).toBe(false);
+    expect((await getEvent(eventId))?.paid).toBe(false);
   });
 
   it('acknowledges event types it does not handle', async () => {

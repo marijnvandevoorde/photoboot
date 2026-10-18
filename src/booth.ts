@@ -338,7 +338,10 @@ function setPill() {
   const ok = !!printer?.connected;
   const paper = paperLeft(config);
   const name = printer?.device?.name || missingPrinter?.name || 'Printer';
-  pill.textContent = (ok ? `🖨 ${name}` : '🖨 Reconnecting…') + (paper?.low ? ' · 📄 low' : '');
+  // Lost after a reload where the browser forgot the device: nothing retries
+  // until someone taps (the picker needs a tap).
+  const state = ok ? name : printer ? 'Reconnecting…' : `${name} · tap to reconnect`;
+  pill.textContent = `🖨 ${state}${paper?.low ? ' · 📄 low' : ''}`;
   pill.classList.toggle('bad', !ok);
   pill.classList.toggle('low', !!paper?.low);
   setStatus({ printer: name, printerConnected: ok });
@@ -412,20 +415,39 @@ document.addEventListener('visibilitychange', () => {
   else reconnectNow();
 });
 
-// The red pill: a tap retries now (harmless for guests: same printer, no
-// picker). The hatch over its left end gets that tap.
+// The red pill: a tap retries now (harmless for guests: same printer). The
+// hatch over its left end gets that tap too.
 function pillTap(e: Event) {
   if (!printer || printer.connected) return;
   e.stopPropagation(); // not a shutter tap
   reconnectNow();
 }
-$('printer-pill').addEventListener('click', pillTap);
 $('admin-hatch').addEventListener('click', pillTap);
 
+// When the browser forgot the printer (a reload without getDevices), a tap
+// on the pill opens the picker, showing only that printer.
+$('printer-pill').addEventListener('click', async (e) => {
+  if (printer || !missingPrinter) return pillTap(e);
+  e.stopPropagation();
+  const saved = missingPrinter;
+  try {
+    const p = await pickPrinter(() => {}, saved.name);
+    printer = p;
+    missingPrinter = null;
+    fitToPrinter(p);
+    lockKiosk(savedPrinter(p, config.printerType));
+    setStatus({ lastError: '' });
+  } catch (err) {
+    setStatus({ lastError: connectError(err) });
+  }
+  setPill();
+});
+
 // Opens the system picker: call straight from a tap.
-function pickPrinter(onLog: (msg: string) => void): Promise<PrinterBase> {
+function pickPrinter(onLog: (msg: string) => void, deviceName?: string): Promise<PrinterBase> {
   return connectPrinter(config.printerType, {
     onLog,
+    deviceName,
     onDisconnect: () => reconnectLoop(),
     model: modelById(config.printerModel),
   });
@@ -460,8 +482,9 @@ setAdminUnlocked(false);
 // Kiosk lock: the booth was started on this device before (a reload, a
 // crash, an app restart). Back to the camera without the setup screen, and
 // pick the same printer up again without the picker. Where that can't work
-// (no getDevices, e.g. Bluefy) the pill says "Reconnecting…" and the host
-// reconnects from the host menu; guests can still take and share photos.
+// (no getDevices: Bluefy, or Chrome without its Bluetooth permissions flag)
+// the pill says "tap to reconnect", and a tap opens the picker with just
+// that printer; guests can still take and share photos meanwhile.
 async function resumeBooth({ printer: saved }: KioskState) {
   missingPrinter = saved;
   const booth = startBooth();
@@ -477,7 +500,7 @@ async function resumeBooth({ printer: saved }: KioskState) {
       reconnectLoop();
     } else {
       setStatus({
-        lastError: 'Printer not reconnected after a restart: long-press the top-left corner of the camera view.',
+        lastError: 'Printer not reconnected after a restart: tap the printer pill on the camera view.',
       });
       setPill();
     }

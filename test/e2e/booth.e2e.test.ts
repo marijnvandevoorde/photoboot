@@ -19,16 +19,30 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // Runs in the page before any script: a Phomemo that counts the bytes it gets
 // and how often the picker opened. getDevices() hands back the same printer
 // on a later load, like Chrome does for a device the site picked before.
-// __drop() cuts the link; with __off set it won't connect.
+// __drop() cuts the link; with __off set it won't connect; __dropAfter = n
+// cuts it after n more writes (mid-print).
 function fakeBluetooth() {
-  const w = window as unknown as { __written: number; __picked: number; __off: boolean; __drop: () => void };
+  const w = window as unknown as {
+    __written: number;
+    __picked: number;
+    __off: boolean;
+    __drop: () => void;
+    __dropAfter: number;
+  };
   w.__written = 0;
   w.__picked = 0;
   w.__off = false;
+  w.__dropAfter = -1;
   const listeners: (() => void)[] = [];
   const char = {
     properties: { write: true, writeWithoutResponse: true },
     writeValueWithResponse: async (c: ArrayBufferView) => {
+      if (w.__dropAfter === 0) {
+        w.__dropAfter = -1;
+        w.__drop();
+        throw new Error('GATT operation failed for unknown reason.');
+      }
+      if (w.__dropAfter > 0) w.__dropAfter--;
       w.__written += c.byteLength;
     },
     writeValueWithoutResponse: async (c: ArrayBufferView) => {
@@ -234,7 +248,9 @@ describe.skipIf(!CHROME)('booth in a real browser', () => {
     });
     await page.waitForFunction(() => document.getElementById('printer-pill')?.classList.contains('bad'));
     expect(await text('#printer-pill')).toContain('Reconnecting');
-    await sleep(500); // the first attempt failed: now waiting 5 s for the next
+    // The first attempt fails (after ~3 s looking for a late connect): now
+    // waiting 5 s for the next.
+    await sleep(3500);
     await page.evaluate(() => {
       (window as unknown as { __off: boolean }).__off = false;
     });
@@ -244,6 +260,24 @@ describe.skipIf(!CHROME)('booth in a real browser', () => {
     });
     expect(await pillBad()).toBe(false);
     expect(await visible('#countdown')).toBe(false); // the tap didn't start a photo
+  });
+
+  it('prints the sticker anyway when the link drops mid-print', async () => {
+    await page.mouse.click(640, 200);
+    await page.waitForSelector('#review:not([hidden])', { timeout: 20_000 });
+    const before = await page.evaluate(() => {
+      const w = window as unknown as { __written: number; __dropAfter: number };
+      w.__dropAfter = 20; // a few bands in
+      return w.__written;
+    });
+    await page.click('#print');
+    await page.waitForFunction(() => document.getElementById('print-title')?.textContent === 'Geprint!', {
+      timeout: 30_000,
+    });
+    const written = await page.evaluate(() => (window as unknown as { __written: number }).__written);
+    expect(written - before).toBeGreaterThan(20_000); // a whole sticker after the partial one
+    await page.click('#done');
+    await page.waitForSelector('#booth:not([hidden])');
   });
 
   it('reconnects a printer the browser forgot after a reload with one tap on the pill', async () => {
@@ -271,7 +305,9 @@ describe.skipIf(!CHROME)('booth in a real browser', () => {
 
     await page.goto(`${base}/settings.html`);
     await page.waitForSelector('#panels:not([hidden])');
-    await page.waitForFunction(() => document.getElementById('local-photos')?.textContent?.includes('1 photos'));
+    await page.waitForFunction(() =>
+      document.getElementById('local-photos')?.textContent?.match(/: [1-9][0-9]* photos/)
+    );
     await page.type('#setup-link', link);
     await page.click('#use-setup-link');
     await page.waitForFunction(() => document.getElementById('import-status')?.textContent?.includes('now set up'));

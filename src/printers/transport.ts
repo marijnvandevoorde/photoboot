@@ -146,7 +146,16 @@ export const webBluetooth: BleTransport = {
     }
     listeners.set(device, onDisconnect);
     if (unseen.has(id)) await seenNearby(device);
-    await device.gatt.connect();
+    try {
+      await device.gatt.connect();
+    } catch (err) {
+      // macOS: Chrome gives up after ~15 s ("Connection attempt failed")
+      // while the link is still coming up, and then it does. Tearing it
+      // down and starting over loses every slow connect, so look again.
+      const gatt = device.gatt;
+      for (let i = 0; i < 15 && !gatt.connected; i++) await new Promise((r) => setTimeout(r, 200));
+      if (!gatt.connected) throw err;
+    }
   },
 
   isConnected({ id }) {

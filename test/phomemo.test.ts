@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { restorePrinter, savedPrinter } from '../src/printers/index.ts';
 import { PHOMEMO_UUIDS, PhomemoPrinter } from '../src/printers/phomemo.ts';
 import type { BleDevice, BleTransport, WriteTarget } from '../src/printers/transport.ts';
@@ -102,6 +102,74 @@ describe('PhomemoPrinter', () => {
     expect(printer.connected).toBe(false);
     await printer.reconnect();
     expect(printer.connected).toBe(true);
+  });
+
+  it('sends the battery query as a keepalive', async () => {
+    const { transport, writes } = fakeTransport();
+    const printer = new PhomemoPrinter({ transport });
+    await printer.connect();
+    await printer.keepAlive();
+    expect(bytes(writes)).toEqual([0x1f, 0x11, 0x08]);
+  });
+
+  it('never overlaps two writes on the link', async () => {
+    const { transport } = fakeTransport();
+    let inFlight = 0;
+    let overlapped = false;
+    transport.write = async () => {
+      inFlight++;
+      overlapped ||= inFlight > 1;
+      await new Promise((r) => setTimeout(r, 1));
+      inFlight--;
+    };
+    const printer = new PhomemoPrinter({ transport });
+    await printer.connect();
+    await Promise.all([printer.printRaster(new Uint8Array(2 * 300), 16, 300), printer.keepAlive(), printer.feed()]);
+    expect(overlapped).toBe(false);
+  });
+
+  it("doesn't count a link without a write channel as connected, and drops it", async () => {
+    const services = [PHOMEMO_UUIDS[1].service];
+    const { transport } = fakeTransport({ services });
+    const printer = new PhomemoPrinter({ transport });
+    await printer.connect();
+    services.length = 0; // service discovery comes back empty this time
+    await printer.reset();
+    await expect(printer.reconnect()).rejects.toThrow(/No known Phomemo service/);
+    expect(printer.connected).toBe(false);
+    expect(transport.isConnected({ id: 'dev-1', name: '' })).toBe(false);
+  });
+
+  describe('with a stuck link', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it('gives up on a connect that never finishes and leaves it disconnected', async () => {
+      const { transport } = fakeTransport();
+      const disconnect = vi.spyOn(transport, 'disconnect');
+      transport.connect = () => new Promise(() => {});
+      const attempt = expect(new PhomemoPrinter({ transport }).connect()).rejects.toThrow(/did not answer/);
+      await vi.advanceTimersByTimeAsync(20_000);
+      await attempt;
+      expect(disconnect).toHaveBeenCalled();
+    });
+
+    it('resets the link when a write hangs, so a reconnect starts clean', async () => {
+      const { transport } = fakeTransport();
+      const printer = new PhomemoPrinter({ transport });
+      await printer.connect();
+      const write = transport.write;
+      transport.write = () => new Promise(() => {});
+      const attempt = expect(printer.feed()).rejects.toThrow(/stopped answering/);
+      await vi.advanceTimersByTimeAsync(5_000);
+      await attempt;
+      expect(printer.connected).toBe(false);
+
+      transport.write = write;
+      await printer.reconnect();
+      await printer.feed(); // the queue isn't stuck behind the failed write
+      expect(printer.connected).toBe(true);
+    });
   });
 });
 

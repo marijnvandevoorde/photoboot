@@ -61,6 +61,9 @@ a fourth candidate.
 - Init: `1B 40` (ESC @ — reset) then `1F 11 02 nn` = density
   (1 thin, 3 normal, 4 thick). Do NOT probe other `1F 11 xx` opcodes —
   unknown ones have bricked M02-family printers.
+- Keepalive: `1F 11 08` (battery query; Phomemo's app and phomemo-tools
+  send it with every print). The booth sends it every 20 s while idle; the
+  reply (`1A 04 <level>`, on the notify characteristic) isn't read.
 - "HD" in the Phomemo app = native 300 dpi; we already print at native res.
 - Raster: `GS v 0` = `1D 76 30 00 xL xH yL yH <bitmap>` where `xL/xH` is
   width in **bytes** (little-endian uint16) and `yL/yH` is height in
@@ -94,9 +97,15 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
      `navigator.bluetooth.getDevices()` + watchAdvertisements on the web,
      `BleClient.getDevices` in the app). If that fails (e.g. Bluefy has no
      getDevices) the pill shows "Reconnecting…" and lastError tells the host.
+     Printer link: connects and writes have timeouts (a hung GATT call
+     otherwise stalls everything), a failed write resets the link, writes
+     are serialised, an idle keepalive finds dead links early, and the
+     reconnect loop retries every 5 s — a tap on the red pill, the page
+     becoming visible, or the host menu's Reconnect retries at once.
      Host access: long-press the "Photoboot" title (~1 s) → settings;
      long-press the top-left corner of the camera view (2 s) → host menu
-     (settings, connect/change printer, stop booth = clear the lock). Both
+     (settings, reconnect / connect / change printer, stop booth = clear
+     the lock). Both
      ask for the PIN in the booth when one is set (then set the
      sessionStorage `photoboot:admin-ok` flag so settings don't ask again;
      the booth clears it on load). `/?admin=1` → settings' own gate.

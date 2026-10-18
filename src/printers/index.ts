@@ -99,7 +99,10 @@ async function pickAnyDevice(): Promise<BleDevice> {
 // Open a printer by family id, by `opts.model` (picked in settings), or
 // 'auto' for name-based detection. Returns a connected PrinterBase.
 export async function connectPrinter(type: string, opts: PrinterOptions = {}): Promise<PrinterBase> {
-  const family = opts.model?.family ?? (type && type !== 'auto' ? type : null);
+  const family =
+    opts.model?.family ??
+    (type && type !== 'auto' ? type : null) ??
+    (opts.deviceName ? detectType({ id: '', name: opts.deviceName }) : null);
   if (family) {
     const spec = PRINTERS[family];
     if (!spec) throw new Error(`Unknown printer type: ${family}`);

@@ -61,11 +61,14 @@ function fakeBluetooth() {
   };
   Object.defineProperty(navigator, 'bluetooth', {
     value: {
-      requestDevice: async () => {
+      requestDevice: async (options: unknown) => {
         w.__picked++;
+        (w as unknown as { __pickedWith: unknown }).__pickedWith = options;
         return device;
       },
-      getDevices: async () => [device],
+      // `fake:forget` in localStorage: the browser lost the permission, as
+      // Chrome does without its Bluetooth permissions flag.
+      getDevices: async () => (localStorage.getItem('fake:forget') ? [] : [device]),
     },
   });
 }
@@ -241,6 +244,24 @@ describe.skipIf(!CHROME)('booth in a real browser', () => {
     });
     expect(await pillBad()).toBe(false);
     expect(await visible('#countdown')).toBe(false); // the tap didn't start a photo
+  });
+
+  it('reconnects a printer the browser forgot after a reload with one tap on the pill', async () => {
+    await page.evaluate(() => localStorage.setItem('fake:forget', '1'));
+    await page.reload();
+    await page.waitForFunction(() =>
+      document.getElementById('printer-pill')?.textContent?.includes('tap to reconnect')
+    );
+    expect(await page.$eval('#printer-pill', (p) => p.classList.contains('bad'))).toBe(true);
+    // Tap the right end: the host hatch covers the left.
+    const box = await (await page.$('#printer-pill'))?.boundingBox();
+    if (!box) throw new Error('no pill');
+    await page.mouse.click(box.x + box.width - 10, box.y + box.height / 2);
+    await page.waitForFunction(() => !document.getElementById('printer-pill')?.classList.contains('bad'));
+    const pickedWith = await page.evaluate(() => (window as unknown as { __pickedWith: unknown }).__pickedWith);
+    expect(pickedWith).toMatchObject({ filters: [{ namePrefix: 'P2S-fake' }] });
+    expect(await visible('#countdown')).toBe(false); // the tap didn't start a photo
+    await page.evaluate(() => localStorage.removeItem('fake:forget'));
   });
 
   it('joins an event from its setup link, saves its setup, and a second device gets it', async () => {

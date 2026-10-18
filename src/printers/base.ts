@@ -26,6 +26,9 @@ export interface PrinterOptions {
   transport?: BleTransport;
   // The model the host picked in settings: wins over the device name.
   model?: PrinterModel | null;
+  // Only offer devices with this name in the picker: the printer used
+  // before, found again.
+  deviceName?: string;
 }
 
 export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -60,6 +63,7 @@ export abstract class PrinterBase {
   // any name, like generic receipt printers).
   protected anyName = false;
   private readonly chosenModel: PrinterModel | null;
+  private readonly deviceName: string | undefined;
   private waiters: { match: (data: Uint8Array) => boolean; resolve: (data: Uint8Array) => void }[] = [];
   // Printable width of the head in dots, from the model once connected.
   // The booth fits its stickers to this.
@@ -72,7 +76,9 @@ export abstract class PrinterBase {
     onDisconnect = () => {},
     transport: ble = transport(),
     model = null,
+    deviceName,
   }: PrinterOptions = {}) {
+    this.deviceName = deviceName;
     this.onLog = onLog;
     this.onDisconnect = onDisconnect;
     this.ble = ble;
@@ -94,7 +100,11 @@ export abstract class PrinterBase {
     if (!this.ble.available) throw new Error('Bluetooth is not available here.');
     this.log('Requesting device…');
     const device = await this.ble.requestDevice({
-      namePrefixes: this.anyName || this.chosenModel?.anyName ? [] : this.namePrefixes,
+      namePrefixes: this.deviceName
+        ? [this.deviceName]
+        : this.anyName || this.chosenModel?.anyName
+          ? []
+          : this.namePrefixes,
       services: [...new Set(this.channels.map((c) => c.service))],
     });
     this.log(`Selected: ${device.name || device.id}`);

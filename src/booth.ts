@@ -39,6 +39,8 @@ const video = $<HTMLVideoElement>('video');
 const STICKER_MARGIN_DOTS = 24; // unprintable strip each side, for the preview
 const RECONNECT_INTERVAL_MS = 5_000;
 const RECONNECT_ON_PRINT_MS = 8_000;
+const RECONNECT_WAIT_MS = 30_000; // host menu's Reconnect
+const KEEPALIVE_MS = 20_000;
 const CAMERA_RETRY_MS = 5_000;
 const ATTRACT_SLIDE_MS = 4_000;
 const HOST_MENU_TIMEOUT_MS = 60_000;
@@ -107,10 +109,6 @@ function toast(msg: string, ms = 2500) {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([promise, sleep(ms).then(() => Promise.reject(new Error('timed out')))]);
-}
 
 for (const el of document.querySelectorAll<HTMLElement>('[data-t]')) el.textContent = t(el.dataset.t ?? '');
 document.documentElement.lang = config.language || 'en';
@@ -239,9 +237,14 @@ function askHost(next: () => void) {
 
 function showHostMenu() {
   const offline = missingPrinter || (printer && !printer.connected);
-  hostHint(offline ? "The printer isn't connected. Turn it on: the booth keeps trying. Or connect it again here." : '');
+  hostHint(
+    offline
+      ? "The printer isn't connected. Turn it on: the booth keeps trying. Stuck? Switch it off and on, then Reconnect."
+      : ''
+  );
   $('host-printer').textContent = printer ? 'Change printer' : 'Connect printer';
   $<HTMLButtonElement>('host-printer').hidden = !transport().available;
+  $<HTMLButtonElement>('host-reconnect').hidden = !printer;
   openHost('menu');
 }
 
@@ -288,6 +291,29 @@ $<HTMLButtonElement>('host-printer').addEventListener('click', async (e) => {
   }
 });
 
+// Start over with the same printer: drop the link and connect again now,
+// without the picker. For a printer that looks connected but won't print.
+$<HTMLButtonElement>('host-reconnect').addEventListener('click', async (e) => {
+  e.stopPropagation();
+  armHostTimeout();
+  const p = printer;
+  if (!p) return;
+  const btn = $<HTMLButtonElement>('host-reconnect');
+  btn.disabled = true;
+  hostHint('Reconnecting…');
+  try {
+    await p.reset();
+    reconnectNow();
+    await waitConnected(p, RECONNECT_WAIT_MS);
+    hostHint(`Connected to ${p.device?.name || 'the printer'}.`);
+  } catch {
+    hostHint('No answer yet. Is the printer on and close by? The booth keeps trying; or switch it off and on.');
+  } finally {
+    btn.disabled = false;
+    armHostTimeout();
+  }
+});
+
 // ---------- printer ----------
 
 function setPill() {
@@ -308,8 +334,11 @@ function setPill() {
 }
 
 // After an unexpected disconnect, keep trying the same printer. There is
-// deliberately no way to pick a different one once connected.
+// deliberately no way to pick a different one once connected. Each attempt
+// is bounded (see PhomemoPrinter.attach), so the loop can't get stuck.
 let reconnecting = false;
+let wake: (() => void) | null = null;
+
 async function reconnectLoop() {
   if (reconnecting) return;
   reconnecting = true;
@@ -317,13 +346,68 @@ async function reconnectLoop() {
   while (printer && !printer.connected) {
     try {
       await printer.reconnect();
-    } catch {
-      await sleep(RECONNECT_INTERVAL_MS);
+    } catch (err) {
+      console.warn('Printer reconnect failed', err);
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, RECONNECT_INTERVAL_MS);
+        wake = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+      });
+      wake = null;
     }
   }
   reconnecting = false;
   setPill();
 }
+
+// Try now instead of after the pause between attempts.
+function reconnectNow() {
+  wake?.();
+  reconnectLoop();
+}
+
+async function waitConnected(p: PrinterBase, ms: number) {
+  const end = Date.now() + ms;
+  while (!p.connected) {
+    if (Date.now() > end) throw new Error('The printer did not reconnect.');
+    await sleep(250);
+  }
+}
+
+// Send a keepalive while idle: it keeps the link busy for printers that
+// drop quiet ones, and finds a dead link (one the stack still reports as
+// up) before a guest's print does.
+async function keepAlive() {
+  if (!printer?.connected || busy || reconnecting) return;
+  try {
+    await printer.keepAlive();
+  } catch (err) {
+    console.warn('Printer keepalive failed', err);
+    setStatus({ lastError: `Printer: ${errorMessage(err)}` });
+    reconnectLoop();
+  }
+}
+setInterval(keepAlive, KEEPALIVE_MS);
+
+// Back from a locked screen or another app: the link may have gone while
+// timers were throttled. Check it, or start reconnecting straight away.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || !printer) return;
+  if (printer.connected) keepAlive();
+  else reconnectNow();
+});
+
+// The red pill: a tap retries now (harmless for guests: same printer, no
+// picker). The hatch over its left end gets that tap.
+function pillTap(e: Event) {
+  if (!printer || printer.connected) return;
+  e.stopPropagation(); // not a shutter tap
+  reconnectNow();
+}
+$('printer-pill').addEventListener('click', pillTap);
+$('admin-hatch').addEventListener('click', pillTap);
 
 // Opens the system picker: call straight from a tap.
 function pickPrinter(onLog: (msg: string) => void): Promise<PrinterBase> {
@@ -1023,7 +1107,9 @@ async function doPrint() {
   try {
     printOverlay(t('printing'), t('grabSticker'));
     if (!printer.connected) {
-      await withTimeout(printer.reconnect(), RECONNECT_ON_PRINT_MS);
+      // Through the loop, so there's only ever one connect in flight.
+      reconnectNow();
+      await waitConnected(printer, RECONNECT_ON_PRINT_MS);
       setPill();
     }
     await printPhoto(printer, raster, { copies });

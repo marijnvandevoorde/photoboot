@@ -40,22 +40,46 @@ export interface BleTransport {
 const webDevices = new Map<string, BluetoothDevice>();
 const listeners = new WeakMap<BluetoothDevice, () => void>();
 const chars = new Map<string, BluetoothRemoteGATTCharacteristic>();
+// Devices from getDevices() that haven't advertised since: see seenNearby.
+const unseen = new Set<string>();
 const ADVERTISEMENT_WAIT_MS = 10_000;
+
+// Rejects after `ms`. The BLE stacks can leave a connect or write pending
+// forever (Chrome's gatt.connect() has no timeout of its own), which would
+// stall the reconnect loop and every print after it.
+export function withTimeout<T>(promise: Promise<T>, ms: number, message = 'timed out'): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
 // Chrome only connects to a device from getDevices() once it has seen it
 // advertise, so watch for one (briefly: the printer may be switched off).
+// Until it has, every connect watches again: a printer that was off at
+// restore is picked up as soon as it's switched on.
 function seenNearby(device: BluetoothDevice, ms = ADVERTISEMENT_WAIT_MS): Promise<void> {
   if (typeof device.watchAdvertisements !== 'function') return Promise.resolve();
+  unseen.add(device.id);
   const abort = new AbortController();
   return new Promise<void>((resolve) => {
-    const done = () => {
+    const stop = () => {
       clearTimeout(timer);
+      device.removeEventListener('advertisementreceived', seen);
       abort.abort();
       resolve();
     };
-    const timer = setTimeout(done, ms);
-    device.addEventListener('advertisementreceived', done, { once: true });
-    device.watchAdvertisements({ signal: abort.signal }).catch(done);
+    const seen = () => {
+      unseen.delete(device.id);
+      stop();
+    };
+    const timer = setTimeout(stop, ms);
+    device.addEventListener('advertisementreceived', seen);
+    // Can't watch here (no permission): waiting again won't help.
+    device.watchAdvertisements({ signal: abort.signal }).catch(() => {
+      if (!abort.signal.aborted) seen();
+    });
   });
 }
 
@@ -93,6 +117,7 @@ export const webBluetooth: BleTransport = {
       device.addEventListener('gattserverdisconnected', handler);
     }
     listeners.set(device, onDisconnect);
+    if (unseen.has(id)) await seenNearby(device);
     await device.gatt.connect();
   },
 

@@ -76,7 +76,8 @@ Settings live on a hidden page, grouped for hosts (Tonight, Event, What
 guests see, Printer & paper, Photos, Security, Advanced) with a short
 explanation under every setting. To get there: long-press the “Photoboot”
 title on the start screen, or long-press the top-left corner of the camera
-view for 2 s for the host menu (settings, change printer, stop booth). Both
+view for 2 s for the host menu (settings, reconnect or change printer, stop
+booth). A tap on the red “Reconnecting…” pill retries the printer at once. Both
 ask for the PIN when one is set; `/?admin=1` opens settings behind the same
 PIN. **Stop booth** (host menu or Settings → Security) brings back the
 start screen.

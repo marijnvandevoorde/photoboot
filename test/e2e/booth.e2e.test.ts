@@ -19,10 +19,13 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // Runs in the page before any script: a Phomemo that counts the bytes it gets
 // and how often the picker opened. getDevices() hands back the same printer
 // on a later load, like Chrome does for a device the site picked before.
+// __drop() cuts the link; with __off set it won't connect.
 function fakeBluetooth() {
-  const w = window as unknown as { __written: number; __picked: number };
+  const w = window as unknown as { __written: number; __picked: number; __off: boolean; __drop: () => void };
   w.__written = 0;
   w.__picked = 0;
+  w.__off = false;
+  const listeners: (() => void)[] = [];
   const char = {
     properties: { write: true, writeWithoutResponse: true },
     writeValueWithResponse: async (c: ArrayBufferView) => {
@@ -35,6 +38,7 @@ function fakeBluetooth() {
   const gatt = {
     connected: false,
     async connect() {
+      if (w.__off) throw new Error('Connection attempt failed.');
       gatt.connected = true;
       return gatt;
     },
@@ -43,7 +47,18 @@ function fakeBluetooth() {
       gatt.connected = false;
     },
   };
-  const device = { id: 'fake', name: 'P2S-fake', gatt, addEventListener() {} };
+  const device = {
+    id: 'fake',
+    name: 'P2S-fake',
+    gatt,
+    addEventListener: (type: string, fn: () => void) => {
+      if (type === 'gattserverdisconnected') listeners.push(fn);
+    },
+  };
+  w.__drop = () => {
+    gatt.connected = false;
+    for (const fn of listeners) fn();
+  };
   Object.defineProperty(navigator, 'bluetooth', {
     value: {
       requestDevice: async () => {
@@ -205,6 +220,27 @@ describe.skipIf(!CHROME)('booth in a real browser', () => {
     await page.waitForFunction(() => document.getElementById('printer-pill')?.textContent?.includes('P2S-fake'));
     expect(await page.evaluate(() => (window as unknown as { __picked: number }).__picked)).toBe(0);
     expect(await page.$eval('#printer-pill', (p) => p.classList.contains('bad'))).toBe(false);
+  });
+
+  it('reconnects by itself after a dropout, and right away on a tap of the pill', async () => {
+    const pillBad = () => page.$eval('#printer-pill', (p) => p.classList.contains('bad'));
+    await page.evaluate(() => {
+      const w = window as unknown as { __off: boolean; __drop: () => void };
+      w.__off = true;
+      w.__drop();
+    });
+    await page.waitForFunction(() => document.getElementById('printer-pill')?.classList.contains('bad'));
+    expect(await text('#printer-pill')).toContain('Reconnecting');
+    await sleep(500); // the first attempt failed: now waiting 5 s for the next
+    await page.evaluate(() => {
+      (window as unknown as { __off: boolean }).__off = false;
+    });
+    await page.click('#printer-pill');
+    await page.waitForFunction(() => !document.getElementById('printer-pill')?.classList.contains('bad'), {
+      timeout: 2000,
+    });
+    expect(await pillBad()).toBe(false);
+    expect(await visible('#countdown')).toBe(false); // the tap didn't start a photo
   });
 
   it('joins an event from its setup link, saves its setup, and a second device gets it', async () => {

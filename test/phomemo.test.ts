@@ -150,7 +150,7 @@ describe('PhomemoPrinter', () => {
       const disconnect = vi.spyOn(transport, 'disconnect');
       transport.connect = () => new Promise(() => {});
       const attempt = expect(new PhomemoPrinter({ transport }).connect()).rejects.toThrow(/did not answer/);
-      await vi.advanceTimersByTimeAsync(20_000);
+      await vi.advanceTimersByTimeAsync(30_000);
       await attempt;
       expect(disconnect).toHaveBeenCalled();
     });

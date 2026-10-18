@@ -39,7 +39,9 @@ const video = $<HTMLVideoElement>('video');
 
 const STICKER_MARGIN_DOTS = 24; // unprintable strip each side, for the preview
 const RECONNECT_INTERVAL_MS = 5_000;
-const RECONNECT_ON_PRINT_MS = 8_000;
+// A guest's print waits this long for the printer to come back: a Mac can
+// take 15 s or more to connect.
+const RECONNECT_ON_PRINT_MS = 30_000;
 const RECONNECT_WAIT_MS = 30_000; // host menu's Reconnect
 const KEEPALIVE_MS = 20_000;
 const CAMERA_RETRY_MS = 5_000;
@@ -1146,17 +1148,32 @@ async function doPrint() {
   setActionsEnabled(false);
   clearTimeout(reviewTimer);
   const copies = Math.max(1, config.copies | 0);
+  const p = printer;
+  // Make sure the printer is there: through the loop, so there's only ever
+  // one connect in flight.
+  const ensureConnected = async () => {
+    if (p.connected) return;
+    printOverlay(t('connectingPrinter'), t('oneMoment'));
+    reconnectNow();
+    await waitConnected(p, RECONNECT_ON_PRINT_MS);
+    setPill();
+  };
   try {
+    await ensureConnected();
     printOverlay(t('printing'), t('grabSticker'));
-    if (!printer.connected) {
-      // Through the loop, so there's only ever one connect in flight.
-      reconnectNow();
-      await waitConnected(printer, RECONNECT_ON_PRINT_MS);
-      setPill();
+    try {
+      await printPhoto(p, raster, { copies });
+    } catch (err) {
+      // The link dropped mid-print: reconnect and print it once more. Half a
+      // sticker and a whole one beat none.
+      if (p.connected) throw err;
+      console.warn('Print interrupted, retrying', err);
+      await ensureConnected();
+      printOverlay(t('printing'), t('grabSticker'));
+      await printPhoto(p, raster, { copies });
     }
-    await printPhoto(printer, raster, { copies });
     current.prints++;
-    record('print', { heightDots: raster.heightDots + tearDots(printer), copies });
+    record('print', { heightDots: raster.heightDots + tearDots(p), copies });
     syncStats();
     printOverlay(t('printed'), t('grabSticker'), false);
     await sleep(1800);
@@ -1167,7 +1184,7 @@ async function doPrint() {
     record('printFail');
     setStatus({ lastError: `Print: ${errorMessage(err)}` });
     $('print-overlay').hidden = true;
-    toast(printer.connected ? t('printFailed') : t('printerOffline'), 6000);
+    toast(p.connected ? t('printFailed') : t('printerOffline'), 6000);
     armReviewTimeout();
     reconnectLoop();
   } finally {

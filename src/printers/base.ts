@@ -34,8 +34,8 @@ export interface PrinterOptions {
 export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 // Covers waiting for a restored device's advertisement (10 s) plus the
-// connect and any handshake.
-const CONNECT_TIMEOUT_MS = 20_000;
+// connect (on a Mac often 15 s) and any handshake.
+const CONNECT_TIMEOUT_MS = 30_000;
 // One write of a chunk; a healthy link takes milliseconds.
 const WRITE_TIMEOUT_MS = 5_000;
 

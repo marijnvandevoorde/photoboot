@@ -76,6 +76,30 @@ a fourth candidate.
 `writeValueWithResponse` when the characteristic supports it, otherwise
 fall back to `writeValueWithoutResponse`.
 
+## Other printer families (2026-10, untested on hardware)
+
+Implemented from open-source drivers; each file's header names its
+sources. Only the Phomemo P2S has been printed on (`verified` in
+models.ts). Things that bite:
+
+- **Service UUIDs collide** across families (`ff00`, `ae30`, `e7810a71…`
+  are each used by 3+ protocols), so the driver is picked by Bluetooth name
+  (models.ts, longest prefix wins), never by service.
+- **Cat printers** (`cat.ts`, 51 78 framing, CRC-8 poly 0x07 over the
+  payload) and **MXW01** (`mxw01.ts`, 22 21 framing, image on AE03) send
+  rows **LSB-first**; everything else is MSB-first. Cat printers pause the
+  stream via notify AE02 (`ae 01 … 10` pause / `… 00` go on).
+- **LuckPrinter SDK** (`luck.ts`): LuckJingle, Action's Crafts & Co 3128
+  and Fichero pocket printer, Lidl, PeriPage, Marklife P50. GS v 0 wrapped
+  in `10 FF` commands; the enable/stop pair differs per firmware
+  (`variant`: lujiang `F1 03`, marklife `F1 02`, aiyin `FE 01`) and the
+  wrong one makes it accept data and never print.
+- **Niimbot** (`niimbot.ts`) and **MXW01** wait for replies (base
+  `request`); Niimbot B1 and B21 differ in start / page-size commands.
+- Narrow label makers (12 mm, printing sideways) are deliberately left out.
+- **Tear margin**: per model `tearMm` (blank rows, since feed commands
+  aren't honoured everywhere); label printers 0, they advance to the gap.
+
 ## What's in the repo
 
 README.md has the user-facing feature list; this is the code map.
@@ -169,10 +193,17 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
 - `src/effects.ts` — woodcut, stipple, mirror, big head. 16 more effects
   were tried in a "filter lab" and dropped; they're in commit 8b32a21.
 - `src/printers/` — printer abstraction: `transport.ts` (BleTransport —
-  Web Bluetooth today, a native plugin in the app), `base.ts`,
-  `phomemo.ts`, registry + auto-detect + `restorePrinter` (adopt a saved
-  device, connect via `reconnect`) in `index.ts`. `src/printer.ts` is a
-  compat shim.
+  Web Bluetooth, or the native plugin in the app; write + notify + an
+  optional bulk data characteristic), `base.ts` (connect with timeout,
+  serialised paced writes, reset on failure, `request` = write + wait for a
+  notification), `models.ts` (every model: name prefixes, dpi, head and
+  default width, tear margin, protocol variant), one driver per family
+  (`phomemo`, `cat`, `mxw01`, `luck`, `paperang`, `niimbot`, `escpos`),
+  registry + auto-detect + `restorePrinter` in `index.ts`.
+  `src/printer.ts` is a compat shim.
+  Settings → Printer & paper lists the models; picking one (or the booth
+  connecting one, `fitToPrinter`) sets `dotsPerMm` and, while
+  `paperWidthAuto`, `paperWidthDots`. `tearMm` 0 = the model's margin.
 - `src/raster.ts` — canvas → packed-bit bitmap (error diffusion, screens,
   tone options), `rasterToCanvas`, calibration generators.
 - `src/storage.ts` — tiny IndexedDB key/value store (template images,
@@ -244,16 +275,15 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
 
 ## Adding a new printer type
 
-1. Subclass `PrinterBase` in `src/printers/<brand>.ts`. Implement `connect`
-   (picker via `this.ble.requestDevice`), `attach`, `init`, `printRaster`,
-   `feed` for that brand's protocol, writing bytes through `this.ble` (the
-   BleTransport) — never navigator.bluetooth directly, so the app works too.
-   Add a fake-transport test like test/phomemo.test.ts.
-2. Register it in `src/printers/index.ts` under `PRINTERS`: label, hint,
-   `defaultWidthDots`, `headWidthDots`, `namePrefixes`, `uuids`, `create`.
-3. That's it — the settings dropdown picks it up, auto-detect routes to it
-   by name prefix, and the booth / preview / print pages see the same
-   `PrinterBase` interface.
+1. Same protocol as a family we have: add a model to
+   `src/printers/models.ts` (names, dpi, widths, `tearMm`, `variant`).
+2. New protocol: subclass `PrinterBase` in `src/printers/<family>.ts`:
+   `familyId`, `family`, `namePrefixes` (`familyNames(id)`), `channels`,
+   then `init`, `printRaster`, `feed` (and `keepAlive`, `ready`,
+   `received`, `pace` if needed). Write through `this.write` /
+   `this.request`, never navigator.bluetooth, so the app works too.
+   Register it in `src/printers/index.ts` with its services, add its models,
+   and a fake-printer test like test/printers.test.ts.
 
 ## Config (env)
 

@@ -7,7 +7,7 @@
 import './platform.ts';
 import qrcode from 'qrcode-generator';
 import { recentPhotos, savePhoto } from './archive.ts';
-import { getConfig } from './config.ts';
+import { getConfig, setConfig } from './config.ts';
 import { $, ctx2d, errorMessage } from './dom.ts';
 import { translator } from './i18n.ts';
 import type { KioskState } from './kiosk.ts';
@@ -16,16 +16,17 @@ import {
   PHOTO_STYLES,
   PHOTO_TWISTS,
   PLAIN_LOOK,
-  PRINT_EXTRA_DOTS,
   photoToRaster,
   printPhoto,
   renderColour,
   renderSticker,
+  tearDots,
 } from './photo.ts';
 import { apiBase, keepScreenOn } from './platform.ts';
 import type { PrinterBase } from './printers/base.ts';
 import type { SavedPrinter } from './printers/index.ts';
 import { connectPrinter, restorePrinter, savedPrinter } from './printers/index.ts';
+import { modelById, modelForName, settingsFor } from './printers/models.ts';
 import { transport } from './printers/transport.ts';
 import { rasterToCanvas } from './raster.ts';
 import { deviceId, remote } from './remote.ts';
@@ -282,6 +283,7 @@ $<HTMLButtonElement>('host-printer').addEventListener('click', async (e) => {
     if (printer && printer.device?.id !== p.device?.id) printer.disconnect().catch(() => {});
     printer = p;
     missingPrinter = null;
+    fitToPrinter(p);
     lockKiosk(savedPrinter(p, config.printerType));
     setStatus({ lastError: '' });
     setPill();
@@ -316,6 +318,16 @@ $<HTMLButtonElement>('host-reconnect').addEventListener('click', async (e) => {
 
 // ---------- printer ----------
 
+// Fit the booth to the printer it's connected to: its resolution, and its
+// width unless the host chose one by hand.
+function fitToPrinter(p: PrinterBase) {
+  const model = modelById(config.printerModel) ?? modelForName(p.device?.name ?? '');
+  if (!model) return;
+  const updates = settingsFor(model, config);
+  if (Object.entries(updates).every(([key, value]) => config[key as keyof typeof updates] === value)) return;
+  Object.assign(config, setConfig(updates));
+}
+
 function setPill() {
   const pill = $<HTMLButtonElement>('printer-pill');
   if (!printer && !missingPrinter) {
@@ -346,6 +358,7 @@ async function reconnectLoop() {
   while (printer && !printer.connected) {
     try {
       await printer.reconnect();
+      fitToPrinter(printer);
     } catch (err) {
       console.warn('Printer reconnect failed', err);
       await new Promise<void>((resolve) => {
@@ -411,7 +424,11 @@ $('admin-hatch').addEventListener('click', pillTap);
 
 // Opens the system picker: call straight from a tap.
 function pickPrinter(onLog: (msg: string) => void): Promise<PrinterBase> {
-  return connectPrinter(config.printerType, { onLog, onDisconnect: () => reconnectLoop() });
+  return connectPrinter(config.printerType, {
+    onLog,
+    onDisconnect: () => reconnectLoop(),
+    model: modelById(config.printerModel),
+  });
 }
 
 const connectError = (err: unknown) =>
@@ -421,6 +438,7 @@ $<HTMLButtonElement>('connect').addEventListener('click', async () => {
   const status = $('setup-status');
   try {
     printer = await pickPrinter((msg) => (status.textContent = msg));
+    fitToPrinter(printer);
     lockKiosk(savedPrinter(printer, config.printerType));
     await startBooth();
   } catch (err) {
@@ -448,7 +466,8 @@ async function resumeBooth({ printer: saved }: KioskState) {
   missingPrinter = saved;
   const booth = startBooth();
   if (saved) {
-    const restored = await restorePrinter(saved, { onDisconnect: () => reconnectLoop() }).catch((err) => {
+    const options = { onDisconnect: () => reconnectLoop(), model: modelById(config.printerModel) };
+    const restored = await restorePrinter(saved, options).catch((err) => {
       console.warn('Printer restore failed', err);
       return null;
     });
@@ -1114,7 +1133,7 @@ async function doPrint() {
     }
     await printPhoto(printer, raster, { copies });
     current.prints++;
-    record('print', { heightDots: raster.heightDots + PRINT_EXTRA_DOTS, copies });
+    record('print', { heightDots: raster.heightDots + tearDots(printer), copies });
     syncStats();
     printOverlay(t('printed'), t('grabSticker'), false);
     await sleep(1800);

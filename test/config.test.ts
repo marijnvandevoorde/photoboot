@@ -24,6 +24,13 @@ describe('config', () => {
     expect(JSON.parse(localStorage.getItem('photoboot:config') ?? '{}').eventName).toBe('Party');
   });
 
+  it('keeps a width picked by hand before the width followed the printer', async () => {
+    localStorage.setItem('photoboot:config', JSON.stringify({ paperWidthDots: 384 }));
+    expect((await load()).getConfig().paperWidthAuto).toBe(false);
+    localStorage.setItem('photoboot:config', JSON.stringify({ paperWidthDots: 552 }));
+    expect((await load()).getConfig().paperWidthAuto).toBe(true);
+  });
+
   it('survives a corrupt stored config', async () => {
     localStorage.setItem('photoboot:config', '{nope');
     const { getConfig, DEFAULTS } = await load();

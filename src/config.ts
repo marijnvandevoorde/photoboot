@@ -20,7 +20,11 @@ export type LivePreview = 'off' | 'choice' | 'always';
 
 export interface Config {
   printerType: string;
+  printerModel: string;
   paperWidthDots: number;
+  paperWidthAuto: boolean;
+  dotsPerMm: number;
+  tearMm: number;
   printDensity: number;
   autoPrint: boolean;
   copies: number;
@@ -57,9 +61,20 @@ export interface Config {
 export const DEFAULTS: Config = {
   // Printer: 'auto' tries to recognise the device, else a known type id.
   printerType: 'auto',
+  // The printer model picked in settings (see printers/models.ts), '' =
+  // recognise it by its Bluetooth name.
+  printerModel: '',
   // Print width in dots. Must be a multiple of 8. 552 = Phomemo P2S booth default
   // (24-dot margins on 576-dot head); 384 = 32 mm; 288 = 24 mm paper.
   paperWidthDots: 552,
+  // Follow the printer: picking or connecting a model sets paperWidthDots.
+  // Choosing a width by hand turns this off.
+  paperWidthAuto: true,
+  // The printer's resolution, from its model: 11.8 at 300 dpi, 8 at 203.
+  dotsPerMm: 11.8,
+  // Blank paper after each sticker so it clears the tear edge, in mm.
+  // 0 = the printer model's own distance.
+  tearMm: 0,
   // Thermal print density: 1 (thin) / 3 (normal) / 4 (thick).
   printDensity: 4,
 
@@ -118,12 +133,22 @@ export const DEFAULTS: Config = {
 
 let cache: Config | null = null;
 
+// A config (or setup file) saved by an older version, brought up to date.
+export function upgradeConfig(stored: Partial<Config>): Partial<Config> {
+  // Saved before the width followed the printer: a width other than the old
+  // default was picked by hand, so keep it.
+  if (!('paperWidthAuto' in stored) && stored.paperWidthDots !== undefined) {
+    return { ...stored, paperWidthAuto: stored.paperWidthDots === DEFAULTS.paperWidthDots };
+  }
+  return stored;
+}
+
 function read(): Config {
   if (cache) return cache;
   let config: Config;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    config = raw ? { ...DEFAULTS, ...JSON.parse(raw) } : { ...DEFAULTS };
+    config = { ...DEFAULTS, ...upgradeConfig(raw ? JSON.parse(raw) : {}) };
   } catch {
     config = { ...DEFAULTS };
   }
@@ -162,7 +187,7 @@ export function resetConfig(): Config {
 
 // Keys that belong to this device, not to an event: left out of profiles,
 // exports and server events.
-export const DEVICE_KEYS = ['serverEvent', 'printerType'] as const;
+export const DEVICE_KEYS = ['serverEvent', 'printerType', 'printerModel', 'dotsPerMm', 'tearMm'] as const;
 export type PortableConfig = Omit<Config, (typeof DEVICE_KEYS)[number]>;
 
 export function portableConfig(config: Partial<Config> = read()): Partial<PortableConfig> {
@@ -183,14 +208,15 @@ export function eventKey(config: Pick<Config, 'serverEvent' | 'eventName'> = rea
   return slug || 'default';
 }
 
-// Common paper widths for Phomemo-class 300dpi printers. The booth exposes
-// these as a dropdown; the exact usable width still depends on the printer
+// Common print widths, in dots: the settings page shows them in mm for the
+// printer's resolution. The exact usable width still depends on the printer
 // head and sticker shape (see test.html calibration).
 export const PAPER_PRESETS = [
-  { dots: 552, label: '53 mm sticker (552 dots)', note: '50 mm sticker, 24-dot margins' },
-  { dots: 384, label: '32 mm (384 dots)', note: 'Narrow label paper' },
-  { dots: 288, label: '25 mm (288 dots)', note: 'Thin label paper' },
-  { dots: 576, label: 'Full width (576 dots)', note: 'Full head width, no margins' },
+  { dots: 552, label: '552 dots', note: '50 mm sticker at 300 dpi, 24-dot margins' },
+  { dots: 576, label: '576 dots', note: 'Full head width at 300 dpi, no margins' },
+  { dots: 384, label: '384 dots', note: 'Full width of a 203 dpi printer; 32 mm at 300 dpi' },
+  { dots: 288, label: '288 dots', note: 'Thin label paper' },
 ];
 
+// At 300 dpi. Paper lengths use the printer's own `dotsPerMm`.
 export const DOTS_PER_MM = 11.8;

@@ -347,6 +347,29 @@ describe.skipIf(!CHROME)('booth in a real browser', () => {
     await offer.close();
   });
 
+  it('sets the width from the printer picked in settings, until the host picks one', async () => {
+    const fresh = await browser.createBrowserContext();
+    const settings = await fresh.newPage();
+    settings.on('pageerror', (e) => errors.push(e instanceof Error ? e.message : String(e)));
+    await settings.goto(`${base}/settings.html`);
+    await settings.waitForSelector('#panels:not([hidden])');
+    const width = () =>
+      settings.evaluate(() => JSON.parse(localStorage.getItem('photoboot:config') ?? '{}').paperWidthDots);
+
+    await settings.select('#printer-model', 'cat-gb');
+    expect(await width()).toBe(384);
+    expect(await settings.$eval('#paper-preset', (s) => (s as HTMLSelectElement).value)).toBe('0');
+    expect(await settings.$eval('#printer-hint', (p) => p.textContent)).toContain('203 dpi');
+
+    await settings.select('#paper-preset', '288');
+    await settings.select('#printer-model', 'phomemo-p2s');
+    expect(await width()).toBe(288); // the host's choice sticks
+
+    await settings.select('#paper-preset', '0');
+    expect(await width()).toBe(552); // back to the printer's own width
+    await fresh.close();
+  });
+
   it('had no uncaught page errors', () => {
     expect(errors).toEqual([]);
   });

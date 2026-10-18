@@ -85,7 +85,7 @@ export function record(kind: 'session' | 'print' | 'share' | 'printFail', { heig
     const h = String(now.getHours());
     s.byHour[h] = (s.byHour[h] ?? 0) + 1;
   } else if (kind === 'print') {
-    const mm = (heightDots * copies) / DOTS_PER_MM;
+    const mm = (heightDots * copies) / (getConfig().dotsPerMm || DOTS_PER_MM);
     s.prints++;
     s.stickers += copies;
     s.printedMm += mm;

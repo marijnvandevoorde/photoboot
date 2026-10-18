@@ -391,6 +391,27 @@ function sharpen(gray: Float32Array, width: number, height: number, amount = 0.6
 }
 
 // Draw a packed raster back onto a canvas, for an on-screen print preview.
+// Scale a raster down to at most `maxWidth` dots (nearest neighbour), for a
+// sticker laid out wider than the printer's head. Unchanged when it fits.
+export function shrinkRaster(raster: Raster, maxWidth: number): Raster {
+  if (raster.widthDots <= maxWidth) return raster;
+  const widthDots = Math.floor(maxWidth / 8) * 8;
+  const scale = raster.widthDots / widthDots;
+  const heightDots = Math.max(1, Math.round(raster.heightDots / scale));
+  const srcRow = raster.widthDots / 8;
+  const rowBytes = widthDots / 8;
+  const bitmap = new Uint8Array(rowBytes * heightDots);
+  for (let y = 0; y < heightDots; y++) {
+    const sy = Math.min(raster.heightDots - 1, Math.floor(y * scale));
+    for (let x = 0; x < widthDots; x++) {
+      const sx = Math.min(raster.widthDots - 1, Math.floor(x * scale));
+      if (raster.bitmap[sy * srcRow + (sx >> 3)] & (0x80 >> (sx & 7)))
+        bitmap[y * rowBytes + (x >> 3)] |= 0x80 >> (x & 7);
+    }
+  }
+  return { bitmap, widthDots, heightDots };
+}
+
 export function rasterToCanvas({ bitmap, widthDots, heightDots }: Raster): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = widthDots;

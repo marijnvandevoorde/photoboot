@@ -28,6 +28,7 @@ function fakeTransport({ services = [PHOMEMO_UUIDS[1].service], known = ['dev-1'
     disconnect: async () => {
       connected = false;
     },
+    subscribe: async () => {},
   };
   const drop = () => {
     connected = false;
@@ -179,7 +180,7 @@ describe('restorePrinter', () => {
     const picked = new PhomemoPrinter({ transport });
     await picked.connect();
     const saved = savedPrinter(picked, 'auto');
-    expect(saved).toEqual({ id: 'dev-1', name: 'P2S-1234', type: 'auto' });
+    expect(saved).toEqual({ id: 'dev-1', name: 'P2S-1234', type: 'auto', model: 'phomemo-p2s' });
 
     const requestDevice = vi.spyOn(transport, 'requestDevice');
     const { transport: fresh } = fakeTransport(); // a new page load: nothing connected

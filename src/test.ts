@@ -1,6 +1,10 @@
 import './platform.ts';
+import { getConfig } from './config.ts';
 import { $, ctx2d, errorMessage } from './dom.ts';
-import { DEFAULT_PRINT_WIDTH_DOTS, PhomemoPrinter } from './printer.ts';
+import { DEFAULT_PRINT_WIDTH_DOTS } from './printer.ts';
+import type { PrinterBase } from './printers/base.ts';
+import { connectPrinter } from './printers/index.ts';
+import { modelById } from './printers/models.ts';
 import { transport } from './printers/transport.ts';
 import {
   canvasToRaster,
@@ -30,7 +34,13 @@ if (!transport().available) {
   $<HTMLButtonElement>('connect').disabled = true;
 }
 
-const printer = new PhomemoPrinter({ onLog: log });
+const config = getConfig();
+let connected: PrinterBase | null = null;
+// Every print button is disabled until Connect worked.
+function printer(): PrinterBase {
+  if (!connected) throw new Error('Connect the printer first.');
+  return connected;
+}
 
 function setConnectedUI(connected: boolean) {
   $<HTMLButtonElement>('connect').disabled = connected;
@@ -58,15 +68,15 @@ async function printCanvas(source: HTMLCanvasElement | HTMLImageElement, { fit =
   showPreview(sized);
   const { bitmap, widthDots, heightDots } = canvasToRaster(sized);
   log(`Rasterised: ${widthDots}×${heightDots} (${bitmap.length} bytes)`);
-  await printer.init();
-  await printer.printRaster(bitmap, widthDots, heightDots);
-  await printer.feed(80);
+  await printer().init();
+  await printer().printRaster(bitmap, widthDots, heightDots);
+  await printer().feed(80);
   log('Print job sent.');
 }
 
 $<HTMLButtonElement>('connect').addEventListener('click', async () => {
   try {
-    await printer.connect();
+    connected = await connectPrinter(config.printerType, { onLog: log, model: modelById(config.printerModel) });
     setConnectedUI(true);
   } catch (err) {
     log(`ERROR: ${errorMessage(err)}`);
@@ -74,7 +84,7 @@ $<HTMLButtonElement>('connect').addEventListener('click', async () => {
 });
 
 $<HTMLButtonElement>('disconnect').addEventListener('click', async () => {
-  await printer.disconnect();
+  await printer().disconnect();
   setConnectedUI(false);
 });
 
@@ -182,12 +192,12 @@ $<HTMLInputElement>('dither-file').addEventListener('change', async (e) => {
       const photoRaster = canvasToRaster(strip, { photo: true, dither, noise });
       const labelRaster = canvasToRaster(textToCanvas(label, { width: targetWidth, fontSize: 20, padding: 4 }));
       log(`Printing ${label}…`);
-      await printer.init({ density });
-      await printer.printRaster(labelRaster.bitmap, labelRaster.widthDots, labelRaster.heightDots);
-      await printer.printRaster(photoRaster.bitmap, photoRaster.widthDots, photoRaster.heightDots);
-      await printer.feed(24);
+      await printer().init({ density });
+      await printer().printRaster(labelRaster.bitmap, labelRaster.widthDots, labelRaster.heightDots);
+      await printer().printRaster(photoRaster.bitmap, photoRaster.widthDots, photoRaster.heightDots);
+      await printer().feed(24);
     }
-    await printer.feed(80);
+    await printer().feed(80);
     log('Dither comparison sent.');
   } catch (err) {
     log(`ERROR: ${errorMessage(err)}`);

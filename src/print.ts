@@ -1,9 +1,12 @@
 // Standalone page: pick a photo and print it with the booth's photo look.
 
 import './platform.ts';
+import { getConfig } from './config.ts';
 import { $, errorMessage } from './dom.ts';
 import { photoToRaster, printPhoto } from './photo.ts';
-import { PhomemoPrinter } from './printer.ts';
+import type { PrinterBase } from './printers/base.ts';
+import { connectPrinter } from './printers/index.ts';
+import { modelById } from './printers/models.ts';
 import { transport } from './printers/transport.ts';
 import { rasterToCanvas } from './raster.ts';
 import type { Raster } from './types.ts';
@@ -17,7 +20,8 @@ function log(msg: string) {
   el.scrollTop = el.scrollHeight;
 }
 
-const printer = new PhomemoPrinter({ onLog: log, onDisconnect: () => updateButtons() });
+const config = getConfig();
+let printer: PrinterBase | null = null;
 
 function selectedWidth() {
   return Number(document.querySelector<HTMLInputElement>('input[name="width"]:checked')?.value ?? 552);
@@ -26,8 +30,8 @@ function selectedWidth() {
 // The printer drops idle links (e.g. while the file picker is open), so
 // Print only needs a selected printer; the click handler reconnects.
 function updateButtons() {
-  $<HTMLButtonElement>('connect').disabled = printer.connected;
-  $<HTMLButtonElement>('print').disabled = !(printer.device && raster);
+  $<HTMLButtonElement>('connect').disabled = !!printer?.connected;
+  $<HTMLButtonElement>('print').disabled = !(printer?.device && raster);
 }
 
 function render() {
@@ -46,7 +50,11 @@ function render() {
 
 $<HTMLButtonElement>('connect').addEventListener('click', async () => {
   try {
-    await printer.connect();
+    printer = await connectPrinter(config.printerType, {
+      onLog: log,
+      onDisconnect: () => updateButtons(),
+      model: modelById(config.printerModel),
+    });
   } catch (err) {
     log(`ERROR: ${errorMessage(err)}`);
   }
@@ -78,7 +86,7 @@ for (const radio of document.querySelectorAll('input[name="width"]')) {
 $<HTMLButtonElement>('print').addEventListener('click', async () => {
   $<HTMLButtonElement>('print').disabled = true;
   try {
-    if (!raster) return;
+    if (!raster || !printer) return;
     if (!printer.connected) await printer.reconnect();
     log('Printing…');
     await printPhoto(printer, raster);

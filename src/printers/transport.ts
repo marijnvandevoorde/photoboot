@@ -10,14 +10,30 @@ export interface BleDevice {
   name: string;
 }
 
+// One way a printer family talks: where to write, and optionally where it
+// answers (status, flow control).
+export interface Channel {
+  service: string;
+  write: string;
+  notify?: string;
+  // A second write characteristic for bulk image data, where the printer
+  // has one (MXW01).
+  data?: string;
+  // Write without response even where with-response is offered: faster,
+  // for printers that pace through `notify` or need none.
+  noResponse?: boolean;
+}
+
 export interface WriteTarget {
   service: string;
   characteristic: string;
   withResponse: boolean;
+  notify?: string;
+  data?: string;
 }
 
 export interface DeviceFilter {
-  namePrefixes: string[];
+  namePrefixes: string[]; // none = any device
   services: string[]; // services the driver may need, for permission
 }
 
@@ -30,8 +46,16 @@ export interface BleTransport {
   connect(device: BleDevice, onDisconnect: () => void): Promise<void>;
   isConnected(device: BleDevice): boolean;
   // First of `candidates` the device offers, or null.
-  findWrite(device: BleDevice, candidates: { service: string; write: string }[]): Promise<WriteTarget | null>;
+  findWrite(device: BleDevice, candidates: Channel[]): Promise<WriteTarget | null>;
   write(device: BleDevice, target: WriteTarget, data: Uint8Array): Promise<void>;
+  // Deliver what the printer sends on `characteristic`. Again after every
+  // connect; the latest callback wins.
+  subscribe(
+    device: BleDevice,
+    service: string,
+    characteristic: string,
+    onData: (data: Uint8Array) => void
+  ): Promise<void>;
   disconnect(device: BleDevice): Promise<void>;
 }
 
@@ -40,6 +64,8 @@ export interface BleTransport {
 const webDevices = new Map<string, BluetoothDevice>();
 const listeners = new WeakMap<BluetoothDevice, () => void>();
 const chars = new Map<string, BluetoothRemoteGATTCharacteristic>();
+const notifyHandlers = new Map<string, (data: Uint8Array) => void>();
+const notifying = new WeakSet<BluetoothRemoteGATTCharacteristic>();
 // Devices from getDevices() that haven't advertised since: see seenNearby.
 const unseen = new Set<string>();
 const ADVERTISEMENT_WAIT_MS = 10_000;
@@ -90,10 +116,12 @@ export const webBluetooth: BleTransport = {
 
   async requestDevice({ namePrefixes, services }) {
     if (!navigator.bluetooth) throw new Error('Web Bluetooth not available in this browser.');
-    const device = await navigator.bluetooth.requestDevice({
-      filters: namePrefixes.map((namePrefix) => ({ namePrefix })),
-      optionalServices: services,
-    });
+    // No names (printers sold under any name): list every nearby device.
+    const device = await navigator.bluetooth.requestDevice(
+      namePrefixes.length
+        ? { filters: namePrefixes.map((namePrefix) => ({ namePrefix })), optionalServices: services }
+        : { acceptAllDevices: true, optionalServices: services }
+    );
     webDevices.set(device.id, device);
     return { id: device.id, name: device.name ?? '' };
   },
@@ -128,12 +156,14 @@ export const webBluetooth: BleTransport = {
   async findWrite({ id }, candidates) {
     const server = webDevices.get(id)?.gatt;
     if (!server?.connected) throw new Error('Not connected.');
-    for (const { service, write } of candidates) {
+    for (const { service, write, notify, data, noResponse } of candidates) {
       try {
         const svc = await server.getPrimaryService(service);
         const char = await svc.getCharacteristic(write);
         chars.set(`${id}|${service}|${write}`, char);
-        return { service, characteristic: write, withResponse: char.properties.write };
+        if (data) chars.set(`${id}|${service}|${data}`, await svc.getCharacteristic(data));
+        const withResponse = char.properties.write && !(noResponse && char.properties.writeWithoutResponse);
+        return { service, characteristic: write, withResponse, notify, data };
       } catch {
         // try the next candidate
       }
@@ -147,6 +177,25 @@ export const webBluetooth: BleTransport = {
     const bytes = data as Uint8Array<ArrayBuffer>;
     if (withResponse) await char.writeValueWithResponse(bytes);
     else await char.writeValueWithoutResponse(bytes);
+  },
+
+  async subscribe({ id }, service, characteristic, onData) {
+    const server = webDevices.get(id)?.gatt;
+    if (!server?.connected) throw new Error('Not connected.');
+    const key = `${id}|${service}|${characteristic}`;
+    notifyHandlers.set(key, onData);
+    const char = await (await server.getPrimaryService(service)).getCharacteristic(characteristic);
+    if (!notifying.has(char)) {
+      notifying.add(char);
+      char.addEventListener('characteristicvaluechanged', () => {
+        const view = char.value;
+        if (view)
+          notifyHandlers.get(key)?.(
+            new Uint8Array(view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength))
+          );
+      });
+    }
+    await char.startNotifications();
   },
 
   async disconnect({ id }) {

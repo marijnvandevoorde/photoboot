@@ -8,6 +8,7 @@ import { DOTS_PER_MM, getConfig } from './config.ts';
 import { $, ctx2d, errorMessage, newCanvas, option } from './dom.ts';
 import type { PrinterBase } from './printers/base.ts';
 import { connectPrinter } from './printers/index.ts';
+import { modelById } from './printers/models.ts';
 import { transport } from './printers/transport.ts';
 import { canvasToRaster, DITHER_MODES, fitToPrintWidth, rasterToCanvas, textToCanvas } from './raster.ts';
 import { SIM_DEFAULTS, simulatePrint } from './thermal-sim.ts';
@@ -389,6 +390,7 @@ if (!transport().available) {
 $<HTMLButtonElement>('connect').addEventListener('click', async () => {
   try {
     printer = await connectPrinter(config.printerType, {
+      model: modelById(config.printerModel),
       onLog: status,
       onDisconnect: () => {
         status('Printer disconnected.');

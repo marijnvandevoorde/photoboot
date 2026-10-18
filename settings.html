@@ -274,20 +274,37 @@
           <h2 class="group-title">Printer &amp; paper</h2>
 
           <div class="card">
+            <h3>Printer</h3>
+            <label>
+              Printer
+              <select id="printer-model"></select>
+            </label>
+            <p id="printer-hint" class="help"></p>
+            <p class="help">
+              Auto-detect recognises the printer by its Bluetooth name when you tap <em>Connect printer</em>, and
+              sets the paper width and resolution for it. Pick your model if it isn't recognised. Not on the
+              list? See <a href="https://github.com/marijnvandevoorde/photoboot#supported-printers">supported
+              printers</a>.
+            </p>
+          </div>
+
+          <div class="card">
             <h3>Paper</h3>
             <label>
               Paper roll
               <select id="paper-preset"></select>
             </label>
-            <p class="help">Pick the roll in the printer. The standard 50 mm sticker roll is the first one.</p>
+            <p class="help">
+              Automatic uses your printer's width. Pick another if your roll is narrower than the head.
+            </p>
             <div id="paper-width-field">
               <label>
                 Custom print width (dots, a multiple of 8)
                 <input id="paper-width" type="number" min="8" step="8" />
               </label>
               <p class="help">
-                The printer makes about 12 dots per mm: 552 = the standard 50 mm sticker, 384 = 32 mm,
-                288 = 25 mm. Test it with a <a href="/test.html">calibration print</a> first.
+                A 300 dpi printer makes about 12 dots per mm (552 = the standard 50 mm sticker), a 203 dpi
+                one 8 (384 = 48 mm). Test it with a <a href="/test.html">calibration print</a> first.
               </p>
             </div>
             <label>
@@ -299,6 +316,11 @@
               </select>
             </label>
             <p class="help">Dark gives the smoothest photos (dots merge instead of speckling). Try Normal if faces turn into black blobs.</p>
+            <label>
+              Blank paper after each sticker (mm, 0 = automatic)
+              <input id="tear-mm" type="number" min="0" max="50" step="1" />
+            </label>
+            <p id="tear-help" class="help"></p>
             <label>
               Roll length (metres, 0 = don't keep track)
               <input id="roll-length" type="number" min="0" step="0.5" />
@@ -416,20 +438,6 @@
         <details id="advanced" class="group advanced">
           <summary><h2 class="group-title">Advanced</h2></summary>
           <p class="help">You don't need any of this for a normal party.</p>
-
-          <div class="card">
-            <h3>Printer type</h3>
-            <label>
-              Type
-              <select id="printer-type"></select>
-            </label>
-            <p id="printer-hint" class="help"></p>
-            <p class="help">
-              Auto recognises the printer by its Bluetooth name when you tap <em>Connect printer</em>. Only pick
-              a type if it isn't found. <a href="/test.html">Printer calibration</a> prints rulers to measure
-              the paper.
-            </p>
-          </div>
 
           <div class="card">
             <h3>Upload token</h3>

@@ -1,0 +1,53 @@
+name: Printer report
+description: Tell us how Photoboot works with your printer, or ask for one we don't support yet.
+title: "Printer: "
+labels: ["printer"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks! Reports on printers marked 🧪 in the README help most, whether they worked or not.
+  - type: input
+    id: printer
+    attributes:
+      label: Printer
+      description: Brand and model, and where you bought it.
+      placeholder: e.g. Crafts & Co 3128 from Action
+    validations:
+      required: true
+  - type: input
+    id: bluetooth-name
+    attributes:
+      label: Bluetooth name
+      description: The name the Connect printer picker shows (or your phone's Bluetooth settings).
+      placeholder: e.g. C&Co3128_A1B2
+    validations:
+      required: true
+  - type: input
+    id: app
+    attributes:
+      label: The printer's own app
+      description: Tells us which protocol it probably speaks.
+      placeholder: e.g. Luck Jingle, iPrint, Fun Print, Phomemo, Niimbot
+  - type: dropdown
+    id: result
+    attributes:
+      label: What happened?
+      options:
+        - It printed fine
+        - It printed, but wrong (too light / dark, cut off, garbled, wrong width…)
+        - It connected but nothing printed
+        - It didn't show up in the picker or didn't connect
+        - It isn't supported yet
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: What you tried, the printer model you picked in settings, and a photo of the print if it came out wrong.
+  - type: input
+    id: browser
+    attributes:
+      label: Device and browser
+      placeholder: e.g. iPad with Bluefy, Android Chrome, Mac Chrome, the iOS app

@@ -13,13 +13,24 @@
 
 import { deletePhotos, exportZip, photoEvents } from './archive.ts';
 import type { Config, TextTemplateConfig } from './config.ts';
-import { DEFAULTS, eventKey, getConfig, PAPER_PRESETS, portableConfig, resetConfig, setConfig } from './config.ts';
+import {
+  DEFAULTS,
+  DEVICE_KEYS,
+  eventKey,
+  getConfig,
+  PAPER_PRESETS,
+  portableConfig,
+  resetConfig,
+  setConfig,
+  upgradeConfig,
+} from './config.ts';
 import { $, errorMessage, option } from './dom.ts';
 import { LANGUAGES, STRING_KEYS, STRINGS } from './i18n.ts';
 import { adminUnlocked, checkPin, hasPin, kioskState, pinHash, setAdminUnlocked, unlockKiosk } from './kiosk.ts';
 import { PHOTO_STYLES, PHOTO_TWISTS } from './photo.ts';
 import { isIosApp } from './platform.ts';
 import { listPrinters } from './printers/index.ts';
+import { DEFAULT_TEAR_MM, MODELS, modelById, settingsFor } from './printers/models.ts';
 import type { PurchasedEvent } from './purchase.ts';
 import type { Setup } from './remote.ts';
 import { remote } from './remote.ts';
@@ -189,9 +200,9 @@ async function currentSetup(): Promise<Setup> {
 
 async function applySetup(setup: Setup | undefined, extra: Partial<Config> = {}) {
   if (!setup?.config) throw new Error('Not a Photoboot setup file.');
-  const keep = { printerType: config.printerType, serverEvent: config.serverEvent };
+  const keep = Object.fromEntries(DEVICE_KEYS.map((k) => [k, config[k]]));
   resetConfig();
-  config = setConfig({ ...portableConfig(setup.config), ...keep, ...extra });
+  config = setConfig({ ...portableConfig(upgradeConfig(setup.config)), ...keep, ...extra });
   await importTemplateImages(setup.images ?? {});
   fillAll();
 }
@@ -256,36 +267,83 @@ $<HTMLInputElement>('import-picker').addEventListener('change', async (e) => {
 
 // ---------- printer ----------
 
-const printerItems = [
-  { id: 'auto', label: 'Auto-detect', hint: 'Picks the right driver from the device name after you tap Connect.' },
-  ...listPrinters().map((p) => ({ id: p.id, label: p.label, hint: p.hint })),
-];
-$<HTMLSelectElement>('printer-type').replaceChildren(...printerItems.map(({ id, label }) => option(id, label)));
-bind('printer-type', 'printerType');
-const printerHint = () =>
-  ($('printer-hint').textContent =
-    printerItems.find((i) => i.id === $<HTMLSelectElement>('printer-type').value)?.hint ?? '');
-$<HTMLSelectElement>('printer-type').addEventListener('change', printerHint);
-fillers.push(printerHint);
+// The model list, grouped by driver. Picking one sets its width (unless
+// the host chose one by hand) and resolution; auto-detect does the same when
+// the booth connects.
+const familyLabels = Object.fromEntries(listPrinters().map((p) => [p.id, p.label]));
+const modelSelect = $<HTMLSelectElement>('printer-model');
+modelSelect.replaceChildren(
+  option('', 'Auto-detect'),
+  ...listPrinters().map((p) => {
+    const group = document.createElement('optgroup');
+    group.label = p.label;
+    group.append(
+      ...MODELS.filter((m) => m.family === p.id).map((m) =>
+        option(m.id, m.verified ? m.label : `${m.label} (untested)`)
+      )
+    );
+    return group;
+  })
+);
+const printerHint = () => {
+  const model = modelById(modelSelect.value);
+  $('printer-hint').textContent = model
+    ? `${familyLabels[model.family]} · ${model.dpi} dpi · prints ${model.widthDots} of ${model.headWidthDots} dots (~${Math.round(model.widthDots / (model.dpi / 25.4))} mm).` +
+      (model.verified ? '' : ' Not tried on this model yet: let us know how it prints.')
+    : 'Recognised by its Bluetooth name when you connect.';
+};
+fillers.push(() => {
+  modelSelect.value = modelById(config.printerModel) ? config.printerModel : '';
+  printerHint();
+});
+modelSelect.addEventListener('change', () => {
+  const model = modelById(modelSelect.value);
+  save(
+    model
+      ? { printerModel: model.id, printerType: model.family, ...settingsFor(model, config) }
+      : { printerModel: '', printerType: 'auto' }
+  );
+  printerHint();
+  fillPaperWidth();
+});
 
 // ---------- paper ----------
 
-const presetOptions = [...PAPER_PRESETS, { dots: -1, label: 'Custom…' }];
+// 0 = Automatic: the printer's own width (paperWidthAuto).
+const presetOptions = [
+  { dots: 0, label: 'Automatic (from the printer)' },
+  ...PAPER_PRESETS,
+  { dots: -1, label: 'Custom…' },
+];
 $<HTMLSelectElement>('paper-preset').replaceChildren(...presetOptions.map(({ dots, label }) => option(dots, label)));
 // The raw width only shows for Custom…: most hosts just pick their roll.
 const showWidth = () => ($('paper-width-field').hidden = $<HTMLSelectElement>('paper-preset').value !== '-1');
-fillers.push(() => {
-  const current = presetOptions.find((o) => o.dots === config.paperWidthDots);
-  $<HTMLSelectElement>('paper-preset').value = String(current ? current.dots : -1);
+function fillPaperWidth() {
+  // Millimetres depend on the printer's resolution.
+  const mm = (dots: number) => Math.round(dots / (config.dotsPerMm || 11.8));
+  for (const opt of $<HTMLSelectElement>('paper-preset').options) {
+    const dots = Number(opt.value);
+    if (dots === 0) opt.textContent = `Automatic: ${config.paperWidthDots} dots (~${mm(config.paperWidthDots)} mm)`;
+    else if (dots > 0) opt.textContent = `${dots} dots (~${mm(dots)} mm)`;
+  }
+  const current = PAPER_PRESETS.find((o) => o.dots === config.paperWidthDots);
+  $<HTMLSelectElement>('paper-preset').value = String(config.paperWidthAuto ? 0 : current ? current.dots : -1);
   $<HTMLInputElement>('paper-width').value = String(config.paperWidthDots);
   showWidth();
-});
+}
+fillers.push(fillPaperWidth);
 $<HTMLSelectElement>('paper-preset').addEventListener('change', () => {
   const v = Number($<HTMLSelectElement>('paper-preset').value);
   showWidth();
-  if (v > 0) {
+  if (v === 0) {
+    const model = modelById(config.printerModel);
+    save({ paperWidthAuto: true, ...(model ? settingsFor(model, { paperWidthAuto: true }) : {}) });
+    fillPaperWidth();
+  } else if (v > 0) {
     $<HTMLInputElement>('paper-width').value = String(v);
-    save({ paperWidthDots: v });
+    save({ paperWidthDots: v, paperWidthAuto: false });
+  } else {
+    save({ paperWidthAuto: false });
   }
 });
 $<HTMLInputElement>('paper-width').addEventListener('change', (e) => {
@@ -297,9 +355,20 @@ $<HTMLInputElement>('paper-width').addEventListener('change', (e) => {
   }
   const match = PAPER_PRESETS.find((p) => p.dots === v);
   $<HTMLSelectElement>('paper-preset').value = String(match ? match.dots : -1);
-  save({ paperWidthDots: v });
+  save({ paperWidthDots: v, paperWidthAuto: false });
 });
 bind('density', 'printDensity', { from: Number });
+bind('tear-mm', 'tearMm', { from: num(0, 50) });
+// What automatic means for the printer picked (or the last one connected).
+const tearHelp = () => {
+  const model = modelById(config.printerModel);
+  const auto = model
+    ? `${model.tearMm} mm for the ${model.label}`
+    : `the connected printer's distance (${DEFAULT_TEAR_MM} mm if unknown)`;
+  $('tear-help').textContent = `So the sticker clears the tear edge. Automatic: ${auto}. Too short? Add a few mm.`;
+};
+fillers.push(tearHelp);
+modelSelect.addEventListener('change', tearHelp);
 const metres: BindOptions = {
   to: (mm) => String((Number(mm) || 0) / 1000),
   from: (v) => (num(0)(v) === undefined ? undefined : Math.round(Number(v) * 1000)),

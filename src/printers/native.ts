@@ -55,9 +55,13 @@ export const nativeBle: BleTransport = {
 
   async findWrite({ id }, candidates) {
     const services = await BleClient.getServices(id);
-    for (const { service, write } of candidates) {
-      const char = services.find((s) => same(s.uuid, service))?.characteristics.find((c) => same(c.uuid, write));
-      if (char) return { service, characteristic: write, withResponse: char.properties.write };
+    for (const { service, write, notify, data, noResponse } of candidates) {
+      const svc = services.find((s) => same(s.uuid, service));
+      const char = svc?.characteristics.find((c) => same(c.uuid, write));
+      if (!char) continue;
+      if (data && !svc?.characteristics.some((c) => same(c.uuid, data))) continue;
+      const withResponse = char.properties.write && !(noResponse && char.properties.writeWithoutResponse);
+      return { service, characteristic: write, withResponse, notify, data };
     }
     return null;
   },
@@ -66,6 +70,12 @@ export const nativeBle: BleTransport = {
     const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
     if (withResponse) await BleClient.write(id, service, characteristic, view);
     else await BleClient.writeWithoutResponse(id, service, characteristic, view);
+  },
+
+  async subscribe({ id }, service, characteristic, onData) {
+    await BleClient.startNotifications(id, service, characteristic, (view) =>
+      onData(new Uint8Array(view.buffer, view.byteOffset, view.byteLength))
+    );
   },
 
   async disconnect({ id }) {

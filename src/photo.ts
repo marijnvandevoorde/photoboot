@@ -1,10 +1,11 @@
 // Shared photo print pipeline, used by the booth, the preview page, and the
 // standalone print page.
 
-import { get } from './config.ts';
+import { DOTS_PER_MM, get } from './config.ts';
 import * as fx from './effects.ts';
 import type { PrinterBase } from './printers/base.ts';
-import { canvasToRaster, fitToPrintWidth } from './raster.ts';
+import { DEFAULT_TEAR_MM, modelById } from './printers/models.ts';
+import { canvasToRaster, fitToPrintWidth, shrinkRaster } from './raster.ts';
 import { composeColour, composeStrip } from './strip.ts';
 import type { ImageSource, Look, Raster, RasterOptions, Template } from './types.ts';
 
@@ -22,10 +23,6 @@ export interface PhotoTwist {
 }
 
 export const PHOTO_DENSITY_DEFAULT = 4;
-
-// Blank paper after each print so the sticker clears the tear bar (~6 mm).
-// Printed rows always advance the paper, unlike a bare feed command.
-const TEAR_MARGIN_DOTS = 72;
 
 // Styles have canvasToRaster options or their own `render`. The 'none' style
 // is a plain threshold — useful when filters are disabled.
@@ -83,22 +80,30 @@ export function renderColour(
   return composeColour(shots, template, stickerWidth, { twist: find(PHOTO_TWISTS, look.twist).apply ?? null });
 }
 
-const FEED_DOTS = 80;
-
-// Paper a sticker uses beyond its own height (tear margin + feed), in dots.
-export const PRINT_EXTRA_DOTS = TEAR_MARGIN_DOTS + FEED_DOTS;
+// Blank rows after each print, so the sticker clears the tear edge: the
+// host's `tearMm`, else the printer model's own distance. Printed rows
+// always advance the paper, unlike a bare feed command (not every printer
+// honours one), so this is the whole margin.
+export function tearDots(printer: PrinterBase | null): number {
+  const model = modelById(get('printerModel')) ?? printer?.model ?? null;
+  const mm = get('tearMm') || (model ? model.tearMm : DEFAULT_TEAR_MM);
+  const perMm = model ? model.dpi / 25.4 : get('dotsPerMm') || DOTS_PER_MM;
+  return Math.round(mm * perMm);
+}
 
 // Print a raster `copies` times, each followed by the tear margin.
+// A sticker wider than the printer's head is scaled down to fit.
 export async function printPhoto(
   printer: PrinterBase,
-  { bitmap, widthDots, heightDots }: Raster,
+  raster: Raster,
   { density, copies = 1 }: { density?: number; copies?: number } = {}
 ): Promise<void> {
-  const padded = new Uint8Array(bitmap.length + (widthDots / 8) * TEAR_MARGIN_DOTS);
+  const { bitmap, widthDots, heightDots } = shrinkRaster(raster, printer.headWidthDots);
+  const tear = tearDots(printer);
+  const padded = new Uint8Array(bitmap.length + (widthDots / 8) * tear);
   padded.set(bitmap);
   await printer.init({ density: density ?? get('printDensity') ?? PHOTO_DENSITY_DEFAULT });
   for (let i = 0; i < Math.max(1, copies); i++) {
-    await printer.printRaster(padded, widthDots, heightDots + TEAR_MARGIN_DOTS);
-    await printer.feed(FEED_DOTS);
+    await printer.printRaster(padded, widthDots, heightDots + tear);
   }
 }

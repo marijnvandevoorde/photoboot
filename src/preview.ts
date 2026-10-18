@@ -7,6 +7,7 @@ import './platform.ts';
 import { getConfig } from './config.ts';
 import { $, ctx2d } from './dom.ts';
 import { DEFAULT_LOOK, PHOTO_STYLES, PHOTO_TWISTS, renderSticker } from './photo.ts';
+import { modelById } from './printers/models.ts';
 import { rasterToCanvas } from './raster.ts';
 import { BUILT_IN_TEMPLATES, loadTemplate } from './templates.ts';
 import type { ImageSource, Template } from './types.ts';
@@ -21,11 +22,11 @@ async function init() {
 }
 
 function renderSummary() {
-  const printerLabel = config.printerType === 'auto' ? 'Auto-detect' : config.printerType;
+  const printerLabel = modelById(config.printerModel)?.label ?? 'Auto-detect';
   const templateLabel = BUILT_IN_TEMPLATES.find((t) => t.id === config.templateId)?.label ?? config.templateId;
   const items = [
     `Printer: <strong>${printerLabel}</strong>`,
-    `Paper width: <strong>${config.paperWidthDots} dots</strong> (~${(config.paperWidthDots / 11.8).toFixed(1)} mm)`,
+    `Paper width: <strong>${config.paperWidthDots} dots</strong> (~${(config.paperWidthDots / (config.dotsPerMm || 11.8)).toFixed(1)} mm)`,
     `Density: <strong>${config.printDensity}</strong>`,
     `Template: <strong>${templateLabel}</strong>`,
     `Shots: <strong>${config.shotCount}</strong>`,
@@ -69,7 +70,7 @@ async function render() {
   preview.style.height = `${canvas.height / dpr}px`;
   ctx2d(preview).drawImage(canvas, 0, 0);
 
-  const mm = (dots: number) => (dots / 11.8).toFixed(1);
+  const mm = (dots: number) => (dots / (config.dotsPerMm || 11.8)).toFixed(1);
   $('preview-meta').textContent =
     `${raster.widthDots} × ${raster.heightDots} dots (~${mm(raster.widthDots)} × ${mm(raster.heightDots)} mm). ` +
     `1 screen pixel = 1 printer dot.`;

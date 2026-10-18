@@ -21,8 +21,11 @@ open it in Chrome (Android, Mac, Windows, ChromeOS) or in
 [Bluefy](https://apps.apple.com/app/bluefy-web-ble-browser/id1492822055) on
 iPad / iPhone. “Start without printer” works on anything with a camera.
 
-- 🖨️ **Prints over Bluetooth** to Phomemo P2 / P2S / M02 / M03 / M04 / T02
-  thermal sticker printers, straight from the browser (Web Bluetooth).
+- 🖨️ **Prints over Bluetooth** to cheap thermal printers, straight from the
+  browser (Web Bluetooth): Phomemo, the "cat printers" from AliExpress and
+  Temu, LuckJingle and the Action / Lidl pocket printers, PeriPage,
+  Paperang, Niimbot and BLE receipt printers. See
+  [Supported printers](#supported-printers).
 - 🎨 **Live looks**: see the camera in Classic, Pop art, Woodcut or Stipple
   before the photo is taken, plus Mirror and Big head twists.
 - 🎞️ **Photo strips** of 1–4 shots, with your own header and footer — typed
@@ -84,11 +87,13 @@ start screen.
 
 ## Hardware
 
-- **Printer**: Phomemo P2 / P2S / M02 / M03 / M04 / T02 family over
-  Bluetooth Low Energy (300 dpi, 576-dot head). Other printers can be added,
-  see [Adding a printer](#adding-a-printer).
-- **Paper**: the default is a 53 mm roll with 50 mm stickers (552 dots wide).
-  Other widths are a setting; `/test.html` prints calibration rulers.
+- **Printer**: a Bluetooth Low Energy thermal printer, see
+  [Supported printers](#supported-printers). We build and test on a
+  Phomemo P2S (300 dpi, 576-dot head).
+- **Paper**: the booth sets the print width from the printer (a 53 mm roll
+  with 50 mm stickers on the P2S: 552 dots). The width and the blank paper
+  after each sticker can be overridden in settings; `/test.html` prints
+  calibration rulers.
 - **Camera**: any webcam or built-in camera. The booth asks for 1280×960 at
   30 fps, which is plenty for a 50 mm sticker.
 - **Browser**: Web Bluetooth is needed for printing — Chrome / Edge on
@@ -231,20 +236,89 @@ Uploads are rate-limited per IP unless they come from a booth with a valid
 event key. Everything else — settings, counters, the full photo archive —
 stays in the booth's browser.
 
+## Supported printers
+
+Auto-detect recognises a printer by its Bluetooth name when you tap
+*Connect printer*, and sets the paper width, resolution and tear margin for
+it. Not recognised? Pick your model under Settings → Printer & paper. You
+can override the width and margin there too.
+
+✅ printed on real hardware · 🧪 implemented from the protocol as documented
+by other open-source projects, not tried yet. **Got one of the 🧪 printers?
+Please tell us how it went**:
+[open a printer report](https://github.com/marijnvandevoorde/photoboot/issues/new?template=printer.yml),
+whether it worked or not.
+
+| Printer | Also sold as / Bluetooth name | Width | Status |
+| --- | --- | --- | --- |
+| Phomemo P2, P2S | `P2…` | 552 of 576 dots, 300 dpi | ✅ |
+| Phomemo M02S, M02 Pro | `M02S`, `M02PRO` | 552 / 600 dots, 300 dpi | 🧪 |
+| Phomemo M02, M02X, T02, M03, Memoking | `M02…`, `T02…`, `Mr.in…` | 384 (M03: 432) dots, 203 dpi | 🧪 |
+| Phomemo M110, M120, M220, M221 (labels) | `M110`, `Q199E`, `Q0xx`… | 320 / 560 dots, 203 dpi | 🧪 |
+| Cat printers GB01–GB05, GT01, X5–X8, LY0x | iPrint / Tiny Print apps, AliExpress, Temu, Amazon | 384 dots, 203 dpi | 🧪 |
+| Cat printers MX05–MX13, YT01, PD01 | iPrint / Fun Print | 384 dots | 🧪 |
+| MXW01, Flying Tiger, StickerMate, C17 | Fun Print / WalkPrint | 384 dots | 🧪 |
+| LuckJingle / Luck P D1, L1, S1 | `LuckP_…`, `DP_…` | 384 dots | 🧪 |
+| Crafts & Co 3128 (Action) | `C&Co…` | 384 dots | 🧪 |
+| Fichero Mini Pocket Printer (Action) | pick it in settings: the picker then lists every device | 384 dots | 🧪 |
+| Lidl / Silvercrest Mini Pocket Printer | `Mini Pocket Printer…` | 384 dots | 🧪 |
+| PeriPage A6, A6+ | `PeriPage…` | 384 / 576 dots | 🧪 |
+| Marklife P50 | `P50…` | 384 dots | 🧪 |
+| Paperang P1, P2 | `Paperang…` | 384 / 576 dots | 🧪 |
+| Niimbot B1, B21 (labels) | `B1-…`, `B21…` | 384 dots | 🧪 |
+| 58 / 80 mm BLE receipt printers (PT-210, MTP-II, MPT-III…) | any name: pick *Receipt printer* in settings | 384 / 576 dots | 🧪 |
+
+**Not supported:**
+- Printers that only do Bluetooth Classic, which browsers can't reach. Many
+  older receipt printers are like this; if yours never shows up in the
+  picker, this is probably why.
+- Narrow label makers (Niimbot D11 / D110, Phomemo D30 / Q30 / P12,
+  Marklife P12 / P15, Fichero D11s labelprinter): they print sideways on
+  12 mm tape, too small for a photo.
+- Photo printers that aren't thermal (Kodak, Polaroid, HP Sprocket, Canon
+  Zoemini, ZINK, dye-sub).
+
+The drivers build on the reverse-engineering work of
+[NaitLee/Cat-Printer](https://github.com/NaitLee/Cat-Printer),
+[rbaron/catprinter](https://github.com/rbaron/catprinter),
+[jeremy46231/MXW01-catprinter](https://github.com/jeremy46231/MXW01-catprinter),
+[MultiMote/niimbluelib](https://github.com/MultiMote/niimbluelib),
+[vivier/phomemo-tools](https://github.com/vivier/phomemo-tools),
+[0xMH/fichero-printer](https://github.com/0xMH/fichero-printer),
+[SwapnanilDhol/minixprint](https://github.com/SwapnanilDhol/minixprint),
+[Yrr0r/paperang-web](https://github.com/Yrr0r/paperang-web),
+[bitbank2/Thermal_Printer](https://github.com/bitbank2/Thermal_Printer) and
+[opentlp](https://github.com/opentlp/opentlp).
+
 ## Adding a printer
 
-Printers are pluggable. Subclass `PrinterBase` in `src/printers/<brand>.js`
-(connect, init, printRaster, feed), register it in `src/printers/index.js`
-with its Bluetooth name prefixes and service UUIDs, and it shows up in
-settings and in auto-detect. The Phomemo protocol notes are in
-[CONTEXT.md](CONTEXT.md).
+Have a printer that isn't on the list, or a 🧪 one that doesn't print right?
+[Open a printer report](https://github.com/marijnvandevoorde/photoboot/issues/new?template=printer.yml)
+with its Bluetooth name and the app it came with: that's usually enough to
+tell which protocol it speaks.
+
+Want to add it yourself? Pull requests are very welcome:
+
+- Most printers speak a protocol we already have: add a model to
+  `src/printers/models.ts` with its Bluetooth name prefixes, resolution,
+  width and tear margin.
+- A new protocol is a subclass of `PrinterBase` in
+  `src/printers/<family>.ts`. Declare its Bluetooth channels and implement
+  `init`, `printRaster` and `feed`; the base class does the connecting,
+  timeouts, write pacing and reconnects. Register it in
+  `src/printers/index.ts`, and add a test with a fake printer like those in
+  `test/printers.test.ts`.
+- Tried it on real hardware? Set `verified: true` on the model and move it
+  to ✅ in this README.
+
+Protocol notes are in [CONTEXT.md](CONTEXT.md).
 
 ## How it's built
 
 TypeScript and Vite, no framework. Photos are dithered to 1-bit in
 the browser (`src/raster.js`, `src/effects.js`), composed with the template
-(`src/strip.js`) and sent to the printer as ESC/POS raster commands over
-Web Bluetooth. [CONTEXT.md](CONTEXT.md) has the full map of the code, the
+(`src/strip.js`) and sent to the printer in its own protocol over Web
+Bluetooth (`src/printers/`). [CONTEXT.md](CONTEXT.md) has the full map of the code, the
 printer protocol and the decisions behind it.
 
 ## License

@@ -30,6 +30,7 @@ const CLEAN_URLS: Record<string, string> = {
   '/admin': '/admin.html',
   '/privacy': '/privacy.html',
   '/terms': '/terms.html',
+  '/sign': '/sign.html',
 };
 
 async function serveStatic(req: Req, res: Res): Promise<void> {
@@ -54,6 +55,7 @@ async function serveStatic(req: Req, res: Res): Promise<void> {
     res.writeHead(200, {
       'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream',
       'Content-Length': info.size,
+      'X-Content-Type-Options': 'nosniff',
       'Cache-Control': pathname.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache',
     });
     createReadStream(file).pipe(res);

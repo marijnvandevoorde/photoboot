@@ -1,6 +1,6 @@
 // Shared photos: the files in the photo store (storage.ts: a bucket, or
 // SHARE_DIR locally), metadata in the database (db.ts). Handles expiry and
-// the storage quota.
+// the storage quota. retention.ts runs cleanup() every hour.
 //
 // A photo expires SHARE_TTL_DAYS after it was taken, unless it belongs to a
 // paid event: then the event's retention applies (PAID_RETENTION_DAYS by
@@ -18,7 +18,6 @@ import { store } from './storage.ts';
 export const TTL_DAYS = envNumber('SHARE_TTL_DAYS', 30);
 export const PAID_RETENTION_DAYS = envNumber('PAID_RETENTION_DAYS', 365);
 const MAX_BYTES = envNumber('SHARE_MAX_MB', 5000) * 1024 * 1024;
-const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 const DAY_MS = 86_400_000;
 
 export const ID = /^[0-9a-f-]{36}$/;
@@ -94,7 +93,3 @@ export async function cleanup(): Promise<number> {
   if (removed) console.log(`photoboot: removed ${removed} expired photo(s)`);
   return removed;
 }
-
-// Runs in whichever process loads this module (prod server or Vite dev).
-cleanup().catch((err) => console.error('cleanup failed', err));
-setInterval(() => cleanup().catch((err) => console.error('cleanup failed', err)), CLEANUP_INTERVAL_MS).unref();

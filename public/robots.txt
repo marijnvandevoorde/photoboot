@@ -1,0 +1,10 @@
+# Guests' photo and gallery pages are private links, never for search engines.
+# They also send noindex (X-Robots-Tag and a robots meta tag).
+User-agent: *
+Disallow: /s/
+Disallow: /g/
+Disallow: /share/
+Disallow: /api/
+Disallow: /admin
+Disallow: /settings.html
+Disallow: /sign

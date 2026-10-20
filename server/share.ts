@@ -37,6 +37,7 @@ import {
   sendJson,
 } from './http.ts';
 import { deletePhoto, expiresAt, hasRoomFor, ID, photoMeta, savePhoto } from './photos.ts';
+import './retention.ts'; // starts the hourly deletion job
 import { store } from './storage.ts';
 import { stripeRoutes } from './stripe.ts';
 
@@ -146,6 +147,7 @@ async function sharePage(id: string, res: Res): Promise<void> {
   <button class="btn secondary" id="delete">Delete from the server</button>
 </div>
 <p class="muted">${escapeHtml(expiryText)} Anyone with this link can see it, so only share it with people you trust.</p>
+${meta.event ? '<p class="muted small">Taken at an event with an online gallery: the host and whoever has the gallery link can see it too. Deleting it here removes it from the gallery as well. The booth device may keep its own copy; ask the host to delete that one.</p>' : ''}
 <script>
   document.getElementById('delete').addEventListener('click', async () => {
     if (!confirm('Delete this photo from the server for good?')) return;

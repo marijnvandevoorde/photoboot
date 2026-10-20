@@ -162,10 +162,15 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
   server events — buttons only once an admin token is entered — upload
   token, reset). Every setting has a one-line `.help` text.
   Inputs use a small `bind()` helper; listeners are bound once.
-- `privacy.html` / `terms.html` (served at `/privacy`, `/terms`) — DRAFT
-  privacy policy and terms, written from what the code does (2026-10-20);
-  keep them true when data handling changes. The share / gallery shell
-  (`page()`) links to /privacy.
+- `privacy.html` / `terms.html` (served at `/privacy`, `/terms`) — final
+  privacy policy and terms (2026-10-20; operator block, host = controller of
+  the photos and us = processor with an Art. 28 clause in the terms, refunds,
+  Belgian law / Ghent). `docs/gdpr.md` is the record of processing: keep all
+  three true when data handling changes. The share / gallery shell (`page()`)
+  links to /privacy.
+- `sign.html` + `src/sign.ts` (`/sign?event=&days=&mode=free&lang=`) —
+  printable booth notice for the host's information duty (en/nl/fr), linked
+  from event.html, the success screen, the event email and settings.
 - `src/consent.ts` — GTM (`VITE_GTM_ID`, default GTM-KPTLSZBG) with Consent
   Mode v2 (all denied by default) and a cookie banner; loaded only on
   event.html, privacy.html and terms.html. Never on the booth, settings,
@@ -245,8 +250,12 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
 - `server/photos.ts` — photos (store + rows); expiry per photo: free
   `SHARE_TTL_DAYS`, paid events `retention_days` / `PAID_RETENTION_DAYS`;
   storage quota.
+- `server/retention.ts` — the hourly deletion job (started by share.ts):
+  expired photos, unpaid events after 30 days, events 30 days after their
+  retention once no photos are left, payment rows after the 7th calendar year
+  (Belgian accounting law), expired admin sessions.
 - `server/events.ts` — event store + the booth routes (setup key: load /
-  save setup, stats) and the host gallery + streamed ZIP (gallery key).
+  save setup, stats, delete the event) and the host gallery + streamed ZIP (gallery key).
   Pending (unpaid) events refuse photos and show no gallery.
 - `server/billing.ts` — the paid-event lifecycle every payment path uses:
   `createPendingEvent`, `activateEvent` (idempotent per payment ref,
@@ -321,13 +330,8 @@ no volume: settings in the secret `photoboot-env`, `DATABASE_URL` in
    tuned on screen only — pending: real test prints (dot gain, thin
    template strokes, tear margin length).
 
-4. **Legal review:** privacy.html and terms.html are drafts — the user
-   reviews them (controller identity / address, roles host vs. us for event
-   photos, refund wording) and then drops the draft notice.
-5. **Gallery wording is wrong:** the gallery page (server/events.ts) says
-   only photos guests pressed "Get photo" on are on the server, but a booth
-   in a server event uploads every photo (`archiveSession` in booth.ts).
-   Fix the wording or the behaviour.
+4. **GDPR loose ends** (docs/gdpr.md, Open points): turn off Brevo
+   open/click tracking for transactional mail; conclude Hetzner's DPA.
 
 ## Decisions / conventions
 

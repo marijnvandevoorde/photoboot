@@ -36,6 +36,9 @@ export const remote = {
     call<Setup & { id: string }>('GET', `/api/events/${id}`, { headers: { 'X-Event-Key': key } }),
   saveEvent: (id: string, key: string, setup: Setup) =>
     call<{ ok: true }>('PUT', `/api/events/${id}`, { body: setup, headers: { 'X-Event-Key': key } }),
+  // The host deletes the event with its photos (payment records stay).
+  deleteEvent: (id: string, key: string) =>
+    call<{ ok: true }>('DELETE', `/api/events/${id}`, { headers: { 'X-Event-Key': key } }),
   pushStats: (id: string, key: string, device: string, stats: Stats) =>
     call<{ ok: true }>('POST', `/api/events/${id}/stats`, { body: { device, stats }, headers: { 'X-Event-Key': key } }),
 };

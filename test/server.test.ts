@@ -333,6 +333,25 @@ describe('events', () => {
     expect(zip.readUInt16LE(zip.length - 12)).toBe(2);
   });
 
+  it('lets the host delete the event with the setup key only, photos and all', async () => {
+    const ev = await createEvent('Delete me');
+    const { id: photo } = await (await upload(boothHeaders(ev))).json();
+    const del = (key: string) =>
+      fetch(`${base}/api/events/${ev.id}`, { method: 'DELETE', headers: { 'X-Event-Key': key } });
+    expect((await del(ev.galleryKey)).status).toBe(401);
+    expect((await del(ev.setupKey)).status).toBe(200);
+    expect((await fetch(`${base}/g/${ev.id}/${ev.galleryKey}`)).status).toBe(404);
+    expect((await fetch(`${base}/share/${photo}.jpg`)).status).toBe(404);
+  });
+
+  it('says in the gallery that every photo is uploaded, and how to have one removed', async () => {
+    const ev = await createEvent('Wording');
+    const html = await (await fetch(`${base}/g/${ev.id}/${ev.galleryKey}`)).text();
+    expect(html).not.toContain('Only photos guests');
+    expect(html).toContain('Every photo taken at this event');
+    expect(html).toContain('Want a photo of you removed?');
+  });
+
   it('escapes the event name in the gallery', async () => {
     const ev = await createEvent('<script>alert(1)</script>');
     const html = await (await fetch(`${base}/g/${ev.id}/${ev.galleryKey}`)).text();
@@ -361,6 +380,41 @@ describe('billing', () => {
     await billing.refundPayment('cs_test_123');
     const { event } = await (await admin('GET', `events/${ev.id}`)).json();
     expect(event.paid).toBe(false);
+  });
+
+  it('deletes unpaid events, expired events and old payment records, and keeps the rest', async () => {
+    const { runRetention, paymentCutoff } = await import('../server/retention.ts');
+    const daysAgo = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString();
+    const age = (id: string, iso: string) =>
+      db.run('UPDATE events SET created = ?, updated = ? WHERE id = ?', iso, iso, id);
+    const exists = async (id: string) => !!(await db.get('SELECT id FROM events WHERE id = ?', id));
+
+    const abandoned = await billing.createPendingEvent({ name: 'Abandoned', email: 'gone@example.com' }, 'stripe');
+    await age(abandoned.id, daysAgo(31));
+    const freshPending = await billing.createPendingEvent({ name: 'Paying now', email: 'p@example.com' }, 'stripe');
+    const expired = await createEvent('Last year');
+    await age(expired.id, daysAgo(365 + 31));
+    const busy = await createEvent('Still has photos');
+    await upload(boothHeaders(busy));
+    await age(busy.id, daysAgo(365 + 31));
+    const future = await createEvent('Wedding next year');
+    await age(future.id, daysAgo(365 + 31));
+    await db.run('UPDATE events SET event_date = ? WHERE id = ?', daysAgo(-60).slice(0, 10), future.id);
+
+    const old = await createEvent('Old payment');
+    await db.run("UPDATE payments SET created = '2018-03-01T00:00:00.000Z' WHERE event_id = ?", old.id);
+
+    await runRetention();
+    expect(await exists(abandoned.id)).toBe(false);
+    expect(await exists(freshPending.id)).toBe(true);
+    expect(await exists(expired.id)).toBe(false);
+    expect(await exists(busy.id)).toBe(true);
+    expect(await exists(future.id)).toBe(true);
+    expect(await db.get('SELECT id FROM payments WHERE event_id = ?', old.id)).toBeFalsy();
+    expect(await db.get('SELECT id FROM payments WHERE event_id = ?', busy.id)).toBeTruthy();
+    // A payment of 2026 is kept until the end of 2033.
+    expect(paymentCutoff(Date.parse('2033-12-31T12:00:00Z'))).toBe('2026-01-01T00:00:00.000Z');
+    expect(paymentCutoff(Date.parse('2034-01-01T12:00:00Z'))).toBe('2027-01-01T00:00:00.000Z');
   });
 
   it('validates what a host fills in', () => {

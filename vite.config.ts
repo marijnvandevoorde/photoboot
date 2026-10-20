@@ -37,6 +37,8 @@ export default defineConfig({
         lab: 'lab.html',
         admin: 'admin.html',
         event: 'event.html',
+        privacy: 'privacy.html',
+        terms: 'terms.html',
       },
     },
   },

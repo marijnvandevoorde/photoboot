@@ -11,6 +11,7 @@
       content="Every photo your guests share, in one private online gallery with a download of all of them."
     />
     <link rel="stylesheet" href="/src/event.css" />
+    <script type="module" src="/src/consent.ts"></script>
   </head>
   <body>
     <main>
@@ -86,12 +87,21 @@
           <button type="submit" id="pay" class="btn">Continue to payment</button>
           <p class="small muted">
             One payment per event, no subscription. You pay securely with Stripe and can ask for an invoice.
+            By continuing you accept the <a class="link" href="/terms">terms</a>; see the
+            <a class="link" href="/privacy">privacy policy</a> for what happens with your email.
           </p>
         </form>
       </section>
 
       <footer class="small muted">
-        The booth itself stays free: without a gallery, guests still get their own photo by QR code (kept <span data-free-days>30 days</span>). <a class="link" href="/">Back to the booth</a>
+        <p>
+          The booth itself stays free: without a gallery, guests still get their own photo by QR code (kept <span data-free-days>30 days</span>). <a class="link" href="/">Back to the booth</a>
+        </p>
+        <p class="legal">
+          <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+          <button type="button" data-consent-open>Cookie settings</button>
+        </p>
       </footer>
     </main>
     <script type="module" src="/src/event.ts"></script>

@@ -162,6 +162,15 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
   server events — buttons only once an admin token is entered — upload
   token, reset). Every setting has a one-line `.help` text.
   Inputs use a small `bind()` helper; listeners are bound once.
+- `privacy.html` / `terms.html` (served at `/privacy`, `/terms`) — DRAFT
+  privacy policy and terms, written from what the code does (2026-10-20);
+  keep them true when data handling changes. The share / gallery shell
+  (`page()`) links to /privacy.
+- `src/consent.ts` — GTM (`VITE_GTM_ID`, default GTM-KPTLSZBG) with Consent
+  Mode v2 (all denied by default) and a cookie banner; loaded only on
+  event.html, privacy.html and terms.html. Never on the booth, settings,
+  admin, or the guests' /s/ and /g/ pages; skipped in the app, on
+  localhost and in Vite dev.
 - `src/kiosk.ts` — kiosk lock state + PIN hashing/checking (shared by the
   booth's host menu and the settings gate).
 - `preview.html` + `src/preview.ts` — renders a sticker through the current
@@ -311,6 +320,14 @@ no volume: settings in the secret `photoboot-env`, `DATABASE_URL` in
    walls and crushed backlit faces. Pop art / Woodcut / Stipple were
    tuned on screen only — pending: real test prints (dot gain, thin
    template strokes, tear margin length).
+
+4. **Legal review:** privacy.html and terms.html are drafts — the user
+   reviews them (controller identity / address, roles host vs. us for event
+   photos, refund wording) and then drops the draft notice.
+5. **Gallery wording is wrong:** the gallery page (server/events.ts) says
+   only photos guests pressed "Get photo" on are on the server, but a booth
+   in a server event uploads every photo (`archiveSession` in booth.ts).
+   Fix the wording or the behaviour.
 
 ## Decisions / conventions
 

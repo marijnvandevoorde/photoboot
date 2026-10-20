@@ -25,6 +25,13 @@ const TYPES: Record<string, string> = {
   '.webmanifest': 'application/manifest+json',
 };
 
+// Pages served without their .html too.
+const CLEAN_URLS: Record<string, string> = {
+  '/admin': '/admin.html',
+  '/privacy': '/privacy.html',
+  '/terms': '/terms.html',
+};
+
 async function serveStatic(req: Req, res: Res): Promise<void> {
   let pathname: string;
   try {
@@ -35,7 +42,7 @@ async function serveStatic(req: Req, res: Res): Promise<void> {
     return;
   }
   if (pathname.endsWith('/')) pathname += 'index.html';
-  if (pathname === '/admin') pathname = '/admin.html';
+  if (CLEAN_URLS[pathname]) pathname = CLEAN_URLS[pathname];
   const file = path.join(DIST, path.normalize(pathname));
   if (!file.startsWith(DIST + path.sep)) {
     res.writeHead(403).end();

@@ -116,8 +116,10 @@ export function page(title: string, body: string): string {
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: 0.6rem; }
   .grid img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 8px; display: block; background: var(--card); }
   p { margin: 0; }
+  .small { font-size: 0.85rem; } .small a { color: inherit; }
 </style>
 </head>
-<body><main>${body}</main></body>
+<body><main>${body}
+<p class="muted small"><a href="/privacy">Privacy</a></p></main></body>
 </html>`;
 }

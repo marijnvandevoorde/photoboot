@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1f9e6e" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <title>Photoboot — Privacy policy</title>
+    <meta name="description" content="What Photoboot does with photos, email addresses and payments." />
+    <link rel="stylesheet" href="/src/event.css" />
+    <script type="module" src="/src/consent.ts"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="brand"><a href="/event.html">Photoboot</a></p>
+        <h1>Privacy policy</h1>
+      </header>
+
+      <!-- DRAFT: written from what the code does on 2026-10-20. Review before relying on it. -->
+      <p class="draft small">
+        <strong>Draft, under review.</strong> This policy describes what the Photoboot software does today. It may
+        still change.
+      </p>
+
+      <article class="prose">
+        <p>
+          Photoboot (boot.small-victories.co and the Photoboot iOS app) is run by Small Victories. Questions, or want
+          to use your rights? Mail <a href="mailto:hello@small-victories.co">hello@small-victories.co</a>.
+        </p>
+
+        <h2>The booth: photos stay on the device unless shared</h2>
+        <ul>
+          <li>
+            The camera picture is processed in the browser or app on the booth device. Taking a photo or printing a
+            sticker sends nothing to our server; the printer is reached over Bluetooth, straight from the device.
+          </li>
+          <li>
+            The booth device can keep a colour copy of every photo in its own browser storage, so the host can
+            download them later. That copy never leaves the device unless the host exports it. Settings, counters
+            and the PIN live on the device too.
+          </li>
+          <li>
+            A photo reaches our server in two cases only:
+            <ul>
+              <li>a guest taps <em>Get photo</em> to get it on their phone through a QR code;</li>
+              <li>
+                the booth is set up for an event with an online gallery: then every photo taken at that booth is
+                uploaded to the event's gallery when the guest leaves the photo screen.
+              </li>
+            </ul>
+          </li>
+        </ul>
+
+        <h2>Shared photos</h2>
+        <ul>
+          <li>
+            We store the photo (a JPEG of the sticker layout in colour) with a random id, the time it was taken, its
+            size and the event it belongs to. Nothing else about the guest: no name, no face recognition, no
+            location.
+          </li>
+          <li>
+            Anyone with a photo's link can see it, so share links with care. The photo page has a
+            <em>Delete from the server</em> button; that removes it for good.
+          </li>
+          <li>
+            Event photos can also be seen and downloaded by everyone who has the event's gallery link (the host,
+            and whoever they share it with).
+          </li>
+          <li>
+            Photos are deleted automatically: <strong>30 days</strong> after they were taken, or for an event with a
+            paid gallery <strong>one year</strong> after (or the period agreed for that event). If an event's
+            payment is refunded, its photos fall back to the 30 days. Deleting an event deletes all its photos.
+          </li>
+        </ul>
+
+        <h2>Hosts who buy an event gallery</h2>
+        <ul>
+          <li>
+            We keep the event name, the optional date and your <strong>email address</strong>, used to send you the
+            setup link and the gallery link, and to answer you if you write to us. We don't send newsletters.
+          </li>
+          <li>
+            When a booth joins an event, it stores the event's setup on our server (settings and any header or
+            footer images you add) and reports counters (sessions, prints, shares, the busiest hour) under a random
+            device id.
+          </li>
+          <li>
+            The event and your email address are kept until the event is deleted. Ask us and we delete it, with
+            its photos. Payment records are kept as long as accounting law requires.
+          </li>
+        </ul>
+
+        <h2>Payments</h2>
+        <ul>
+          <li>
+            <strong>On the web, Stripe</strong> handles the payment. You enter your card or other payment details
+            with Stripe, not with us. We receive the payment's reference, amount, currency and your email address,
+            and Stripe creates an invoice. See
+            <a href="https://stripe.com/privacy" rel="noopener">Stripe's privacy policy</a>.
+          </li>
+          <li>
+            <strong>In the iOS app, Apple</strong> handles the in-app purchase. Apple doesn't tell us who you are;
+            we receive the signed transaction (its id, the product, price, currency, App Store country and date)
+            and a random token that ties it to your event. See
+            <a href="https://www.apple.com/legal/privacy/" rel="noopener">Apple's privacy policy</a>.
+          </li>
+        </ul>
+
+        <h2>Who processes data for us</h2>
+        <ul>
+          <li>
+            <strong>Oracle Cloud Infrastructure</strong> (Amsterdam region) runs the server, the database and the
+            private storage for photos.
+          </li>
+          <li>
+            <strong>Cloudflare</strong> sits in front of the site, like most websites, and sees your IP address and
+            the requests you make, to deliver and protect the site.
+          </li>
+          <li><strong>Brevo</strong> sends the email with your event links.</li>
+          <li><strong>Stripe</strong> and <strong>Apple</strong> handle payments, as above.</li>
+          <li><strong>Google</strong> runs Google Analytics and Google Tag Manager, only if you accept (below).</li>
+        </ul>
+        <p>Some of these companies may process data outside the EU, under the safeguards the GDPR requires.</p>
+
+        <h2>Cookies and analytics</h2>
+        <ul>
+          <li>
+            Only the event sign-up page and the privacy and terms pages use <strong>Google Analytics</strong>, loaded
+            through <strong>Google Tag Manager</strong>, to count visits. The booth, the settings, and the guests'
+            photo and gallery pages never load it.
+          </li>
+          <li>
+            <strong>Nothing is tracked until you accept.</strong> A banner asks first. Until you click
+            <em>Accept</em>, Google Analytics is told consent is denied and sets no cookies; <em>Reject</em> keeps it
+            that way. Advertising cookies stay off, whatever you choose.
+          </li>
+          <li>
+            If you accept, Google Analytics records the pages you visit, where you came from, your approximate region
+            and your device and browser type, using the cookies <code>_ga</code> and <code>_ga_…</code>. See
+            <a href="https://policies.google.com/technologies/partner-sites" rel="noopener"
+              >how Google uses data from sites like this one</a
+            >.
+          </li>
+          <li>
+            Your choice is remembered in your browser (local storage). Changed your mind? Click
+            <button type="button" class="link" data-consent-open>Cookie settings</button> and choose again; rejecting
+            removes the Google Analytics cookies.
+          </li>
+          <li>
+            Other browser storage is only functional: the sign-up form is kept for the browser session while you
+            pay, so a cancelled payment doesn't lose it.
+          </li>
+        </ul>
+
+        <h2>Your rights</h2>
+        <p>
+          Under the GDPR you can ask to see, correct or delete your data, object to its use, or take it with you.
+          Mail <a href="mailto:hello@small-victories.co">hello@small-victories.co</a>; a photo you can delete yourself
+          from its page. You can also complain to the Belgian Data Protection Authority
+          (<a href="https://www.dataprotectionauthority.be" rel="noopener">dataprotectionauthority.be</a>).
+        </p>
+
+        <h2>Hosts and their guests</h2>
+        <p>
+          A host who runs a booth at their event decides to take and share their guests' photos. Please tell your
+          guests that photos may be shared through a link or an online gallery, and delete a photo when someone asks.
+        </p>
+      </article>
+
+      <footer class="small muted">
+        <p class="legal">
+          <a href="/event.html">Event gallery</a>
+          <a href="/terms">Terms</a>
+          <button type="button" data-consent-open>Cookie settings</button>
+        </p>
+      </footer>
+    </main>
+  </body>
+</html>

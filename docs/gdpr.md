@@ -3,15 +3,15 @@
 Last reviewed: 2026-10-20, against the code in this repo. Keep it true when data handling changes, together
 with `privacy.html` and `terms.html`.
 
-**Who:** Small Victories (Marijn Vandevoorde), Mellestraat 303, 9090 Merelbeke-Melle, Belgium,
+**Who:** Small Victories BV, Mellestraat 303, 9090 Merelbeke-Melle, Belgium,
 BE0793.301.929, hello@small-victories.co. No DPO (not required: small scale, no special categories as a
 core activity).
 
 ## Roles
 
-- **Photos taken at a booth:** the **host** (whoever runs the booth, free or paid) is the controller. We are
-  the processor. The Art. 28 terms are in `terms.html` ("How we process your guests' photos for you").
-- **Hosts' data, payments, booth counters, visits to our pages:** we are the controller.
+- **Photos taken at a booth:** the **host** (whoever runs the booth, free or paid) is the controller.
+  Small Victories BV is the processor. The Art. 28 terms are in `terms.html` ("How we process your guests' photos for you").
+- **Hosts' data, payments, booth counters, visits to our pages:** Small Victories BV is the controller.
 
 ## Processing activities
 

@@ -46,7 +46,7 @@ const TEXTS: Record<Lang, Texts> = {
     },
     host: 'Organised by:',
     hostBlank: '……………………………',
-    footer: `The host is responsible for these photos. Photoboot by Small Victories stores them for the host. Privacy: ${PRIVACY}`,
+    footer: `The host is responsible for these photos. Photoboot by Small Victories BV stores them for the host. Privacy: ${PRIVACY}`,
   },
   nl: {
     kicker: 'Fotobooth',
@@ -69,7 +69,7 @@ const TEXTS: Record<Lang, Texts> = {
     },
     host: 'Georganiseerd door:',
     hostBlank: '……………………………',
-    footer: `De organisator is verantwoordelijk voor deze foto's. Photoboot van Small Victories bewaart ze voor de organisator. Privacy: ${PRIVACY}`,
+    footer: `De organisator is verantwoordelijk voor deze foto's. Photoboot van Small Victories BV bewaart ze voor de organisator. Privacy: ${PRIVACY}`,
   },
   fr: {
     kicker: 'Photomaton',
@@ -92,7 +92,7 @@ const TEXTS: Record<Lang, Texts> = {
     },
     host: 'Organisé par :',
     hostBlank: '……………………………',
-    footer: `L'organisateur est responsable de ces photos. Photoboot de Small Victories les conserve pour lui. Vie privée : ${PRIVACY}`,
+    footer: `L'organisateur est responsable de ces photos. Photoboot de Small Victories BV les conserve pour lui. Vie privée : ${PRIVACY}`,
   },
 };
 

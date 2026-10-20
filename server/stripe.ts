@@ -2,7 +2,8 @@
 //
 //   GET  /api/checkout/price    { amount, currency, enabled, paidDays, freeDays }
 //                               for the sign-up page (event.html)
-//   POST /api/checkout          { name, email, eventDate? } → pending event +
+//   POST /api/checkout          { name, email, eventDate?, withdrawalConsent:
+//                               true } → pending event +
 //                               Checkout Session → { url } (redirect there)
 //   GET  /api/checkout/status?session=cs_…
 //                               { paid, eventName, setupLink, galleryLink } once
@@ -147,13 +148,21 @@ async function activateFromSession(session: Session) {
 
 async function checkout(req: Req, res: Res) {
   if (checkoutLimited(clientIp(req))) throw new HttpError(429, 'Too many attempts, try again later.');
+  const body = await readJson<Record<string, unknown>>(req, 8192);
   let request: ReturnType<typeof checkEventRequest>;
   try {
-    request = checkEventRequest(await readJson(req, 8192));
+    request = checkEventRequest(body);
   } catch (err) {
-    if (err instanceof HttpError) throw err;
     throw new HttpError(400, (err as Error).message);
   }
+  // EU Consumer Rights Directive: the host asks for the gallery to start
+  // right away and accepts losing the withdrawal right once the event has
+  // taken place. Recorded on the session and PaymentIntent at Stripe, and
+  // confirmed in the email (billing.ts).
+  if (body?.withdrawalConsent !== true) {
+    throw new HttpError(400, 'Tick the box to confirm the gallery starts right away.');
+  }
+  const consent = new Date().toISOString();
   const ev = await createPendingEvent(request, 'stripe');
   const params: Record<string, unknown> = {
     mode: 'payment',
@@ -171,8 +180,8 @@ async function checkout(req: Req, res: Res) {
     ],
     customer_email: request.email,
     client_reference_id: ev.id,
-    metadata: { event_id: ev.id },
-    payment_intent_data: { metadata: { event_id: ev.id } },
+    metadata: { event_id: ev.id, withdrawal_consent: consent },
+    payment_intent_data: { metadata: { event_id: ev.id, withdrawal_consent: consent } },
     invoice_creation: { enabled: true }, // hosts may need an invoice
     success_url: `${publicUrl()}/event.html?session={CHECKOUT_SESSION_ID}`,
     cancel_url: `${publicUrl()}/event.html?cancelled=1`,

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1f9e6e" />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <title>Photoboot — Booth notice</title>
+    <meta name="description" content="A printable notice that tells guests where their photo booth photos go." />
+    <link rel="stylesheet" href="/src/sign.css" />
+  </head>
+  <body>
+    <div class="tools">
+      <p>
+        Print this notice and put it next to the booth: the law asks you to tell your guests what happens with their
+        photos. Click the event name or the host line to change them before printing.
+      </p>
+      <div class="row">
+        <label>
+          Language
+          <select id="lang">
+            <option value="en">English</option>
+            <option value="nl">Nederlands</option>
+            <option value="fr">Français</option>
+          </select>
+        </label>
+        <label>
+          Booth
+          <select id="mode">
+            <option value="gallery">With an online gallery</option>
+            <option value="free">Without a gallery (QR only)</option>
+          </select>
+        </label>
+        <button type="button" id="print">Print</button>
+      </div>
+    </div>
+
+    <article class="sign">
+      <p class="kicker" data-t="kicker"></p>
+      <h1 data-t="title">Your photos go to an online gallery</h1>
+      <p class="event" id="event" contenteditable="true" spellcheck="false"></p>
+      <ul id="points"></ul>
+      <p class="host"><span data-t="host"></span> <span id="host" contenteditable="true" spellcheck="false"></span></p>
+      <p class="small" data-t="footer"></p>
+    </article>
+    <script type="module" src="/src/sign.ts"></script>
+  </body>
+</html>

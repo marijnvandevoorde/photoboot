@@ -29,6 +29,9 @@ const publicUrl = () =>
 export const setupLink = (ev: Pick<StoredEvent, 'id' | 'setupKey'>) =>
   `${publicUrl()}/settings.html#event=${ev.id}.${ev.setupKey}`;
 export const galleryLink = (ev: Pick<StoredEvent, 'id' | 'galleryKey'>) => `${publicUrl()}/g/${ev.id}/${ev.galleryKey}`;
+// The printable notice that tells guests about the gallery (sign.html).
+export const signLink = (ev: Pick<StoredEvent, 'name' | 'retentionDays'>) =>
+  `${publicUrl()}/sign?${new URLSearchParams({ event: ev.name, days: String(ev.retentionDays ?? PAID_RETENTION_DAYS) })}`;
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -115,7 +118,15 @@ export async function sendEventEmail(ev: StoredEvent): Promise<void> {
   if (!ev.email) throw new Error('This event has no email address.');
   const setup = setupLink(ev);
   const gallery = galleryLink(ev);
+  const sign = signLink(ev);
+  const days = ev.retentionDays ?? PAID_RETENTION_DAYS;
   const name = escapeHtml(ev.name);
+  // Consumer Rights Directive: confirm on a durable medium what the host
+  // agreed to at checkout (stripe.ts). Apple handles its own purchases.
+  const withdrawal =
+    ev.source === 'stripe'
+      ? 'You asked for the gallery to start right away and agreed that your 14-day right of withdrawal ends once your event has taken place. Until then, mail us for a full refund.'
+      : '';
   await sendMail({
     to: { email: ev.email },
     subject: `Your photo booth for ${ev.name} is ready`,
@@ -124,20 +135,25 @@ export async function sendEventEmail(ev: StoredEvent): Promise<void> {
 1. Set up the booth: open this link on the iPad or laptop you'll use as the booth (open it on every booth if you have more than one):
 ${setup}
 
-2. Your photo gallery: every photo guests share shows up here, with a download of all of them. Keep this link private; share it with whoever should get the photos:
+2. Your photo gallery: every photo taken at your booths shows up here, with a download of all of them. Keep this link private; share it with whoever should get the photos:
 ${gallery}
 
-Photos are kept for ${ev.retentionDays ?? PAID_RETENTION_DAYS} days after they're taken.
+3. Tell your guests: print this notice and put it next to the booth, so they know their photos go to an online gallery:
+${sign}
 
+Photos are kept for ${days} days after they're taken, then deleted automatically. To delete the event and all its photos sooner: on a booth, Settings → Event → Online gallery → Delete the event, or mail hello@small-victories.co.
+${withdrawal ? `\n${withdrawal}\n` : ''}
 Have a great party!
 Photoboot — ${publicUrl()}`,
     html: `<div style="font:16px/1.5 -apple-system,system-ui,sans-serif;max-width:560px">
 <h1 style="font-size:22px">Your photo booth for ${name} is ready 📸</h1>
 <p><strong>1. Set up the booth.</strong> Open this link on the iPad or laptop you'll use as the booth (on every booth, if you have more than one):</p>
 <p><a href="${escapeHtml(setup)}" style="display:inline-block;background:#1f9e6e;color:#000;padding:12px 20px;border-radius:999px;text-decoration:none;font-weight:600">Set up the booth</a></p>
-<p><strong>2. Your photo gallery.</strong> Every photo guests share shows up here, with a download of all of them. Keep this link private; share it with whoever should get the photos:</p>
+<p><strong>2. Your photo gallery.</strong> Every photo taken at your booths shows up here, with a download of all of them. Keep this link private; share it with whoever should get the photos:</p>
 <p><a href="${escapeHtml(gallery)}">${escapeHtml(gallery)}</a></p>
-<p style="color:#666">Photos are kept for ${ev.retentionDays ?? PAID_RETENTION_DAYS} days after they're taken.</p>
+<p><strong>3. Tell your guests.</strong> <a href="${escapeHtml(sign)}">Print this notice</a> and put it next to the booth, so they know their photos go to an online gallery.</p>
+<p style="color:#666">Photos are kept for ${days} days after they're taken, then deleted automatically. To delete the event and all its photos sooner: on a booth, Settings → Event → Online gallery → Delete the event, or mail <a href="mailto:hello@small-victories.co">hello@small-victories.co</a>.</p>
+${withdrawal ? `<p style="color:#666">${escapeHtml(withdrawal)}</p>` : ''}
 </div>`,
   });
 }

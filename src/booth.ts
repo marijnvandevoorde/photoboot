@@ -956,15 +956,16 @@ function colourJpeg(s: Session | null = session): Promise<Blob> {
 
 // Archive when the guest leaves the review, so the copy has their final twist.
 // A booth in a server event also stores every photo in the event, unless
-// it was already shared with that twist.
-function archiveSession(s: Session | null) {
+// it was already shared with that twist, or the guest pressed Retake
+// (`upload` false: they didn't want that one).
+function archiveSession(s: Session | null, upload = true) {
   if (!s) return;
   if (config.keepLocalCopies) {
     colourJpeg(s)
       .then((blob) => savePhoto(blob))
       .catch((err) => console.error('Local copy failed', err));
   }
-  if (config.serverEvent?.id && !(s.shareUrl && s.shareTwist === (s.look?.twist ?? 'none'))) {
+  if (upload && config.serverEvent?.id && !(s.shareUrl && s.shareTwist === (s.look?.twist ?? 'none'))) {
     uploadPhoto(s).catch((err) => {
       console.error('Event upload failed', err);
       setStatus({ lastError: `Event upload: ${errorMessage(err)}` });
@@ -1111,18 +1112,18 @@ function showReview() {
   if (config.autoPrint && printer) doPrint();
 }
 
-function backToBooth() {
+function backToBooth({ upload = true } = {}) {
   clearTimeout(reviewTimer);
   $('qr-dialog').hidden = true;
   $('print-overlay').hidden = true;
-  archiveSession(session);
+  archiveSession(session, upload);
   session = null;
   show('booth');
   setPill();
 }
 
 $<HTMLButtonElement>('retry').addEventListener('click', () => {
-  if (!busy) backToBooth();
+  if (!busy) backToBooth({ upload: false });
 });
 $<HTMLButtonElement>('done').addEventListener('click', () => {
   if (!busy) backToBooth();

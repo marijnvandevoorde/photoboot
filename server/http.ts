@@ -24,7 +24,8 @@ export function sendHtml(res: Res, status: number, html: string) {
     'Content-Type': 'text/html; charset=utf-8',
     'Cache-Control': 'no-store',
     'X-Robots-Tag': 'noindex, nofollow',
-    'Referrer-Policy': 'no-referrer',
+    'Referrer-Policy': 'no-referrer', // the gallery key is in the URL
+    'X-Content-Type-Options': 'nosniff',
   });
   res.end(html);
 }

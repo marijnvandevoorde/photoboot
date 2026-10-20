@@ -96,23 +96,32 @@
             <p id="server-event" class="small"></p>
             <div id="event-joined" hidden>
               <p class="help">
-                Every photo guests share goes to this event's private gallery. Running several booths? Set this
-                one up, save it to the event, then open the setup link on the others.
+                Every photo guests keep (not the ones they retake) goes to this event's private gallery. Running
+                several booths? Set this one up, save it to the event, then open the setup link on the others.
+                Let guests know with the <a id="event-sign" href="/sign" target="_blank" rel="noopener">booth
+                notice</a>: print it and put it next to the booth.
               </p>
               <div class="row">
                 <button type="button" id="save-to-event" class="primary">Save this setup to the event</button>
                 <button type="button" id="leave-event">Disconnect from the event</button>
               </div>
+              <p class="help">
+                Done with the event? Delete it from the server, with its gallery and every photo in it. This can't be
+                undone; download the ZIP from the gallery first.
+              </p>
+              <div class="row">
+                <button type="button" id="delete-event" class="danger">Delete the event</button>
+              </div>
             </div>
             <div id="event-join">
               <p class="help" id="event-buy-web">
-                Want every shared photo of the evening in one private online gallery, with a download of all of
+                Want every photo of the evening in one private online gallery, with a download of all of
                 them? <a href="/event.html" target="_blank" rel="noopener">Get an event gallery</a>. You'll get
                 an email with a setup link: open it on this device, or paste it here.
               </p>
               <div id="event-buy-app" hidden>
                 <p class="help">
-                  Want every shared photo of the evening in one private online gallery, with a download of all of
+                  Want every photo of the evening in one private online gallery, with a download of all of
                   them? Buy it once for this event: photos are kept for a year and you can run as many booths as you
                   like. This booth is set up right away, and you also get the links by email.
                 </p>
@@ -126,6 +135,13 @@
                   <button type="button" id="buy-gallery" class="primary" disabled>Buy</button>
                   <button type="button" id="restore-purchase">Restore unfinished purchase</button>
                 </div>
+                <p class="help">
+                  By buying you accept the
+                  <a href="https://boot.small-victories.co/terms" target="_blank" rel="noopener">terms</a>, including
+                  how we handle your guests' photos for you; see the
+                  <a href="https://boot.small-victories.co/privacy" target="_blank" rel="noopener">privacy policy</a>.
+                  Refunds go through Apple.
+                </p>
                 <p class="help">Already have a setup link (from the email, or another booth)? Paste it here.</p>
               </div>
               <div class="row">
@@ -139,7 +155,7 @@
             <p id="buy-status" class="small" hidden></p>
             <div id="event-bought" hidden>
               <p class="help">
-                Your private gallery: every photo guests share shows up there, with a download of all of them.
+                Your private gallery: every photo taken at your booths shows up there, with a download of all of them.
                 Share the link only with whoever should get the photos.
               </p>
               <div class="row">

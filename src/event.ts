@@ -81,6 +81,8 @@ async function submit(e: SubmitEvent) {
   const eventDate = field('date').value || null;
   if (!name) return showError('Give the event a name.');
   if (!field('email').checkValidity() || !email) return showError('That email address looks wrong.');
+  const withdrawalConsent = field('withdrawal').checked;
+  if (!withdrawalConsent) return showError('Tick the box to confirm the gallery starts right away.');
   const pay = $<HTMLButtonElement>('pay');
   pay.disabled = true;
   pay.textContent = 'Opening the payment page…';
@@ -90,7 +92,7 @@ async function submit(e: SubmitEvent) {
     // fine without
   }
   try {
-    const { url } = await api<{ url: string }>('/api/checkout', { name, email, eventDate });
+    const { url } = await api<{ url: string }>('/api/checkout', { name, email, eventDate, withdrawalConsent });
     location.href = url;
   } catch (err) {
     showError(errorMessage(err));
@@ -132,6 +134,7 @@ function showLinks(status: Status) {
   const gallery = $<HTMLAnchorElement>('gallery-link');
   gallery.href = status.galleryLink as string;
   gallery.textContent = status.galleryLink as string;
+  $<HTMLAnchorElement>('sign-link').href = `/sign?${new URLSearchParams({ event: status.eventName ?? '' })}`;
   const copy = $<HTMLButtonElement>('setup-copy');
   copy.addEventListener('click', async () => {
     try {

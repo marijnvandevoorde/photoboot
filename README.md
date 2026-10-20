@@ -228,13 +228,17 @@ up right away. To set it up:
 ## Privacy
 
 Without a server event, only photos a guest chooses to share leave the
-booth; a booth in an event uploads every photo to that event's gallery. Each
+booth; a booth in an event uploads every photo to that event's gallery
+(except the ones a guest retakes). Each
 uploaded photo gets an unguessable link and a page where the guest can save it or delete it, and
 it's deleted automatically after `SHARE_TTL_DAYS`. Images are served with
 `Cache-Control: private`, so a CDN doesn't keep copies after a delete.
 Uploads are rate-limited per IP unless they come from a booth with a valid
 event key. Everything else — settings, counters, the full photo archive —
-stays in the booth's browser.
+stays in the booth's browser. An hourly job (`server/retention.ts`) also
+deletes unpaid and expired events and payment records older than the
+accounting period. The GDPR record of processing is in `docs/gdpr.md`; hosts
+get a printable notice for their guests at `/sign`.
 
 ## Supported printers
 

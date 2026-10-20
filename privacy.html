@@ -15,19 +15,30 @@
       <header>
         <p class="brand"><a href="/event.html">Photoboot</a></p>
         <h1>Privacy policy</h1>
+        <p class="small muted">Last updated 20 October 2026</p>
       </header>
-
-      <!-- DRAFT: written from what the code does on 2026-10-20. Review before relying on it. -->
-      <p class="draft small">
-        <strong>Draft, under review.</strong> This policy describes what the Photoboot software does today. It may
-        still change.
-      </p>
 
       <article class="prose">
         <p>
-          Photoboot (boot.small-victories.co and the Photoboot iOS app) is run by Small Victories. Questions, or want
-          to use your rights? Mail <a href="mailto:hello@small-victories.co">hello@small-victories.co</a>.
+          Photoboot (boot.small-victories.co and the Photoboot iOS app) is run by
+          <strong>Small Victories (Marijn Vandevoorde)</strong>, Mellestraat 303, 9090 Merelbeke-Melle, Belgium ·
+          enterprise number BE0793.301.929 ·
+          <a href="mailto:hello@small-victories.co">hello@small-victories.co</a>. Questions, or want to use your
+          rights? Mail us.
         </p>
+
+        <h2>Who is responsible for what</h2>
+        <ul>
+          <li>
+            <strong>Photos taken at a booth</strong> belong to the event. The <strong>host</strong> who runs the
+            booth decides to take and share them, and is the controller of those photos. We store and show them for
+            the host, as their processor, under the data-processing terms in our <a href="/terms">terms</a>.
+          </li>
+          <li>
+            <strong>Hosts' own data</strong> (email address, event details, payments) and visits to our own pages:
+            there Small Victories is the controller.
+          </li>
+        </ul>
 
         <h2>The booth: photos stay on the device unless shared</h2>
         <ul>
@@ -45,32 +56,31 @@
             <ul>
               <li>a guest taps <em>Get photo</em> to get it on their phone through a QR code;</li>
               <li>
-                the booth is set up for an event with an online gallery: then every photo taken at that booth is
-                uploaded to the event's gallery when the guest leaves the photo screen.
+                the booth is set up for an event with an online gallery: then every photo a guest keeps is uploaded
+                to the event's gallery when they leave the photo screen. A photo the guest retakes is not uploaded.
               </li>
             </ul>
           </li>
         </ul>
 
-        <h2>Shared photos</h2>
+        <h2>Photos on our server</h2>
         <ul>
           <li>
-            We store the photo (a JPEG of the sticker layout in colour) with a random id, the time it was taken, its
-            size and the event it belongs to. Nothing else about the guest: no name, no face recognition, no
-            location.
+            We store the photo (a JPEG of the sticker layout in colour, without location or camera data) with a
+            random id, the time it was taken, its size and the event it belongs to. Nothing else about the guest:
+            no name, no face recognition, no location.
           </li>
           <li>
             Anyone with a photo's link can see it, so share links with care. The photo page has a
-            <em>Delete from the server</em> button; that removes it for good.
+            <em>Delete from the server</em> button; that removes it for good, also from the event's gallery.
           </li>
           <li>
             Event photos can also be seen and downloaded by everyone who has the event's gallery link (the host,
             and whoever they share it with).
           </li>
           <li>
-            Photos are deleted automatically: <strong>30 days</strong> after they were taken, or for an event with a
-            paid gallery <strong>one year</strong> after (or the period agreed for that event). If an event's
-            payment is refunded, its photos fall back to the 30 days. Deleting an event deletes all its photos.
+            Photo and gallery pages are private links: they are not listed anywhere, they tell search engines not
+            to index them, and the photo files sit in private storage that only our server can read.
           </li>
         </ul>
 
@@ -84,10 +94,6 @@
             When a booth joins an event, it stores the event's setup on our server (settings and any header or
             footer images you add) and reports counters (sessions, prints, shares, the busiest hour) under a random
             device id.
-          </li>
-          <li>
-            The event and your email address are kept until the event is deleted. Ask us and we delete it, with
-            its photos. Payment records are kept as long as accounting law requires.
           </li>
         </ul>
 
@@ -107,21 +113,72 @@
           </li>
         </ul>
 
+        <h2>Why we may use this data</h2>
+        <ul>
+          <li>
+            <strong>Photos of guests:</strong> we process them for the host, on the host's instructions (running
+            the service as described here). The host needs their own legal ground, usually their legitimate
+            interest in photos of their party, and must tell their guests; we give them a
+            <a href="/sign">booth notice</a> to print.
+          </li>
+          <li>
+            <strong>Your email address and event details:</strong> to deliver the gallery you ordered (performance
+            of a contract).
+          </li>
+          <li>
+            <strong>Payment records:</strong> the contract, and our legal duty to keep accounting records.
+          </li>
+          <li>
+            <strong>Booth counters:</strong> our legitimate interest in showing the host how their booth was used
+            and keeping the service working. They hold nothing about guests.
+          </li>
+          <li><strong>Google Analytics:</strong> only with your consent, which you can withdraw at any time.</li>
+        </ul>
+
+        <h2>How long we keep it</h2>
+        <ul>
+          <li>
+            <strong>Photos:</strong> deleted automatically <strong>30 days</strong> after they were taken, or for an
+            event with a paid gallery <strong>one year</strong> after (or the period agreed for that event). If an
+            event's payment is refunded, its photos fall back to the 30 days.
+          </li>
+          <li>
+            <strong>Events</strong> (name, date, email address, setup, counters): deleted with all their photos when
+            the host deletes the event, or automatically once its photos have expired and another 30 days have
+            passed. An event that was never paid is deleted after 30 days.
+          </li>
+          <li>
+            <strong>Payment records</strong> are kept apart from the photos and events, for as long as Belgian
+            accounting law requires (until the end of the seventh year after the payment), then deleted.
+          </li>
+          <li>
+            <strong>Backups:</strong> the server is backed up every night, encrypted. Something deleted disappears
+            from the backups within 30 days.
+          </li>
+        </ul>
+
         <h2>Who processes data for us</h2>
         <ul>
           <li>
-            <strong>Oracle Cloud Infrastructure</strong> (Amsterdam region) runs the server, the database and the
-            private storage for photos.
+            <strong>Oracle Cloud Infrastructure</strong> (Amsterdam region, the Netherlands) runs the server, the
+            database and the private storage for photos.
           </li>
+          <li><strong>Hetzner</strong> (EU) keeps our encrypted backups.</li>
           <li>
             <strong>Cloudflare</strong> sits in front of the site, like most websites, and sees your IP address and
-            the requests you make, to deliver and protect the site.
+            the requests you make, to deliver and protect the site. The site only works over HTTPS.
           </li>
-          <li><strong>Brevo</strong> sends the email with your event links.</li>
+          <li><strong>Brevo</strong> (France) sends the email with your event links.</li>
           <li><strong>Stripe</strong> and <strong>Apple</strong> handle payments, as above.</li>
           <li><strong>Google</strong> runs Google Analytics and Google Tag Manager, only if you accept (below).</li>
         </ul>
-        <p>Some of these companies may process data outside the EU, under the safeguards the GDPR requires.</p>
+        <p>
+          <strong>Outside the EU.</strong> Our server, database, photos and backups are stored in the EU. Cloudflare,
+          Stripe, Apple and Google are (part of) American companies, and Oracle's support staff may reach the server
+          from outside the EU, so some data can be handled in the United States or elsewhere. Those transfers are
+          covered by the EU–US Data Privacy Framework, which these companies have joined, and by the European
+          Commission's standard contractual clauses.
+        </p>
 
         <h2>Cookies and analytics</h2>
         <ul>
@@ -156,15 +213,29 @@
         <h2>Your rights</h2>
         <p>
           Under the GDPR you can ask to see, correct or delete your data, object to its use, or take it with you.
-          Mail <a href="mailto:hello@small-victories.co">hello@small-victories.co</a>; a photo you can delete yourself
-          from its page. You can also complain to the Belgian Data Protection Authority
+          Mail <a href="mailto:hello@small-victories.co">hello@small-victories.co</a>; we answer within a month.
+          You can also complain to the Belgian Data Protection Authority
           (<a href="https://www.dataprotectionauthority.be" rel="noopener">dataprotectionauthority.be</a>).
         </p>
 
+        <h2>Guests: a photo of you</h2>
+        <ul>
+          <li>
+            Delete it yourself: open the photo's link (its QR code, or the event's gallery) and tap
+            <em>Delete from the server</em>.
+          </li>
+          <li>
+            Or ask the host of the event, or mail us the link of the photo (or the event's name and date). We remove
+            it from our server within a few days and let the host know, since the photos are theirs; if the host has
+            a good reason to keep it, we tell you. The booth device's own copy is the host's: ask them to delete it.
+          </li>
+        </ul>
+
         <h2>Hosts and their guests</h2>
         <p>
-          A host who runs a booth at their event decides to take and share their guests' photos. Please tell your
-          guests that photos may be shared through a link or an online gallery, and delete a photo when someone asks.
+          A host who runs a booth at their event decides to take and share their guests' photos, and must tell their
+          guests. <a href="/sign">Print the booth notice</a> and put it next to the booth. Delete a photo when
+          someone asks, and take extra care with photos of children.
         </p>
       </article>
 
@@ -172,6 +243,7 @@
         <p class="legal">
           <a href="/event.html">Event gallery</a>
           <a href="/terms">Terms</a>
+          <a href="/sign">Booth notice</a>
           <button type="button" data-consent-open>Cookie settings</button>
         </p>
       </footer>

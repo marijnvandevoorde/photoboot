@@ -8,7 +8,7 @@
     <title>Photoboot — Event gallery</title>
     <meta
       name="description"
-      content="Every photo your guests share, in one private online gallery with a download of all of them."
+      content="Every photo from your booth, in one private online gallery with a download of all of them."
     />
     <link rel="stylesheet" href="/src/event.css" />
     <script type="module" src="/src/consent.ts"></script>
@@ -19,7 +19,7 @@
         <p class="brand"><a href="/">Photoboot</a></p>
         <h1>Your party's photos, all in one place</h1>
         <p class="lead">
-          The photo booth is free. Add an <strong>event gallery</strong> and every photo your guests share ends up
+          The photo booth is free. Add an <strong>event gallery</strong> and every photo your guests take ends up
           in one private online gallery.
         </p>
       </header>
@@ -39,6 +39,11 @@
           </div>
           <p class="small muted">Your gallery (keep it private, share it with whoever should get the photos):</p>
           <p><a id="gallery-link" class="link" href="/" target="_blank" rel="noopener">Your gallery</a></p>
+          <p class="small muted">
+            Let your guests know their photos go to an online gallery:
+            <a id="sign-link" class="link" href="/sign" target="_blank" rel="noopener">print the booth notice</a>
+            and put it next to the booth.
+          </p>
         </div>
       </section>
 
@@ -46,11 +51,11 @@
         <ul class="perks">
           <li>
             <strong>One private gallery</strong>
-            <span>Every photo guests share from the booth, together on one page only you have the link to.</span>
+            <span>Every photo guests keep at the booth (not the ones they retake), together on one private page.</span>
           </li>
           <li>
             <strong>Download them all</strong>
-            <span>One ZIP with every shared photo, whenever you like.</span>
+            <span>One ZIP with every photo, whenever you like.</span>
           </li>
           <li>
             <strong>Kept for <span data-paid-days>a year</span></strong>
@@ -59,6 +64,13 @@
           <li>
             <strong>Several booths</strong>
             <span>Run the same event on as many devices as you want; their photos and counters add up.</span>
+          </li>
+          <li>
+            <strong>A notice for your guests</strong>
+            <span>
+              A <a class="link" href="/sign" target="_blank" rel="noopener">printable booth notice</a> tells guests
+              where their photos go and how to have one removed.
+            </span>
           </li>
           <li>
             <strong>Links by email</strong>
@@ -83,12 +95,20 @@
             Your email
             <input id="email" name="email" type="email" autocomplete="email" required placeholder="you@example.com" />
           </label>
+          <label class="check">
+            <input id="withdrawal" name="withdrawalConsent" type="checkbox" required />
+            <span>
+              I want my gallery to start right away. I understand that my 14-day right of withdrawal ends once my
+              event has taken place; until then I can cancel for a full refund.
+            </span>
+          </label>
           <p id="form-error" class="error" role="alert" hidden></p>
           <button type="submit" id="pay" class="btn">Continue to payment</button>
           <p class="small muted">
             One payment per event, no subscription. You pay securely with Stripe and can ask for an invoice.
-            By continuing you accept the <a class="link" href="/terms">terms</a>; see the
-            <a class="link" href="/privacy">privacy policy</a> for what happens with your email.
+            By continuing you accept the <a class="link" href="/terms">terms</a>, including how we handle your
+            guests' photos for you; see the <a class="link" href="/privacy">privacy policy</a> for what happens
+            with your email.
           </p>
         </form>
       </section>

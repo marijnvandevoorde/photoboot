@@ -39,6 +39,7 @@ export default defineConfig({
         event: 'event.html',
         privacy: 'privacy.html',
         terms: 'terms.html',
+        sign: 'sign.html',
       },
     },
   },

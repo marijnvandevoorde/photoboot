@@ -640,6 +640,7 @@ function renderServerEvent() {
     : '';
   $('event-joined').hidden = !ev?.id;
   $('event-join').hidden = !!ev?.id;
+  if (ev?.id) $<HTMLAnchorElement>('event-sign').href = `/sign?${new URLSearchParams({ event: ev.name || '' })}`;
 }
 fillers.push(renderServerEvent);
 
@@ -662,6 +663,23 @@ $<HTMLButtonElement>('leave-event').addEventListener('click', () => {
   save({ serverEvent: null });
   renderServerEvent();
   renderStatus();
+});
+
+$<HTMLButtonElement>('delete-event').addEventListener('click', async () => {
+  const ev = config.serverEvent;
+  if (!ev?.id) return;
+  const name = ev.name || ev.id;
+  if (!confirm(`Delete “${name}” from the server, with its gallery and every photo in it? This can't be undone.`))
+    return;
+  try {
+    await remote.deleteEvent(ev.id, ev.key);
+    save({ serverEvent: null });
+    renderServerEvent();
+    renderStatus();
+    flashStatus('Event deleted ✓');
+  } catch (err) {
+    flashStatus(`Couldn't delete: ${errorMessage(err)}`, true);
+  }
 });
 
 // Setup QR: /settings.html#event=<id>.<setupKey>

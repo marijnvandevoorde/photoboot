@@ -3,7 +3,8 @@
 // photos shared at that event and the booths' summed counters.
 //
 // Two secrets per event, handed out as links (see mail.ts / admin):
-//   setupKey    load and save the setup, upload photos, push stats (booths)
+//   setupKey    load and save the setup, upload photos, push stats (booths),
+//               delete the event (the host)
 //   galleryKey  view the gallery and download the ZIP (the host)
 // The owner manages all events in /admin (admin.ts).
 //
@@ -19,6 +20,7 @@ import { crc32 } from './zip.ts';
 
 const MAX_EVENT_BYTES = 10 * 1024 * 1024; // config + template images as data URLs
 const EVENT_ID = /^[\w-]{6,32}$/;
+const REMOVAL_EMAIL = 'hello@small-victories.co';
 
 export const newKey = (bytes: number) => randomBytes(bytes).toString('base64url');
 
@@ -292,6 +294,12 @@ async function boothRoute(req: Req, res: Res, id: string, isStats: boolean): Pro
   const ev = await getEvent(id);
   if (!ev) return sendJson(res, 404, { error: 'No such event.' });
   if (!safeEqual(req.headers['x-event-key'], ev.setupKey)) return sendJson(res, 401, { error: 'Wrong event key.' });
+  // The host deletes the event, its photos and counters (settings → Online
+  // gallery). Payment records stay: accounting law (retention.ts).
+  if (req.method === 'DELETE' && !isStats) {
+    await deleteEvent(ev.id);
+    return sendJson(res, 200, { ok: true });
+  }
   if (ev.status !== 'active') return sendJson(res, 402, { error: "This event isn't paid yet." });
 
   if (isStats) {
@@ -349,8 +357,9 @@ async function sendGallery(res: Res, ev: StoredEvent, base: string): Promise<voi
       `<h1>${escapeHtml(ev.name)}</h1>
 <p class="muted">${escapeHtml(statLine)}</p>
 ${photos.length ? `<div class="actions"><a class="btn" href="${escapeHtml(base)}/photos.zip">Download all (ZIP)</a></div>` : ''}
-<div class="grid">${grid || '<p class="muted">No shared photos yet. Only photos guests pressed “Get photo” on appear here.</p>'}</div>
-<p class="muted">${escapeHtml(expiry)} Only photos guests shared are on the server; the booth device keeps a copy of every photo.</p>`
+<div class="grid">${grid || '<p class="muted">No photos yet. Photos taken at a booth set up for this event appear here.</p>'}</div>
+<p class="muted">Every photo taken at this event's booths is here, also the ones nobody printed or shared (not the ones guests retook). ${escapeHtml(expiry)} Keep this link private: anyone who has it can see and download these photos.</p>
+<p class="muted small"><strong>Want a photo of you removed?</strong> Open it and tap “Delete from the server”, ask the host of the event, or mail <a href="mailto:${REMOVAL_EMAIL}?subject=${encodeURIComponent('Photo removal')}">${REMOVAL_EMAIL}</a> with the link of the photo. We remove it within a few days and let the host know.</p>`
     )
   );
 }

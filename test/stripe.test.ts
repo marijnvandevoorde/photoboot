@@ -109,7 +109,7 @@ async function startCheckout(name = 'Anna & Tom', email = 'host@example.com') {
   const res = await fetch(`${base}/api/checkout`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, email, eventDate: '2026-12-31' }),
+    body: JSON.stringify({ name, email, eventDate: '2026-12-31', withdrawalConsent: true }),
   });
   expect(res.status).toBe(200);
   const { url } = (await res.json()) as { url: string };
@@ -193,6 +193,8 @@ describe('checkout', () => {
       success_url: 'https://booth.test/event.html?session={CHECKOUT_SESSION_ID}',
       cancel_url: 'https://booth.test/event.html?cancelled=1',
     });
+    expect(call.form.get('metadata[withdrawal_consent]')).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(call.form.get('payment_intent_data[metadata][withdrawal_consent]')).toMatch(/^\d{4}-/);
     expect(call.form.has('automatic_tax[enabled]')).toBe(false);
     expect(await getEvent(eventId)).toMatchObject({
       name: 'Anna & Tom',
@@ -213,6 +215,18 @@ describe('checkout', () => {
     } finally {
       delete process.env.STRIPE_AUTOMATIC_TAX;
     }
+  });
+
+  it('refuses a checkout without the withdrawal consent', async () => {
+    const before = calls.length;
+    const res = await fetch(`${base}/api/checkout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Party', email: 'a@b.co' }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/Tick the box/);
+    expect(calls.length).toBe(before);
   });
 
   it('refuses a bad form with the reason', async () => {

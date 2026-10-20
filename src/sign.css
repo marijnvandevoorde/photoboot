@@ -1,0 +1,121 @@
+/* Printable booth notice (/sign): A4 / letter, black on white when printed. */
+:root {
+  color-scheme: light;
+  --accent: #1f9e6e;
+  font-family: -apple-system, system-ui, sans-serif;
+  line-height: 1.45;
+}
+* {
+  box-sizing: border-box;
+}
+[hidden] {
+  display: none !important;
+}
+body {
+  margin: 0;
+  background: #eee;
+  color: #111;
+}
+.tools {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 1rem;
+  display: grid;
+  gap: 0.8rem;
+  font-size: 0.95rem;
+}
+.tools p {
+  margin: 0;
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  align-items: end;
+}
+label {
+  display: grid;
+  gap: 0.2rem;
+  font-weight: 600;
+}
+select,
+button {
+  font: inherit;
+  padding: 0.5rem 0.8rem;
+  border-radius: 8px;
+  border: 1px solid #bbb;
+  background: #fff;
+  color: #111;
+}
+button {
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+}
+.sign {
+  max-width: 44rem;
+  margin: 0 auto 2rem;
+  padding: 2.5rem 2.5rem 2rem;
+  background: #fff;
+  border-top: 0.8rem solid var(--accent);
+  font-size: 1.25rem;
+}
+.kicker {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: var(--accent);
+}
+h1 {
+  margin: 0.2rem 0 0.4rem;
+  font-size: 2.3rem;
+  line-height: 1.15;
+}
+.event {
+  margin: 0 0 1rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+ul {
+  margin: 0 0 1.4rem;
+  padding-left: 1.3rem;
+  display: grid;
+  gap: 0.8rem;
+}
+.host {
+  margin: 0 0 1rem;
+  font-weight: 600;
+}
+.small {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #444;
+}
+[contenteditable]:hover,
+[contenteditable]:focus {
+  outline: 2px dashed #bbb;
+  outline-offset: 2px;
+}
+@media print {
+  @page {
+    margin: 15mm;
+  }
+  body {
+    background: #fff;
+  }
+  .tools {
+    display: none;
+  }
+  .sign {
+    margin: 0;
+    max-width: none;
+    padding: 0;
+    border-top-width: 6mm;
+    padding-top: 8mm;
+  }
+  [contenteditable] {
+    outline: none !important;
+  }
+}

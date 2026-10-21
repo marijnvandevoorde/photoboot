@@ -86,10 +86,9 @@ The web checkout requires a checkbox (`withdrawalConsent`) that the gallery star
 withdrawal right ends once the event has taken place. The time is stored as `withdrawal_consent` metadata on
 the Stripe Checkout Session and PaymentIntent, and confirmed in the event email.
 
-## Open points
+## Known limitation
 
-- Check the Brevo account: turn off open and click tracking for transactional email (not in the code).
-- Make sure a DPA is in place with each processor: Oracle, Cloudflare, Brevo and Stripe include one in their
-  terms; Hetzner's has to be concluded in its console.
-- The gallery link lets anyone who has it delete a photo (through its page). That's deliberate (guests can
-  remove their own photo), but it means a guest can also delete someone else's photo.
+The gallery link lets anyone who has it delete a photo (through its page). That's deliberate (guests can
+remove their own photo), but it means a guest can also delete someone else's photo.
+
+Open GDPR work (Brevo tracking, Hetzner DPA) is tracked in `CONTEXT.md`, "Open work".

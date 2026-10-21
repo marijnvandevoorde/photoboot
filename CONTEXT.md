@@ -318,20 +318,24 @@ no volume: settings in the secret `photoboot-env`, `DATABASE_URL` in
 `photoboot-mysql` (HeatWave schema `photoboot`), `S3_*` in `photoboot-bucket`
 (private OCI bucket `photoboot`).
 
-## Open questions / next things to do
+## Open work
 
-1. **iPad:** Bluefy is needed for Web Bluetooth — verify that camera
-   (`getUserMedia`) works inside Bluefy.
-2. **Paper-out / lid / battery** — not detected. Would need reading the
-   printer's notify characteristic; never probe unknown opcodes.
-3. **Photo look** — default style "Classic" is Atkinson + threshold noise
-   16, gamma 0.6, density 3. Plain Atkinson gave regular hatching on flat
-   walls and crushed backlit faces. Pop art / Woodcut / Stipple were
-   tuned on screen only — pending: real test prints (dot gain, thin
-   template strokes, tear margin length).
+Only open items; delete a line when it's done.
 
-4. **GDPR loose ends** (docs/gdpr.md, Open points): turn off Brevo
-   open/click tracking for transactional mail; conclude Hetzner's DPA.
+**You (owner):**
+- Brevo: turn off open and click tracking for transactional mail (account setting, not code).
+- Hetzner: conclude the DPA in its console (Oracle, Cloudflare, Brevo and Stripe include one in their terms).
+- iPad: check that the camera (`getUserMedia`) works inside Bluefy.
+- Real test prints of the Pop art / Woodcut / Stipple styles (tuned on screen only): dot gain, thin
+  template strokes, tear margin length.
+
+**Ideas / decisions open:**
+- Store app (idea, 2026-10-20): ship photoboot on the App Store and Google Play for visibility, still using the
+  server for uploads and galleries. The paid gallery is a digital good, so the apps must use Apple IAP
+  (`server/apple.ts`, `src/purchase.ts` exist) and Google Play Billing (not built); the web keeps Stripe. Also
+  needs store listings, privacy labels and the store-only link rule on small-victories.co.
+- Paper-out / lid / battery detection: would need reading the printer's notify characteristic; never probe
+  unknown opcodes.
 
 ## Decisions / conventions
 

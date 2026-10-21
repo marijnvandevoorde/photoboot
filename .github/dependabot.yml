@@ -24,6 +24,8 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    cooldown:
+      default-days: 3
 
   # Base image in the Dockerfile at the repo root.
   - package-ecosystem: "docker"
@@ -38,6 +40,8 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    cooldown:
+      default-days: 3
 
   # Actions used by the workflows in .github/workflows/.
   - package-ecosystem: "github-actions"
@@ -52,3 +56,5 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    cooldown:
+      default-days: 3

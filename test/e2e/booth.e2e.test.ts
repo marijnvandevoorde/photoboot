@@ -396,7 +396,12 @@ describe.skipIf(!CHROME)('booth in a real browser', () => {
     await offer.goto(`${base}/event.html?cancelled=1`);
     await offer.waitForFunction(() => /19/.test(document.getElementById('price')?.textContent ?? ''));
     expect(await offer.$eval('#form', (f) => !(f as HTMLElement).hidden)).toBe(true);
-    expect(await offer.$$eval('#form input', (i) => i.map((x) => x.id))).toEqual(['name', 'date', 'email']);
+    expect(await offer.$$eval('#form input', (i) => i.map((x) => x.id))).toEqual([
+      'name',
+      'date',
+      'email',
+      'withdrawal',
+    ]);
     expect(await offer.$eval('#cancelled', (p) => !(p as HTMLElement).hidden)).toBe(true);
     expect(await offer.$eval('#paid', (p) => (p as HTMLElement).hidden)).toBe(true);
     // This server has no Stripe key: say so instead of failing at checkout.

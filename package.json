@@ -21,15 +21,15 @@
     "deploy:check": "\"${SV_DEPLOY:-../Oracle/deploy/sv-deploy}\" --check"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.15",
+    "@biomejs/biome": "^2.6.3",
     "@capacitor/cli": "^8.5.3",
     "@types/node": "^26.6.5",
-    "@types/web-bluetooth": "^0.0.21",
+    "@types/web-bluetooth": "^0.0.22",
     "@vitejs/plugin-basic-ssl": "^2.3.0",
     "happy-dom": "^21.0.4",
-    "puppeteer-core": "^25.14.0",
+    "puppeteer-core": "^25.16.0",
     "typescript": "^7.0.2",
-    "vite": "^8.3.4",
+    "vite": "^8.3.5",
     "vitest": "^5.0.5"
   },
   "dependencies": {

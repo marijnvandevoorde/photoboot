@@ -1,12 +1,12 @@
 # Both stages pinned to Node 26.12.1, the 2026-10-21 security release (CVE-2026-106069 and others).
-FROM node:26.12.1-alpine AS build
+FROM node:26.13.0-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY . .
 RUN npm run build
 
-FROM node:26.12.1-alpine
+FROM node:26.13.0-alpine
 WORKDIR /app
 ENV NODE_ENV=production PORT=8080 SHARE_DIR=/data/shares
 COPY package.json package-lock.json ./

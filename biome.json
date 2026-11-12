@@ -16,7 +16,10 @@
       "!**/package-lock.json",
       "!**/ios/App/App/public",
       "!**/ios/**/build",
-      "!**/ios/**/DerivedData"
+      "!**/ios/**/DerivedData",
+      "!**/*.md",
+      "!**/*.yml",
+      "!**/*.yaml"
     ]
   },
   "formatter": {

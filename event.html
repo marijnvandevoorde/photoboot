@@ -11,6 +11,62 @@
       content="Every photo from your booth, in one private online gallery with a download of all of them."
     />
     <link rel="stylesheet" href="/src/event.css" />
+    <link rel="alternate" type="text/plain" href="/llms.txt" title="llms.txt" />
+    <!-- Price = EVENT_PRICE_CENTS on the server (default 1900); change both together. -->
+    <script type="application/ld+json">
+      {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Service",
+          "@id": "https://boot.small-victories.co/event.html#gallery",
+          "name": "Photoboot event gallery",
+          "url": "https://boot.small-victories.co/event.html",
+          "description": "Every photo from your booth, in one private online gallery with a ZIP download of all of them, kept for a year. One payment per event, no subscription.",
+          "provider": { "@id": "https://small-victories.co/#org" },
+          "isRelatedTo": { "@id": "https://boot.small-victories.co/#app" },
+          "offers": {
+            "@type": "Offer",
+            "price": "19.00",
+            "priceCurrency": "EUR",
+            "url": "https://boot.small-victories.co/event.html",
+            "availability": "https://schema.org/InStock"
+          }
+        },
+        {
+          "@type": "WebApplication",
+          "@id": "https://boot.small-victories.co/#app",
+          "name": "Photoboot",
+          "url": "https://boot.small-victories.co/",
+          "description": "A free photo booth in the browser that prints black-and-white stickers on a Bluetooth thermal printer and gives guests a colour copy by QR code.",
+          "applicationCategory": "PhotographyApplication",
+          "operatingSystem": "Any (Chrome with Web Bluetooth; Bluefy on iPad and iPhone)",
+          "browserRequirements": "Requires a camera; printing requires Web Bluetooth",
+          "inLanguage": ["en", "nl", "fr"],
+          "isAccessibleForFree": true,
+          "license": "https://opensource.org/licenses/MIT",
+          "codeRepository": "https://github.com/marijnvandevoorde/photoboot",
+          "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+          "publisher": { "@id": "https://small-victories.co/#org" }
+        },
+        {
+          "@type": "Organization",
+          "@id": "https://small-victories.co/#org",
+          "name": "Small Victories BV",
+          "url": "https://small-victories.co",
+          "email": "hello@small-victories.co",
+          "taxID": "BE0793.301.929",
+          "address": {
+            "@type": "PostalAddress",
+            "streetAddress": "Mellestraat 303",
+            "postalCode": "9090",
+            "addressLocality": "Merelbeke-Melle",
+            "addressCountry": "BE"
+          }
+        }
+      ]
+      }
+    </script>
     <script type="module" src="/src/consent.ts"></script>
   </head>
   <body>
@@ -81,7 +137,7 @@
         <p id="cancelled" class="notice" hidden>Payment cancelled: nothing was charged. You can try again below.</p>
 
         <form id="form" class="card stack" novalidate>
-          <h2>Get an event gallery <span id="price" class="price"></span></h2>
+          <h2>Get an event gallery <span id="price" class="price">€19</span></h2>
           <label>
             Event name
             <input id="name" name="name" type="text" maxlength="120" autocomplete="off" required

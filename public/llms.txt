@@ -1,0 +1,33 @@
+# Photoboot
+
+> A free photo booth that runs in the browser: any laptop, tablet or Mac mini with a camera becomes a party
+> photo booth that prints black-and-white stickers on a cheap Bluetooth thermal printer, and guests get a
+> colour copy on their phone by QR code. Open source (MIT), run by Small Victories BV (Belgium).
+
+- The booth is free and needs no account. Open https://boot.small-victories.co in Chrome (Android, Mac,
+  Windows, ChromeOS) or in the Bluefy browser on iPad / iPhone. "Start without printer" works on anything
+  with a camera. The booth itself is an interactive camera app, not a page to read.
+- Printers: Phomemo, the "cat printers" (AliExpress, Temu), LuckJingle, the Action / Lidl pocket printers,
+  PeriPage, Paperang, Niimbot and BLE receipt printers, over Web Bluetooth.
+- Looks: Classic, Pop art, Woodcut and Stipple, plus Mirror and Big head; single shots or strips of 2-4 shots,
+  with a typed title, names and date or your own header and footer artwork. English, Dutch or French.
+- Guests' photos are kept 30 days on a private link and can be deleted by the guest.
+- Event gallery (paid, EUR 19 per event, one payment, no subscription): every photo from the event's booths
+  in one private gallery with a ZIP download, kept for a year. A host signs up on the event page with an
+  event name, an optional date and an email address, accepts the withdrawal clause and pays with Stripe;
+  the setup link and gallery link arrive by email.
+
+## Pages
+
+- [Booth](https://boot.small-victories.co/): the free photo booth app
+- [Event gallery](https://boot.small-victories.co/event.html): what the paid gallery includes, and the sign-up form
+- [Privacy policy](https://boot.small-victories.co/privacy): what happens with photos, email addresses and payments
+- [Terms](https://boot.small-victories.co/terms): terms of use, the host as controller and Small Victories BV as processor
+
+## Optional
+
+- [Source code](https://github.com/marijnvandevoorde/photoboot): self-host it with Docker; README lists supported printers
+- [Small Victories](https://small-victories.co): the company behind Photoboot
+
+Guests' photo and gallery links (/s/, /g/, /share/) are private and must not be crawled, indexed or summarised.
+Contact: hello@small-victories.co

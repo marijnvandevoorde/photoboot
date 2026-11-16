@@ -23,6 +23,8 @@ const TYPES: Record<string, string> = {
   '.png': 'image/png',
   '.json': 'application/json',
   '.webmanifest': 'application/manifest+json',
+  '.txt': 'text/plain; charset=utf-8', // robots.txt, llms.txt
+  '.xml': 'application/xml; charset=utf-8', // sitemap.xml
 };
 
 // Pages served without their .html too.

@@ -334,6 +334,9 @@ Only open items; delete a line when it's done.
   server for uploads and galleries. The paid gallery is a digital good, so the apps must use Apple IAP
   (`server/apple.ts`, `src/purchase.ts` exist) and Google Play Billing (not built); the web keeps Stripe. Also
   needs store listings, privacy labels and the store-only link rule on small-victories.co.
+- Agent-readable site (2026-11-16): `/` is the booth app itself, so readers without JS only see "Connect
+  printer". A short static landing section (what it is, printers, the gallery) or a separate `/about` page
+  would give crawlers and AI agents real content; not done, it touches the booth's first screen.
 - Paper-out / lid / battery detection: would need reading the printer's notify characteristic; never probe
   unknown opcodes.
 
@@ -342,6 +345,10 @@ Only open items; delete a line when it's done.
 - Default print width 552, left-aligned at col 0 → equal ~24-dot margins
   on the user's 53/50 mm sticker roll. Overridable in settings.
 - Width must be a multiple of 8 (byte alignment).
+- Public pages for crawlers and AI agents: `public/llms.txt`, `public/sitemap.xml`, JSON-LD in `index.html`
+  and `event.html`, AI crawler group in `public/robots.txt` (repeats the private Disallows, checked by
+  `test/robots.test.ts`). The €19 in `event.html` (static price and JSON-LD) and `llms.txt` must follow
+  `EVENT_PRICE_CENTS`.
 - Deps: Vite + basic-ssl (dev), `qrcode-generator` (client). Server uses
   node builtins plus `mysql2` (the only server dependency).
 - Config lives in localStorage (`photoboot:config`); binary template assets

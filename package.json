@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.6",
-    "@capacitor/cli": "^8.6.0",
+    "@capacitor/cli": "^8.6.2",
     "@types/node": "^26.6.6",
     "@types/web-bluetooth": "^0.0.22",
     "@vitejs/plugin-basic-ssl": "^2.3.0",
@@ -35,8 +35,8 @@
   "dependencies": {
     "@capacitor-community/bluetooth-le": "^8.3.0",
     "@capacitor-community/keep-awake": "^8.0.1",
-    "@capacitor/core": "^8.6.0",
-    "@capacitor/ios": "^8.6.0",
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/ios": "^8.6.2",
     "@capgo/native-purchases": "^8.9.6",
     "mysql2": "^3.24.6",
     "qrcode-generator": "^2.0.4"

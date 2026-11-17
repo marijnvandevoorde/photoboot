@@ -21,15 +21,15 @@
     "deploy:check": "\"${SV_DEPLOY:-../Oracle/deploy/sv-deploy}\" --check"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.6.6",
+    "@biomejs/biome": "^2.6.7",
     "@capacitor/cli": "^8.6.2",
     "@types/node": "^26.6.6",
     "@types/web-bluetooth": "^0.0.22",
     "@vitejs/plugin-basic-ssl": "^2.3.0",
     "happy-dom": "^21.0.4",
-    "puppeteer-core": "^25.16.0",
+    "puppeteer-core": "^25.17.0",
     "typescript": "^7.0.2",
-    "vite": "^8.3.6",
+    "vite": "^8.3.8",
     "vitest": "^5.1.0"
   },
   "dependencies": {
@@ -37,7 +37,7 @@
     "@capacitor-community/keep-awake": "^8.0.1",
     "@capacitor/core": "^8.6.2",
     "@capacitor/ios": "^8.6.2",
-    "@capgo/native-purchases": "^8.9.6",
+    "@capgo/native-purchases": "^8.9.16",
     "mysql2": "^3.24.6",
     "qrcode-generator": "^2.0.4"
   },

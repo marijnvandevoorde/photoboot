@@ -21,7 +21,7 @@
     "deploy:check": "\"${SV_DEPLOY:-../Oracle/deploy/sv-deploy}\" --check"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.6.7",
+    "@biomejs/biome": "^2.6.8",
     "@capacitor/cli": "^8.6.2",
     "@types/node": "^26.6.6",
     "@types/web-bluetooth": "^0.0.22",

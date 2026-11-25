@@ -8,14 +8,13 @@
     <title>Photoboot — Privacy policy</title>
     <meta name="description" content="What Photoboot does with photos, email addresses and payments." />
     <link rel="stylesheet" href="/src/event.css" />
-    <script type="module" src="/src/consent.ts"></script>
   </head>
   <body>
     <main>
       <header>
         <p class="brand"><a href="/event.html">Photoboot</a></p>
         <h1>Privacy policy</h1>
-        <p class="small muted">Last updated 20 October 2026</p>
+        <p class="small muted">Last updated 25 November 2026</p>
       </header>
 
       <article class="prose">
@@ -132,7 +131,7 @@
             <strong>Booth counters:</strong> our legitimate interest in showing the host how their booth was used
             and keeping the service working. They hold nothing about guests.
           </li>
-          <li><strong>Google Analytics:</strong> only with your consent, which you can withdraw at any time.</li>
+          <li><strong>Visit counts:</strong> our legitimate interest in knowing how the site is used.</li>
         </ul>
 
         <h2>How long we keep it</h2>
@@ -166,15 +165,15 @@
           <li><strong>Hetzner</strong> (EU) keeps our encrypted backups.</li>
           <li>
             <strong>Cloudflare</strong> sits in front of the site, like most websites, and sees your IP address and
-            the requests you make, to deliver and protect the site. The site only works over HTTPS.
+            the requests you make, to deliver and protect the site, and counts visits (below). The site only works
+            over HTTPS.
           </li>
           <li><strong>Brevo</strong> (France) sends the email with your event links.</li>
           <li><strong>Stripe</strong> and <strong>Apple</strong> handle payments, as above.</li>
-          <li><strong>Google</strong> runs Google Analytics and Google Tag Manager, only if you accept (below).</li>
         </ul>
         <p>
           <strong>Outside the EU.</strong> Our server, database, photos and backups are stored in the EU. Cloudflare,
-          Stripe, Apple and Google are (part of) American companies, and Oracle's support staff may reach the server
+          Stripe and Apple are (part of) American companies, and Oracle's support staff may reach the server
           from outside the EU, so some data can be handled in the United States or elsewhere. Those transfers are
           covered by the EU–US Data Privacy Framework, which these companies have joined, and by the European
           Commission's standard contractual clauses.
@@ -183,26 +182,8 @@
         <h2>Cookies and analytics</h2>
         <ul>
           <li>
-            Only the event sign-up page and the privacy and terms pages use <strong>Google Analytics</strong>, loaded
-            through <strong>Google Tag Manager</strong>, to count visits. The booth, the settings, and the guests'
-            photo and gallery pages never load it.
-          </li>
-          <li>
-            <strong>Nothing is tracked until you accept.</strong> A banner asks first. Until you click
-            <em>Accept</em>, Google Analytics is told consent is denied and sets no cookies; <em>Reject</em> keeps it
-            that way. Advertising cookies stay off, whatever you choose.
-          </li>
-          <li>
-            If you accept, Google Analytics records the pages you visit, where you came from, your approximate region
-            and your device and browser type, using the cookies <code>_ga</code> and <code>_ga_…</code>. See
-            <a href="https://policies.google.com/technologies/partner-sites" rel="noopener"
-              >how Google uses data from sites like this one</a
-            >.
-          </li>
-          <li>
-            Your choice is remembered in your browser (local storage). Changed your mind? Click
-            <button type="button" class="link" data-consent-open>Cookie settings</button> and choose again; rejecting
-            removes the Google Analytics cookies.
+            We count visits with <strong>Cloudflare Web Analytics</strong>. It sets no cookies, stores no IP address
+            and doesn't follow you across sites. There is no Google Analytics and there are no analytics cookies.
           </li>
           <li>
             Other browser storage is only functional: the sign-up form is kept for the browser session while you
@@ -244,7 +225,6 @@
           <a href="/event.html">Event gallery</a>
           <a href="/terms">Terms</a>
           <a href="/sign">Booth notice</a>
-          <button type="button" data-consent-open>Cookie settings</button>
         </p>
       </footer>
     </main>

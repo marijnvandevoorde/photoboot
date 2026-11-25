@@ -171,11 +171,9 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
 - `sign.html` + `src/sign.ts` (`/sign?event=&days=&mode=free&lang=`) —
   printable booth notice for the host's information duty (en/nl/fr), linked
   from event.html, the success screen, the event email and settings.
-- `src/consent.ts` — GTM (`VITE_GTM_ID`, default GTM-KPTLSZBG) with Consent
-  Mode v2 (all denied by default) and a cookie banner; loaded only on
-  event.html, privacy.html and terms.html. Never on the booth, settings,
-  admin, or the guests' /s/ and /g/ pages; skipped in the app, on
-  localhost and in Vite dev.
+- No analytics code in the repo: the Cloudflare zone injects its Web
+  Analytics beacon (cookieless, no consent needed) into every HTML page it
+  proxies. No GTM, no cookie banner (removed 2026-11-25).
 - `src/kiosk.ts` — kiosk lock state + PIN hashing/checking (shared by the
   booth's host menu and the settings gate).
 - `preview.html` + `src/preview.ts` — renders a sticker through the current

@@ -5,7 +5,4 @@ interface ImportMetaEnv {
   readonly VITE_SERVER_URL?: string;
   // App Store product id of the event gallery consumable (iOS in-app purchase).
   readonly VITE_APPLE_PRODUCT_ID?: string;
-  // Google Tag Manager container for the public pages (src/consent.ts);
-  // default GTM-KPTLSZBG, empty = no GTM and no cookie banner.
-  readonly VITE_GTM_ID?: string;
 }

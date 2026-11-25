@@ -23,7 +23,7 @@ core activity).
 | Payments | Provider ref, amount, currency, status, date; Stripe: session id, PaymentIntent, email, withdrawal-consent time (Stripe metadata); Apple: transaction id, product, storefront | Hosts | Contract + legal obligation (Art. 6(1)(b), (c)): Belgian accounting law | Until the end of the 7th calendar year after the payment, then deleted; kept apart from photos (event deletion sets `event_id` NULL) | `server/billing.ts`, `server/stripe.ts`, `server/apple.ts`, `server/retention.ts` |
 | Booth counters | Sessions, prints, shares, paper, busiest hour, per random device id | None (no guest data) | Legitimate interest (Art. 6(1)(f)) | With the event (cascade) | `server/events.ts` (`stats`) |
 | Event email | Email address, event name, links | Hosts | Contract | Brevo's own log retention | `server/mail.ts`, `server/billing.ts` |
-| Analytics | GA4 via GTM, cookies `_ga*` | Visitors of event / privacy / terms pages | Consent (Art. 6(1)(a)), Consent Mode v2 default denied | Google's GA4 retention setting | `src/consent.ts` |
+| Analytics | Cloudflare Web Analytics: page views, referrer, country, browser / device type; no cookies, no IP stored, no cross-site tracking | Visitors of the web pages | Legitimate interest (Art. 6(1)(f)) | Cloudflare's Web Analytics retention | Injected by the Cloudflare zone, no code in this repo |
 | Admin login | Session token hash, IP, expiry | Owner | Legitimate interest (security) | Deleted when expired (hourly job) | `server/admin.ts`, `server/retention.ts` |
 | Backups | Database dump + photo bucket mirror, encrypted | All of the above | Same as the source | 30 days (`Oracle/k8s/backup/sv-backup.sh`) | Oracle repo |
 
@@ -36,14 +36,13 @@ reaches us unless the host exports it.
 | --- | --- | --- | --- |
 | Oracle Cloud Infrastructure | Kubernetes cluster, MySQL HeatWave (`photoboot` schema), private bucket `photoboot` (`NoPublicAccess`, no versioning) | eu-amsterdam-1 (NL) | Data stored in the EU; Oracle support access from outside the EU under SCCs / DPF |
 | Hetzner | Encrypted backup mirror (Storage Box) | EU | n/a (EU) |
-| Cloudflare | DNS, proxy, TLS (HTTPS redirect + HSTS at the edge) | Global edge, US company | EU–US DPF + SCCs |
+| Cloudflare | DNS, proxy, TLS (HTTPS redirect + HSTS at the edge), Web Analytics | Global edge, US company | EU–US DPF + SCCs |
 | Brevo | Transactional email | France | n/a (EU) |
 | Stripe | Web payments, invoices (controller for its own part) | Ireland / US | DPF + SCCs |
 | Apple | In-app purchases (controller for its own part) | Ireland / US | DPF + SCCs |
-| Google | GA4 + GTM, consent only | Ireland / US | DPF + SCCs |
 
 Photos go only to Oracle (and the Hetzner backup) and through Cloudflare in transit (`Cache-Control: private`,
-so not cached at the edge). Stripe, Apple and Google never see photos.
+so not cached at the edge). Stripe and Apple never see photos.
 
 ## Security (Art. 32)
 
@@ -57,7 +56,7 @@ so not cached at the edge). Stripe, Apple and Google never see photos.
 - Rate limits: uploads without an event key 120/h per IP, checkout 20/h, admin login 10 failures / 15 min.
 - Admin: `ADMIN_TOKEN` + TOTP. Secrets live in Kubernetes Secrets (`photoboot-env`, `photoboot-mysql`,
   `photoboot-bucket`), never in the repo.
-- GTM never loads on the booth, settings or guest pages.
+- No Google Analytics, GTM or analytics cookies on any page.
 
 ## Data-subject requests
 

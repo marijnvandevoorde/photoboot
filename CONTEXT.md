@@ -328,10 +328,9 @@ Only open items; delete a line when it's done.
   template strokes, tear margin length.
 
 **Ideas / decisions open:**
-- Store app (idea, 2026-10-20): ship photoboot on the App Store and Google Play for visibility, still using the
-  server for uploads and galleries. The paid gallery is a digital good, so the apps must use Apple IAP
-  (`server/apple.ts`, `src/purchase.ts` exist) and Google Play Billing (not built); the web keeps Stripe. Also
-  needs store listings, privacy labels and the store-only link rule on small-victories.co.
+- Store app (idea, 2026-10-20): ship photoboot on the App Store and Google Play. Assessment in
+  `docs/store-app.md` (2026-11-27): iOS is mostly built (IAP consumable, 1–2 days of store work left), Android
+  needs Play Billing (3–5 days); recommendation iOS first, iPad-only, Android later. Your call.
 - Agent-readable site (2026-11-16): `/` is the booth app itself, so readers without JS only see "Connect
   printer". A short static landing section (what it is, printers, the gallery) or a separate `/about` page
   would give crawlers and AI agents real content; not done, it touches the booth's first screen.

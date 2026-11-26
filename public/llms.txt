@@ -20,6 +20,7 @@
 ## Pages
 
 - [Booth](https://boot.small-victories.co/): the free photo booth app
+- [About](https://boot.small-victories.co/about): what the booth does, what you need, and how photos are handled
 - [Event gallery](https://boot.small-victories.co/event.html): what the paid gallery includes, and the sign-up form
 - [Privacy policy](https://boot.small-victories.co/privacy): what happens with photos, email addresses and payments
 - [Terms](https://boot.small-victories.co/terms): terms of use, the host as controller and Small Victories BV as processor

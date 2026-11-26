@@ -29,6 +29,7 @@ const TYPES: Record<string, string> = {
 
 // Pages served without their .html too.
 const CLEAN_URLS: Record<string, string> = {
+  '/about': '/about.html',
   '/admin': '/admin.html',
   '/privacy': '/privacy.html',
   '/terms': '/terms.html',

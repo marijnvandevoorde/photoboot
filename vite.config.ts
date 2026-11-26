@@ -40,6 +40,7 @@ export default defineConfig({
         privacy: 'privacy.html',
         terms: 'terms.html',
         sign: 'sign.html',
+        about: 'about.html',
       },
     },
   },

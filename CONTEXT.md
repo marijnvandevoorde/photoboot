@@ -277,7 +277,9 @@ needed — no canvas there, so pixels are covered by `test/e2e`). CI in
 - `server/admin.ts` — `/api/admin/*`: ADMIN_TOKEN + TOTP login (first
   login enrolls), cookie sessions, list / edit / comp / delete events,
   payments. Page: `admin.html` + `src/admin.ts`.
-- `server/mail.ts` — Brevo HTTP API; logs to `outbox` without a key.
+- `server/mail.ts` — Brevo HTTP API; logs to `outbox` without a key. Asks Brevo per recipient not to
+  track (`contactPixelTrackingConsent: false`, `removeTrackingPixel: true`; ignored where the account lacks
+  the feature).
 - `server/totp.ts` — RFC 6238 codes, base32.
 - `server/http.ts` — helpers (incl. the per-IP `rateLimiter`) + the HTML
   shell of the public pages.
@@ -321,8 +323,14 @@ no volume: settings in the secret `photoboot-env`, `DATABASE_URL` in
 Only open items; delete a line when it's done.
 
 **You (owner):**
-- Brevo: turn off open and click tracking for transactional mail (account setting, not code).
-- Hetzner: conclude the DPA in its console (Oracle, Cloudflare, Brevo and Stripe include one in their terms).
+- Brevo (account-wide, so Plek's mail too): Settings → Automations → Transactional emails → Tracking →
+  Anonymous email tracking: Yes → Save. Optional: Settings → Contacts → Per-contact pixel tracking consent:
+  Yes, "Track contacts whose consent is unknown": No; then `server/mail.ts`'s per-recipient
+  `contactPixelTrackingConsent: false` applies as well. Links stay rewritten through Brevo: only Enterprise
+  plans can switch that off (on request). No API for these settings.
+- Hetzner: conclude the DPA at accounts.hetzner.com/account/dpa (pick data types and data subjects, tick
+  "I agree to the agreement"); it covers the Storage Box with every encrypted backup, not just photoboot's.
+  Oracle, Cloudflare, Brevo and Stripe include one in their terms.
 - iPad: check that the camera (`getUserMedia`) works inside Bluefy.
 - Real test prints of the Pop art / Woodcut / Stipple styles (tuned on screen only): dot gain, thin
   template strokes, tear margin length.

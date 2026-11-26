@@ -6,6 +6,14 @@
 //   MAIL_FROM      sender address, e.g. booth@small-victories.co (must be a
 //                  verified sender in Brevo)
 //   MAIL_FROM_NAME sender name (default "Photoboot")
+//
+// Tracking: these mails carry the host's private setup and gallery links, so
+// we ask Brevo not to track the recipient. Per recipient, Brevo offers two
+// flags and nothing for link rewriting: `contactPixelTrackingConsent: false`
+// anonymises opens and clicks (only when the account's per-contact pixel
+// tracking consent is on), `removeTrackingPixel: true` drops the open pixel
+// (Enterprise plans only). Brevo ignores each one where it doesn't apply.
+// Switching click tracking off altogether is an account matter (CONTEXT.md).
 
 const BREVO_URL = 'https://api.brevo.com/v3/smtp/email';
 
@@ -35,7 +43,7 @@ export async function sendMail(mail: Mail): Promise<void> {
         email: process.env.MAIL_FROM || 'booth@small-victories.co',
         name: process.env.MAIL_FROM_NAME || 'Photoboot',
       },
-      to: [mail.to],
+      to: [{ ...mail.to, contactPixelTrackingConsent: false, removeTrackingPixel: true }],
       subject: mail.subject,
       htmlContent: mail.html,
       textContent: mail.text,
